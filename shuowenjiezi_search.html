@@ -1253,6 +1253,7 @@ function find_char(type)
 		dd.innerHTML="<font color=red><b>找不到!"
 	}
 }
+var sw_font = "北师大说文小篆";
 function display(page)
 {
 	last=now=next="";
@@ -1302,7 +1303,7 @@ function display(page)
 		str+="<tr valign=top bgcolor="+(i%2==1?'lightyellow':'white')+"><td>&nbsp;"+(i+1)
 			+"&nbsp;<td><font color=blue>"+tt[0].substr(1)
 			+"<td nowrap>"+tt[1]+"<td align=center nowrap><font size=5 color=red>"
-			+"<font face='SW' size=5>"+tt[2]+"</font>"+tt[3]
+			+"<font face='"+sw_font+"' size=5>"+tt[2]+"</font>"+tt[3]
 			+"<td><font color=blue>"+tt[5]
 			+"<td align=center>"+(tt[4].length<12?tt[4]:gen_py(tt[4]))
 			+"<td width=400px><font color=blue size=4>"+tt[6]+(tt[10]=='x`'?gen_gw(tt[0]):"")+(tt[8]!=''?("<small><font color=brown><br>"+tt[8]):"")+(tt[9]!=''?("<small><font color=brown><br>"+tt[9]):"")
@@ -1344,7 +1345,7 @@ function gen_gw(g)
 		strtmp="";
 		for(i=0;i<arr.length;i++)
 		{
-			strtmp+="<br><font face='SW' size=6>"+arr[i][0]+"</font>"+arr[i][1];
+			strtmp+="<br><font face='"+sw_font+"' size=6>"+arr[i][0]+"</font>"+arr[i][1];
 		}		
 		return strtmp;
 	}
@@ -1354,7 +1355,7 @@ function gen_gw(g)
 		strtmp="";
 		for(i=0;i<arr.length;i++)
 		{
-			strtmp+="<br><font face='SW' size=6>"+arr[i][0]+"</font>"+arr[i][1].replace(findgw,"<b><font color=darkblue>"+findgw+"</font></b>");;
+			strtmp+="<br><font face='"+sw_font+"' size=6>"+arr[i][0]+"</font>"+arr[i][1].replace(findgw,"<b><font color=darkblue>"+findgw+"</font></b>");;
 		}
 		return strtmp;
 	}	
