@@ -2,6 +2,7 @@
 - 《说文解字》检索: shuowenjiezi_search.html
 - 查异体字：回字的多种写法 fanyiti.htm
 - 汉字笔画检索 bihua.html
+- 找字：根据拼音与笔顺找字 py_bh_find.html
 - 成语检索、成语接龙 chengyu_search.html
   
 ### 《说文解字》检索: shuowenjiezi_search.html
@@ -22,3 +23,9 @@
 
 ### 成语检索、成语接龙 chengyu_search.html
 - [online](https://superzhangmch.github.io/tiny_tools/chengyu_search.html) 或下载后浏览器直接打开使用。
+
+### 找字：知道大概发音与大概字形找字 py_bh_find.html
+- 一个字，想不起来怎么写了，读音拿不准，字形拿不准。那么就用拼音的一部分与字形笔顺的一部分，来找字。
+- 比如下面找一个字：字形里有个者字，读音拼音以o或e结尾
+  ![image](https://github.com/user-attachments/assets/2a77a3bb-86eb-4078-801f-b1a54dcd1485)
+
