@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>item 频次统计</title>
+    <style>
+        table {
+            width: 80%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+
+<h2>item 频次统计</h2>
+<label for="separator">行内分隔符 :</label>
+<input type="text" id="separator" placeholder="分隔符" value=',' style='width:40px'> <font color=blue>（若用 \t 则输入 "tab"; 若用空格则输入"space"）</font>
+<br><br>
+<textarea id="textInput" rows="10" cols="50" placeholder="在此输入文本... (给出多行数据，每行用分隔符分隔开了一些 item。希望统计这些item的频次以及百分比)"></textarea>
+<br><br>
+<button onclick="processText()">作统计</button>
+
+<h3>结果：</h3>
+<table id="resultTable">
+    <thead>
+        <tr>
+            <th>序号</th>
+            <th>项</th>
+            <th>计数</th>
+            <th>百分比(比项的总数)</th>
+            <th>百分比(比总行数)</th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+
+<script>
+function processText() {
+    const separatorInput = document.getElementById('separator').value;
+    const textInput = document.getElementById('textInput').value;
+
+    var separator = ' ';
+    if (separatorInput.toLowerCase().trim() === 'tab') separator = '\t';
+    else if (separatorInput.toLowerCase().trim() === 'space') separator = ' ';
+    else separator = separatorInput.trim();
+
+    const lines = textInput.split('\n').filter(line => line.trim() !== '');
+    const allItems = lines.flatMap(line => line.split(separator)).map(item => item.trim()).filter(item => item);
+
+    const counts = allItems.reduce((acc, item) => {
+        acc[item] = (acc[item] || 0) + 1;
+        return acc;
+    }, {});
+
+    const totalItems = allItems.length;
+    const sortedItems = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+    const tbody = document.getElementById('resultTable').getElementsByTagName('tbody')[0];
+    tbody.innerHTML = ''; // 清空表格内容
+
+    sortedItems.forEach(([item, count], index) => {
+        const row = tbody.insertRow();
+        const cellIndex = row.insertCell(0);
+        const cellItem = row.insertCell(1);
+        const cellCount = row.insertCell(2);
+        const cellPercentage = row.insertCell(3);
+        const cellPercentage1 = row.insertCell(4);
+
+        cellIndex.textContent = index + 1;
+        cellItem.textContent = item;
+        cellCount.textContent = count;
+        cellPercentage.textContent = ((count / totalItems) * 100).toFixed(2) + '%';
+        cellPercentage1.textContent = ((count / lines.length) * 100).toFixed(2) + '%';
+    });
+}
+</script>
+
+</body>
+</html>
