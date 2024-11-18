@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON View</title>
+    <style>
+        textarea {
+            width: 100%;
+            height: 100px;
+        }
+        #output {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        table, th, td {
+            border: 1px solid black;
+            border-collapse: collapse;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>JSON View</h1>
+    <textarea id="jsonInput" placeholder="Enter JSON here..."></textarea>
+    <button onclick="formatJSON()">Format JSON</button>
+    <div id="output"></div>
+
+    <script>
+        function fix_and_return_json(data) {
+
+            data = data.replace(/,\s*([\]}])/g, '$1');
+            try { return JSON.parse(data); } catch (e) {}
+
+            if (data.includes("'")) {
+                if (!data.includes('"')) {
+                    data = data.replace(/'/g, '"');
+                    try { return JSON.parse(data); } catch (e) {}
+                } else if (data.includes('\\"')) {
+                    data = data.replace(/\\"/g, 'XXXXX');
+                    if (!data.includes('"')) {
+                        data = data.replace(/'/g, '"');
+                        data = data.replace(/XXXXX/g, "'");
+                        try { return JSON.parse(data); } catch (e) {}
+                    }   
+                }   
+            }
+            data = data.replace(/\b(True|False|TRUE|FALSE|NULL|Null)\b/g, function(match) {return match.toLowerCase();});
+            try { return JSON.parse(data); } catch (e) {}
+        
+            // Count and attempt to balance brackets and quotes
+            const openBrackets = (data.match(/\[/g) || []).length;
+            const closeBrackets = (data.match(/\]/g) || []).length;
+            const openBraces = (data.match(/{/g) || []).length;
+            const closeBraces = (data.match(/}/g) || []).length;
+            const quotes = (data.match(/(?<!\\)"/g) || []).length; // Ignore escaped quotes
+        
+        
+            // Balance double quotes
+            if (quotes % 2 !== 0) {
+                data += '"';
+            }   
+            try { return JSON.parse(data); } catch (e) {}
+        
+            // Balance brackets and braces
+            if (openBraces == closeBraces && openBrackets > closeBrackets) {
+                data += ']'.repeat(openBrackets - closeBrackets);
+            }   
+            if (openBrackets == closeBrackets && openBraces > closeBraces) {
+                data += '}'.repeat(openBraces - closeBraces);
+            }
+            if (openBrackets > closeBrackets && openBraces > closeBraces) {
+                var start_letter = data[0];
+                if (start_letter == '[') {
+                    data += '}'.repeat(openBraces - closeBraces);
+                    data += ']'.repeat(openBrackets - closeBrackets);
+                }
+                if (start_letter == '{') {
+                    data += ']'.repeat(openBrackets - closeBrackets);
+                    data += '}'.repeat(openBraces - closeBraces);
+                }
+            }
+            try { return JSON.parse(data); } catch (e) {}
+            data = data.replace(/,\s*([\]}])/g, '$1');
+            try { return JSON.parse(data); } catch (e) {}
+            return null;
+        }
+        function formatJSON() {
+            const input = document.getElementById('jsonInput').value;
+            const singleLineInput = input.replace(/\n/g, '').replace(/\t/g, '        '); // 拼接成单行
+            const outputDiv = document.getElementById('output');
+            outputDiv.innerHTML = ''; // Clear previous output
+           //console.log(singleLineInput)
+
+            try {
+                const jsonObj = JSON.parse(singleLineInput);
+                const formattedHTML = formatValue(jsonObj);
+                outputDiv.appendChild(formattedHTML);
+            } catch (e) {
+		const jsonObj = fix_and_return_json(singleLineInput);
+		if (jsonObj === null) {
+                	outputDiv.textContent = 'Invalid JSON input.';
+			return
+		}
+                const formattedHTML = formatValue(jsonObj);
+                outputDiv.appendChild(formattedHTML);
+            }
+        }
+
+        function formatValue(value) {
+            if (Array.isArray(value)) {
+                return formatArray(value);
+            } else if (typeof value === 'object' && value !== null) {
+                return formatDict(value);
+            } else if (typeof value === 'string') {
+                return formatString(value);
+            } else {
+                return document.createTextNode(String(value));
+            }
+        }
+
+        function formatDict(dict) {
+            const table = document.createElement('table');
+            for (const [key, val] of Object.entries(dict)) {
+                const row = table.insertRow();
+                const keyCell = row.insertCell();
+                keyCell.textContent = key;
+                keyCell.style.backgroundColor = 'lightgreen';
+
+                const valueCell = row.insertCell();
+                valueCell.appendChild(formatValue(val));
+            }
+            return table;
+        }
+
+        function doesNotStartWithBraceOrBracket(str) {
+                if (typeof str !== 'string' || str.length === 0) {
+                        return false; // 如果不是字符串或为空字符串，返回 false
+                }
+                const firstChar = str.charAt(0); // 或者使用 str[0]
+                return firstChar !== '{' && firstChar !== '[';
+        }
+
+        function formatArray(arr) {
+            if (arr.every(item => typeof item === 'number' || typeof item === 'boolean')) {
+                return document.createTextNode(arr.join(' | '));
+            } else if (arr.every(item => typeof item === 'string' && item.length < 50 && doesNotStartWithBraceOrBracket(item))) {
+                return document.createTextNode(arr.join(' | '));
+            } else if (arr.every(item => typeof item === 'string' && item.length > 50 && doesNotStartWithBraceOrBracket(item))) {
+                const ul = document.createElement('ol');
+                arr.forEach(item => {
+                    const li = document.createElement('li');
+                    li.appendChild(formatString(item));
+                    ul.appendChild(li);
+                });
+                return ul;
+            } else {
+                const ul = document.createElement('ol');
+                arr.forEach(item => {
+                    const li = document.createElement('li');
+                    li.appendChild(formatValue(item));
+                    ul.appendChild(li);
+                });
+                return ul;
+            }
+        }
+
+        function formatString(str) {
+            try {
+                const parsedStr = JSON.parse(str);
+                return formatValue(parsedStr);
+            } catch {
+                // console.log('xxx', str,str.includes('\\n' ));
+                //if (str.includes('\\n') || str.includes('\\t')) {
+                //str = str.replace("<", "&lt;");
+                //str = str.replace(">", "&gt;");
+                if (str.includes('\n')) {
+                    const pre = document.createElement('pre');
+                    // pre.textContent = str.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+                    pre.textContent = str;
+                    return pre;
+                } else {
+                    return document.createTextNode(str);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
