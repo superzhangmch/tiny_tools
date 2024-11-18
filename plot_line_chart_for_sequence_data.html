@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta http-equiv="content-type" content="text/html;charset=gbk">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>统计分析与折线图 - plot a line chart for sequence data</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+}
+
+textarea {
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+#statistics {
+    margin-top: 20px;
+}
+</style>
+
+<script>
+function processData() {
+    const inputData = document.getElementById('inputData').value.trim();
+    if (!inputData) return;
+
+    const lines = inputData.split('\n');
+    const arrays = lines.map(line => {
+        const regex = /-?\d+(\.\d+)?/g; // 匹配整数和浮点数，包括负数
+        const matches = line.match(regex);
+        return matches ? matches.map(Number) : [];
+    }).filter(arr => arr.length > 1); // 过滤掉没有数字或只有一个数字的行
+
+    const statistics = arrays.map(arr => calculateStatistics(arr));
+	
+  
+    displayStatistics(statistics);
+    drawLineChart(arrays);
+}
+
+
+function calculateStatistics(array) {
+    const mean = array.reduce((sum, value) => sum + value, 0) / array.length;
+
+    const sortedArray = [...array].sort((a, b) => a - b);
+    const median = (sortedArray[(array.length - 1) >> 1] + sortedArray[array.length >> 1]) / 2;
+
+    const stdDev = Math.sqrt(array.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / array.length);
+
+    const max = Math.max(...array);
+    const min = Math.min(...array);
+    const count = array.length;
+
+    return { mean, median, stdDev, max, min, count };
+}
+
+function displayStatistics(statistics) {
+    const container = document.getElementById('statisticsTableContainer');
+    
+    // 清空之前的内容
+    container.innerHTML = '';
+
+    // 如果没有统计数据，直接返回
+    if (statistics.length === 0) {
+        container.innerHTML = '<p>No data available.</p>';
+        return;
+    }
+
+    // 创建表格元素
+    const table = document.createElement('table');
+    table.style.width = '80%';
+    table.setAttribute('border', '1');
+    
+    // 创建表头
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    const headers = ['Array Index', 'Mean', 'Median', 'Standard Deviation', 'Max', 'Min', 'Count'];
+    
+    headers.forEach(headerText => {
+        const th = document.createElement('th');
+        th.appendChild(document.createTextNode(headerText));
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    // 创建表体
+    const tbody = document.createElement('tbody');
+    
+    statistics.forEach((stat, index) => {
+        const row = document.createElement('tr');
+        
+        // 添加数组索引
+        let cell = document.createElement('td');
+        cell.appendChild(document.createTextNode(index + 1));
+        row.appendChild(cell);
+
+        // 添加均值
+        cell = document.createElement('td');
+        cell.appendChild(document.createTextNode(stat.mean.toFixed(2)));
+        row.appendChild(cell);
+
+        // 添加中位数
+        cell = document.createElement('td');
+        cell.appendChild(document.createTextNode(stat.median.toFixed(2)));
+        row.appendChild(cell);
+
+        // 添加标准差
+        cell = document.createElement('td');
+        cell.appendChild(document.createTextNode(stat.stdDev.toFixed(2)));
+        row.appendChild(cell);
+
+        // 添加最大值
+        cell = document.createElement('td');
+        cell.appendChild(document.createTextNode(stat.max));
+        row.appendChild(cell);
+
+        // 添加最小值
+        cell = document.createElement('td');
+        cell.appendChild(document.createTextNode(stat.min));
+        row.appendChild(cell);
+
+        // 添加元素个数
+        cell = document.createElement('td');
+        cell.appendChild(document.createTextNode(stat.count));
+        row.appendChild(cell);
+
+        tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+    container.appendChild(table);
+}
+
+let chartInstance = null; // 全局变量来存储当前的 Chart 实例
+
+function drawLineChart(data) {
+    const ctx = document.getElementById('lineChart').getContext('2d');
+
+    // 如果已经有一个 Chart 实例，先销毁它
+    if (chartInstance) {
+        chartInstance.destroy();
+    }
+
+    const datasets = data.map((arr, index) => ({
+        label: `Array ${index + 1}`,
+        data: arr,
+        borderColor: getRandomColor(),
+        fill: false
+    }));
+
+    chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data[0].map((_, i) => i), // 假定所有数组长度相同
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: {
+                    type: 'linear',
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+function getRandomColor() {
+    const letters = '0123456789ABCDEF';
+    let color = '#';
+    for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+    return color;
+}
+
+</script>
+</head>
+<body>
+    <h1>序列数据画折线图 (Plot a line chart for sequence data)</h1>
+    <textarea id="inputData" rows="10" cols="50" placeholder="">
+每行是一类序列数据，格式不限。(Each row is a type of sequence data, with no specific format required.) for example:
+aaa: [1,12,3,4,6]
+bbb 1 2 3 55 1
+-1.1 2 3 5
+    </textarea>
+    <button onclick="processData()">处理数据并画折线图(Process data and plot a line chart)</button>
+    <div id="statisticsTableContainer"></div>
+    <canvas id="lineChart"></canvas>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+</html>
