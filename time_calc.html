@@ -29,10 +29,10 @@
 <body>
 
     <h1>Time Tool</h1>
-    <textarea id="inputArea" placeholder="时间格式是2022-02-02或2022-02-02 02:02:02 
-(1). 时间差：给定两个时间算时间差或给定一个算和当前时间的差。每行一个. 
-(2). 倒计时，给定一个未来时间，算倒计时还有多久。
-(3). 时间转化：给定时间戳转时间或给定时间转时间戳"></textarea>
+    <textarea id="inputArea" placeholder="时间格式是 2022-02-02 或 2022-02-02 02:02:02 
+(1). 时间差：给定两个时间(每行一个)算时间差，或给定一个算和当前时间的差。
+(2). 倒计时：给定一个未来时间，算倒计时。即现在距离它还有多久。
+(3). 时间转化：给定unix时间戳转时间，或给定时间转时间戳。格式任意，会自动识别二者并做转化。"></textarea>
     <br>
     <button onclick="calculateTimeDifference()">计算时间差</button>
     <button onclick="startCountdown()">倒计时</button>
