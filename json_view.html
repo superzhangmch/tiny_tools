@@ -56,9 +56,12 @@
 	}
    
         function fix_and_return_json(data) {
+	    var data_ori = data;
+	    // ,] | ,}情况
             data = data.replace(/,\s*([\]}])/g, '$1');
             try { return JSON.parse(data); } catch (e) {}
 
+	    // 双引号，却用成了单引号
             if (data.includes("'")) {
                 if (!data.includes('"')) {
                     data = data.replace(/'/g, '"');
@@ -74,17 +77,18 @@
 		    }
                 }
             }
+	    // true, false, null 问题
             data = data.replace(/\b(True|False|TRUE|FALSE|NULL|Null)\b/g, function(match) {return match.toLowerCase();});
             try { return JSON.parse(data); } catch (e) {}
-        
+
+	    // 尾部截断问题：引号或括号不匹配
             // Count and attempt to balance brackets and quotes
             const openBrackets = (data.match(/\[/g) || []).length;
             const closeBrackets = (data.match(/\]/g) || []).length;
             const openBraces = (data.match(/{/g) || []).length;
             const closeBraces = (data.match(/}/g) || []).length;
             const quotes = (data.match(/(?<!\\)"/g) || []).length; // Ignore escaped quotes
-        
-        
+
             // Balance double quotes
             if (quotes % 2 !== 0) {
                 data += '"';
@@ -136,6 +140,30 @@
                     }   
                 }   
             }   
+	    // 遍历：多一个字符，少一个字符的情况
+            const regex = /[,"\[\]{}:]/g;
+            const matches = [...data_ori.matchAll(regex)]
+            console.log(matches, data_ori)
+            var char_set = [',', '"', '[', ']', '{', '}', ':'];
+            for (var idx in matches) {
+                var i = matches[idx].index;
+                var h = data_ori.slice(0, i)
+                var tail = data_ori.slice(i)
+                for (const c of char_set) {
+                        data = h + c + tail;
+                        try { return JSON.parse(data); } catch (e) {}
+                }
+
+                h = data_ori.slice(0, i+1)
+                tail = data_ori.slice(i+1)
+                for (const c of char_set) {
+                        data = h + c + tail;
+                        try { return JSON.parse(data); } catch (e) {}
+                }
+                h = data_ori.slice(0, i)
+                tail = data_ori.slice(i+1)
+                try { return JSON.parse(h+tail); } catch (e) {}
+            
             return null
         }
         function formatJSON() {
