@@ -28,8 +28,34 @@
     <div id="output"></div>
 
     <script>
+	function generateCombinations(n, m) {
+	    const result = [];
+	    const combination = [];
+	
+	    function backtrack(nRemaining, mRemaining) {
+	        if (nRemaining === 0 && mRemaining === 0) {
+	            result.push(combination.join(''));
+	            return;
+	        }
+	
+	        if (nRemaining > 0) {
+	            combination.push(']');
+	            backtrack(nRemaining - 1, mRemaining);
+	            combination.pop();
+	        }
+	
+	        if (mRemaining > 0) {
+	            combination.push('}');
+	            backtrack(nRemaining, mRemaining - 1);
+	            combination.pop();
+	        }
+	    }
+	
+	    backtrack(n, m);
+	    return result;
+	}
+   
         function fix_and_return_json(data) {
-
             data = data.replace(/,\s*([\]}])/g, '$1');
             try { return JSON.parse(data); } catch (e) {}
 
@@ -43,8 +69,10 @@
                         data = data.replace(/'/g, '"');
                         data = data.replace(/XXXXX/g, "'");
                         try { return JSON.parse(data); } catch (e) {}
-                    }   
-                }   
+		    } else {
+		        data = data.replace(/XXXXX/g, '\\"');
+		    }
+                }
             }
             data = data.replace(/\b(True|False|TRUE|FALSE|NULL|Null)\b/g, function(match) {return match.toLowerCase();});
             try { return JSON.parse(data); } catch (e) {}
@@ -60,31 +88,58 @@
             // Balance double quotes
             if (quotes % 2 !== 0) {
                 data += '"';
-            }   
+            }
             try { return JSON.parse(data); } catch (e) {}
         
             // Balance brackets and braces
             if (openBraces == closeBraces && openBrackets > closeBrackets) {
                 data += ']'.repeat(openBrackets - closeBrackets);
+                try { return JSON.parse(data); } catch (e) {}
+                data = data.replace(/,\s*([\]}])/g, '$1'); try { return JSON.parse(data); } catch (e) {}
             }   
             if (openBrackets == closeBrackets && openBraces > closeBraces) {
-                data += '}'.repeat(openBraces - closeBraces);
+                var data1 = data + '}'.repeat(openBraces - closeBraces);
+                var data2 = data + ':"add_to_fix_json"' + '}'.repeat(openBraces - closeBraces);
+                var data3 = data + '"add_to_fix_json"' + '}'.repeat(openBraces - closeBraces);
+
+                try { return JSON.parse(data1); } catch (e) {}
+                data = data1.replace(/,\s*([\]}])/g, '$1'); try { return JSON.parse(data); } catch (e) {}
+
+                try { return JSON.parse(data2); } catch (e) {}
+                data = data2.replace(/,\s*([\]}])/g, '$1'); try { return JSON.parse(data); } catch (e) {}
+
+                try { return JSON.parse(data3); } catch (e) {}
+                data = data3.replace(/,\s*([\]}])/g, '$1'); try { return JSON.parse(data); } catch (e) {}
             }
             if (openBrackets > closeBrackets && openBraces > closeBraces) {
-                var start_letter = data[0];
-                if (start_letter == '[') {
-                    data += '}'.repeat(openBraces - closeBraces);
-                    data += ']'.repeat(openBrackets - closeBrackets);
-                }
-                if (start_letter == '{') {
-                    data += ']'.repeat(openBrackets - closeBrackets);
-                    data += '}'.repeat(openBraces - closeBraces);
-                }
-            }
-            try { return JSON.parse(data); } catch (e) {}
-            data = data.replace(/,\s*([\]}])/g, '$1');
-            try { return JSON.parse(data); } catch (e) {}
-            return null;
+                const match = data.match(/\S/);
+                var start_letter = match ? match[0] : null;
+                const combinations = generateCombinations(openBrackets - closeBrackets, openBraces - closeBraces);
+                for (var idx in combinations) {
+                    var comb = combinations[idx];
+                    const lastChar = data.charAt(data.length - 1); 
+                    if (start_letter == '[' && lastChar != ']') continue;
+                    if (start_letter == '{' && lastChar != '}') continue;
+
+                    var data1 = data + comb;
+                    try { return JSON.parse(data1); } catch (e) {}
+                    data = data1.replace(/,\s*([\]}])/g, '$1'); try { return JSON.parse(data); } catch (e) {}
+
+                    if (comb[0] == '}') {
+                        var data2 = data + ':"add_to_fix_json"' + comb;
+                        var data3 = data + '"add_to_fix_json"' + comb;
+
+
+                        try { return JSON.parse(data2); } catch (e) {}
+                        data = data2.replace(/,\s*([\]}])/g, '$1'); try { return JSON.parse(data); } catch (e) {}
+
+                        try { return JSON.parse(data3); } catch (e) {}
+                        data = data3.replace(/,\s*([\]}])/g, '$1'); try { return JSON.parse(data); } catch (e) {}
+                    }   
+                }   
+            }   
+            return null
+          
         }
         function formatJSON() {
             const input = document.getElementById('jsonInput').value;
