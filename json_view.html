@@ -164,6 +164,8 @@
                 tail = data_ori.slice(i+1)
                 try { return JSON.parse(h+tail); } catch (e) {}
 	    }
+	    # 直接当做字符串解释
+	    try { return JSON.parse('"' + data_ori + '"'); } catch (e) {}
             return null
         }
         function formatJSON() {
