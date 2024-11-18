@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        button {
+            margin-right: 10px;
+            padding: 10px;
+            cursor: pointer;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Time Tool</h1>
+    <textarea id="inputArea" placeholder="时间格式是2022-02-02或2022-02-02 02:02:02 
+(1). 时间差：给定两个时间算时间差或给定一个算和当前时间的差。每行一个. 
+(2). 倒计时，给定一个未来时间，算倒计时还有多久。
+(3). 时间转化：给定时间戳转时间或给定时间转时间戳"></textarea>
+    <br>
+    <button onclick="calculateTimeDifference()">计算时间差</button>
+    <button onclick="startCountdown()">倒计时</button>
+    <button onclick="convertTimestamps()">时间戳转换</button>
+
+    <div id="result"></div>
+
+    <script>
+  	var timer = null;
+    function getTimeDifference(t1, t2) {
+        // 确保 t1 是较早的时间
+        if (t1 > t2) {
+            [t1, t2] = [t2, t1];
+        }
+    
+        let years, months, days, hours, minutes, seconds;
+    
+        // 计算秒差
+        seconds = t2.getSeconds() - t1.getSeconds();
+        if (seconds < 0) {
+            seconds += 60;
+            t2.setMinutes(t2.getMinutes() - 1);
+        }
+    
+        // 计算分差
+        minutes = t2.getMinutes() - t1.getMinutes();
+        if (minutes < 0) {
+            minutes += 60;
+            t2.setHours(t2.getHours() - 1);
+        }
+    
+        // 计算小时差
+        hours = t2.getHours() - t1.getHours();
+        if (hours < 0) {
+            hours += 24;
+            t2.setDate(t2.getDate() - 1);
+        }
+    
+        // 计算天差
+        days = t2.getDate() - t1.getDate();
+        if (days < 0) {
+            // 获取前一个月的天数
+            const previousMonth = new Date(t2.getFullYear(), t2.getMonth(), 0);
+            days += previousMonth.getDate();
+            t2.setMonth(t2.getMonth() - 1);
+        }
+    
+        // 计算月差
+        months = t2.getMonth() - t1.getMonth();
+        if (months < 0) {
+            months += 12;
+            t2.setFullYear(t2.getFullYear() - 1);
+        }
+    
+        // 计算年差
+        years = t2.getFullYear() - t1.getFullYear();
+    
+        return { years, months, days, hours, minutes, seconds };
+    }
+	
+    function calculateTimeDifference() {
+	    if (timer) {clearInterval(timer)}
+            const input = document.getElementById('inputArea').value.trim();
+            const lines = input.split('\n');
+            let date1, date2;
+            if (lines.length >= 1) {
+                date1 = new Date(lines[0].trim());
+            }
+            if (lines.length >= 2) {
+                date2 = new Date(lines[1].trim());
+            } else {
+                date2 = new Date();
+            }
+            if (!date1 || isNaN(date1.getTime())) {
+                document.getElementById('result').innerText = "无效的日期格式";
+                return;
+            }
+            const diff = Math.abs(date2 - date1);
+            const result = show_time_diff(diff, date1, date2);
+            document.getElementById('result').innerHTML = result;
+        }
+
+        function show_time_diff(diff, t1, t2) {
+            const seconds = Math.floor(diff/1000.) 
+
+            const sec_0     = seconds;
+            const min_0     = seconds / 60.;
+            const hours_0   = seconds / 3600.;
+            const day_0     = seconds / 86400.;
+            const mon_0     = seconds / (86400*365.25/12);
+            const year_0    = seconds / (86400*365.25);
+
+      	    var ret = getTimeDifference(t1, t2);
+      	    var years = ret.years
+      	    var months = ret.months
+      	    var days = ret.days
+      	    var hours = ret.hours
+      	    var min = ret.minutes
+      	    var sec = ret.seconds
+          
+            var s1 = ""
+            if (years) s1 += "" + years + " 年 "
+            if (s1 || months) s1 += "" + months + " 月 "
+            if (s1 || days)   s1 += "" + days + " 日 "
+            if (s1 || hours)  s1 += "" + hours + " 时 "
+            if (s1 || min)    s1 += "" + min + " 分 "
+            if (s1 || sec)    s1 += "" + sec + " 秒"
+            if (year_0 > 0.01) s1 += "<br>= " + year_0.toFixed(2) + " 年"
+            if (mon_0 > 0.01) s1 += "<br>= " + mon_0.toFixed(2) + " 年"
+            if (day_0 > 0.01) s1 += "<br>= " + day_0.toFixed(2) + " 日"
+            if (hours_0 > 0.01) s1 += "<br>= " + hours_0.toFixed(2) + " 小时"
+            if (min_0 > 0.01) s1 += "<br>= " + min_0.toFixed(2) + " 分"
+
+            if (sec_0 > 0.01 && seconds > 60) s1 += "<br>= " + sec_0 + " 秒"
+            return s1;
+        }
+
+   function startCountdown() {
+	    if (timer) {clearInterval(timer)}
+            const input = document.getElementById('inputArea').value.trim();
+            const targetDate = new Date(input);
+            if (!targetDate || isNaN(targetDate.getTime())) {
+                document.getElementById('result').innerText = "无效的日期格式";
+                return;
+            }
+            const countdown = setInterval(() => {
+                const now = new Date();
+		            const target = new Date(targetDate.getTime());
+                const diff = target - now;
+
+                if (diff <= 0) {
+                    clearInterval(countdown);
+                    document.getElementById('result').innerText = "时间到!";
+                    return;
+                }
+
+                document.getElementById('result').innerHTML = show_time_diff(diff, now, target);
+            }, 1000);
+	          timer = countdown;
+        }
+
+    function convertTimestamps() {
+	    if (timer) {clearInterval(timer)}
+            const input = document.getElementById('inputArea').value;
+            const timestampPattern = /\b\d{10,13}\b/g;
+            const datePattern = /\b\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?\b/g;
+
+            const convertedInput = input.replace(timestampPattern, (match) => {
+                const timestamp = parseInt(match, 10);
+                const date = new Date(timestamp);
+                if (date.getFullYear() >= 1970 && date.getFullYear() <= 2050) {
+                       return `${match} <font color=red>(${date.toISOString().replace('T', ' ').split('.')[0]})</font>`;
+                }
+                const date1 = new Date(timestamp*1000);
+                if (date1.getFullYear() >= 1970 && date1.getFullYear() <= 2050) {
+                       return `${match} <font color=red>(${date.toISOString().replace('T', ' ').split('.')[0]})</font>`;
+                }
+                return match;
+            })
+	              const convertedInput_1 = input.replace(datePattern, (match) => {
+                const date = new Date(match);
+                                return `${match} <font color=red>(${date.getTime()})</font>`;
+            });
+
+			    document.getElementById('result').innerHTML = "<pre>" + convertedInput + "<hr>" + convertedInput_1 + "</pre>";
+        }
+    </script>
+
+</body>
+</html>
