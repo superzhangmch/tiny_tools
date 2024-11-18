@@ -182,14 +182,17 @@
 
             const convertedInput = input.replace(timestampPattern, (match) => {
                 const timestamp = parseInt(match, 10);
+		    
+		const date1 = new Date(timestamp*1000);
+                if (date1.getFullYear() >= 2000 && date1.getFullYear() <= 2050) {
+                       return `${match} <font color=red>(${date.toISOString().replace('T', ' ').split('.')[0]})</font>`;
+                }
+		    
                 const date = new Date(timestamp);
-                if (date.getFullYear() >= 1970 && date.getFullYear() <= 2050) {
+                if (date.getFullYear() >= 2000 && date.getFullYear() <= 2050) {
                        return `${match} <font color=red>(${date.toISOString().replace('T', ' ').split('.')[0]})</font>`;
                 }
-                const date1 = new Date(timestamp*1000);
-                if (date1.getFullYear() >= 1970 && date1.getFullYear() <= 2050) {
-                       return `${match} <font color=red>(${date.toISOString().replace('T', ' ').split('.')[0]})</font>`;
-                }
+
                 return match;
             })
 	              const convertedInput_1 = input.replace(datePattern, (match) => {
