@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>sum of numbers</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        p {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>sum of numbers</h1>
+    <textarea id="inputText" placeholder="input text here which contains numbers ..."></textarea>
+    <button onclick="calculateSum()">sum them up</button>
+    <p id="result"></p>
+
+    <script>
+        function calculateSum() {
+            // 获取 textarea 的值
+            const inputText = document.getElementById('inputText').value;
+            
+            // 正则表达式匹配所有数字（包括整数和浮点数，可以为负）
+            const regex = /-?\d+(\.\d+)?/g;
+            const matches = inputText.match(regex);
+            
+            // 计算和
+            if (matches) {
+                let sum = 0;
+                sum = matches.reduce((acc, num) => acc + parseFloat(num), 0);
+
+                // 显示结果
+                document.getElementById('result').innerHTML = `sum = ${sum}`;
+
+	              // 高亮显示匹配的数字
+                const highlightedText = inputText.replace(regex, match => `<font color=red>${match}</font>`);
+				        document.getElementById('result').innerHTML += "<hr><pre>" + highlightedText + "</pre>";
+			    } else {
+                document.getElementById('result').innerHTML = "no number found";
+					}
+      }
+    </script>
+
+</body>
+</html>
