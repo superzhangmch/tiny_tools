@@ -52,7 +52,7 @@
             for (let i = 0; i < str.length; i++) {
                 if (allowedCharacters.indexOf(str[i]) === -1) {
                     // 对不允许的字符进行编码
-                    result += '%' + str.charCodeAt(i).toString(16).toUpperCase();
+                    result += encodeURIComponent(str[i]);
                 } else {
                     // 允许的字符直接添加
                     result += str[i];
