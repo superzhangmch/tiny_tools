@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>encode / decode tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            margin-bottom: 10px;
+        }
+        button {
+            margin-right: 10px;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border: 1px solid #ccc;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Encode / decode tool</h1>
+    
+    <textarea id="inputText" placeholder="input text here ..."></textarea>
+    <br>
+    
+    <button onclick="encodeBase64()">Base64 Encode</button>
+    <button onclick="encodeURLEncode()">URL Encode</button>
+    <button onclick="decodeText()">Decode (自动猜哪种)</button>
+    
+    <h2>Result</h2>
+    <pre style='white-space: pre-wrap;word-wrap: break-word;' id="result"></pre>
+
+    <script>
+        function encodeBase64() {
+            const inputText = document.getElementById('inputText').value;
+            const encodedText = btoa(unescape(encodeURIComponent(inputText)));
+            document.getElementById('result').textContent = encodedText;
+        }
+
+        function encodeURLEncode() {
+            const inputText = document.getElementById('inputText').value;
+            const encodedText = encodeURIComponent(inputText);
+            document.getElementById('result').textContent = encodedText;
+        }
+
+        function decodeText() {
+            document.getElementById('result').textContent = ''
+            let inputText = document.getElementById('inputText').value;
+            let resultText = inputText;
+            let previousLength;
+            
+            const base64Pattern = /[A-Za-z0-9+\/=]{6,}/g;
+            const urlEncodedPattern = /%[0-9A-Fa-f]{2}/g;
+
+            var last_str = inputText;
+            do {
+                console.log(last_str)
+                previousLength = resultText.length;
+                
+                resultText = resultText.replace(base64Pattern, (match) => {
+                    try {
+                        return decodeURIComponent(escape(atob(match)));
+                    } catch (e) {
+                        return match;
+                    }
+                });
+
+                try { resultText = decodeURIComponent(resultText); } catch (e) { }
+
+                if (last_str != resultText) document.getElementById('result').textContent += '[result]\n' + resultText + "\n\n";
+                last_str = resultText;
+
+            } while (resultText.length < previousLength);
+        }
+    </script>
+
+</body>
+</html>
