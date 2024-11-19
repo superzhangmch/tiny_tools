@@ -45,11 +45,35 @@
             const encodedText = btoa(unescape(encodeURIComponent(inputText)));
             document.getElementById('result').textContent = encodedText;
         }
-
+        function customURLEncode(str) {
+            const allowedCharacters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~!*\'();:@&=+$,/?#[]';
+            let result = '';
+        
+            for (let i = 0; i < str.length; i++) {
+                if (allowedCharacters.indexOf(str[i]) === -1) {
+                    // 对不允许的字符进行编码
+                    result += '%' + str.charCodeAt(i).toString(16).toUpperCase();
+                } else {
+                    // 允许的字符直接添加
+                    result += str[i];
+                }
+            }
+        
+            return result;
+        }
         function encodeURLEncode() {
-            const inputText = document.getElementById('inputText').value;
+            const inputText = document.getElementById('inputText').value.trim();
+            if (!inputText) {
+                document.getElementById('result').textContent = "please input first";
+                return;
+            }
             const encodedText = encodeURIComponent(inputText);
-            document.getElementById('result').textContent = encodedText;
+            const encodedText1 = customURLEncode(inputText);
+            if (encodedText == encodedText1) {
+                document.getElementById('result').textContent = encodedText;
+            } else {
+                document.getElementById('result').textContent = encodedText + "\n____\n" + encodedText1;
+            }
         }
 
         function decodeText() {
