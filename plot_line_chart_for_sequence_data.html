@@ -3,7 +3,7 @@
 <head>
 	<meta http-equiv="content-type" content="text/html;charset=utf8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>统计分析与折线图 - plot a line chart for sequence data</title>
+    <title>统计分析与折线图</title>
 
 <style>
 body {
@@ -82,7 +82,7 @@ function parseDataByColumns(input) {
 function processColData() {
     const inputData = document.getElementById('inputData').value.trim();
     if (!inputData) return;
-    var arr = parseDataByColumns(inputData);
+    var arrays = parseDataByColumns(inputData);
     const statistics = arrays.map(arr => calculateStatistics(arr));
 	
   
@@ -230,7 +230,7 @@ function getRandomColor() {
 </script>
 </head>
 <body>
-    <h1>序列数据画折线图 (Plot a line chart for sequence data)</h1>
+    <h1>序列数据画折线图</h1>
     <textarea id="inputData" rows="10" cols="50" placeholder="">
 行序列：每行是一类序列数据，分隔符不限。 for example:
 aaa: [1,12,3,4,6]
