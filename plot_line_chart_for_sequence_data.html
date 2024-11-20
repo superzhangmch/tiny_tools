@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -43,33 +42,30 @@ function processData() {
 
 function parseDataByColumns(input) {
     const lines = input.split('\n');
-    let delimiter = ' ';
-    let fields = [1];
-    const columnData = {1: []};
+    let delimiter = document.getElementById('delimiter').value.trim();
+    if (!delimiter) delimiter = ' ';
+    if ('space' == delimiter) delimiter = ' ';
+    if ('tab' == delimiter) delimiter = '\t';
 
+    let fieldsInput = document.getElementById('fields').value.trim();
+    let columnData = {};
+    let fields = fieldsInput.split(',').map(Number);
+    if (fieldsInput.length == 0 || !fields) {
+	fields = [0];
+	columnData[0] = [];
+    } else {
+	for (var f in fields) {
+	    columnData[fields[f]] = [];
+	}
+    }
+    console.log('xx', '<'+delimiter+'>', fields, fields.length, columnData);
     for (let line of lines) {
         line = line.trim();
 
-        if (line.startsWith('#')) {
-            if (line.startsWith('#SEP=')) {
-                const sep = line.substring(5).trim();
-                if (sep === 'tab') {
-                    delimiter = '\t';
-                } else if (sep === 'space') {
-                    delimiter = ' ';
-                } else if (sep != '') {
-		    delimiter = sep;
-		}
-            } else if (line.startsWith('#FIELDS=')) {
-                fields = line.substring(8).split(',').map(Number);
-                fields.forEach(field => {
-                    columnData[field] = [];
-                });
-            }
-        } else if (line) {
+        if (line) {
             const values = line.split(delimiter);
             fields.forEach(field => {
-                const value = values[field - 1];
+                const value = values[field];
                 if (!isNaN(value)) {
                     columnData[field].push(Number(value));
                 }
@@ -237,10 +233,8 @@ aaa: [1,12,3,4,6]
 bbb 1 2 3 55 1
 -1.1 2 3 5
 ==========
-列序列：每列是一类序列数据。
-前两行中如有 \"#FIELDS=1,2,3\" 这样的，则只针对指定的列，列序号从 1 开始。
-前两行中如有 \"#SEP=,\" 这样的，表示分隔符，\t与空格用tab/space。"></textarea>
-    <button onclick="processData()">行序列：画折线图</button> <button onclick="processColData()">列序列：画折线图</button>
+列序列：每列是一类序列数据。列序号比如1,2,3。列分隔符，默认空格, \t用tag"></textarea>
+    <button onclick="processData()">行序列：画折线图</button> | <button onclick="processColData()">列序列：画折线图</button> <input type="text" id="delimiter" placeholder="列分隔符" style='width:60px'> <input type="text" id="fields" placeholder="列序号，逗号隔开, 0开始">
     <p>
     <div id="statisticsTableContainer"></div>
     <canvas id="lineChart"></canvas>
@@ -248,3 +242,4 @@ bbb 1 2 3 55 1
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 </html>
+
