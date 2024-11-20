@@ -40,6 +40,55 @@ function processData() {
     drawLineChart(arrays);
 }
 
+function parseDataByColumns(input) {
+    const lines = input.split('\n');
+    let delimiter = ' ';
+    let fields = [0];
+    const columnData = {0: []};
+
+    for (let line of lines) {
+        line = line.trim();
+
+        if (line.startsWith('#')) {
+            if (line.startsWith('#SEP=')) {
+                const sep = line.substring(5).trim();
+                if (sep === 'tab') {
+                    delimiter = '\t';
+                } else if (sep === 'space') {
+                    delimiter = ' ';
+                } else if (sep != '') {
+		    delimiter = sep;
+		}
+            } else if (line.startsWith('#FIELDS=')) {
+                fields = line.substring(8).split(',').map(Number);
+                fields.forEach(field => {
+                    columnData[field] = [];
+                });
+            }
+        } else if (line) {
+            const values = line.split(delimiter);
+            fields.forEach(field => {
+                const value = values[field - 1];
+                if (!isNaN(value)) {
+                    columnData[field].push(Number(value));
+                }
+            });
+        }
+    }
+
+    return fields.map(field => columnData[field]);
+}
+
+function processColData() {
+    const inputData = document.getElementById('inputData').value.trim();
+    if (!inputData) return;
+    var arr = parseDataByColumns(inputData);
+    const statistics = arrays.map(arr => calculateStatistics(arr));
+	
+  
+    displayStatistics(statistics);
+    drawLineChart(arrays);
+}
 
 function calculateStatistics(array) {
     const mean = array.reduce((sum, value) => sum + value, 0) / array.length;
@@ -183,12 +232,16 @@ function getRandomColor() {
 <body>
     <h1>序列数据画折线图 (Plot a line chart for sequence data)</h1>
     <textarea id="inputData" rows="10" cols="50" placeholder="">
-每行是一类序列数据，格式不限。(Each row is a type of sequence data, with no specific format required.) for example:
+行序列：每行是一类序列数据，分隔符不限。 for example:
 aaa: [1,12,3,4,6]
 bbb 1 2 3 55 1
 -1.1 2 3 5
+==========
+列序列：每列是一类序列数据。
+前两行中如有 #FIELDS=1,2,3 这样的，则只针对指定的列，列序号从0开始。
+前两行中如有 "#SEP=," 这样的，表示分隔符，\t与空格用tab/space。
     </textarea>
-    <button onclick="processData()">处理数据并画折线图(Process data and plot a line chart)</button>
+    <button onclick="processData()">行序列数据画折线图</button> <button onclick="processColData()">列序列数据画图</button>
     <div id="statisticsTableContainer"></div>
     <canvas id="lineChart"></canvas>
 
