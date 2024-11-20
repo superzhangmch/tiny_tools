@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -43,8 +44,8 @@ function processData() {
 function parseDataByColumns(input) {
     const lines = input.split('\n');
     let delimiter = ' ';
-    let fields = [0];
-    const columnData = {0: []};
+    let fields = [1];
+    const columnData = {1: []};
 
     for (let line of lines) {
         line = line.trim();
@@ -231,17 +232,16 @@ function getRandomColor() {
 </head>
 <body>
     <h1>序列数据画折线图</h1>
-    <textarea id="inputData" rows="10" cols="50" placeholder="">
-行序列：每行是一类序列数据，分隔符不限。 for example:
+    <textarea id="inputData" rows="10" cols="50" placeholder="行序列：每行是一类序列数据，分隔符不限。 for example:
 aaa: [1,12,3,4,6]
 bbb 1 2 3 55 1
 -1.1 2 3 5
 ==========
 列序列：每列是一类序列数据。
-前两行中如有 #FIELDS=1,2,3 这样的，则只针对指定的列，列序号从0开始。
-前两行中如有 "#SEP=," 这样的，表示分隔符，\t与空格用tab/space。
-    </textarea>
-    <button onclick="processData()">行序列数据画折线图</button> <button onclick="processColData()">列序列数据画图</button>
+前两行中如有 \"#FIELDS=1,2,3\" 这样的，则只针对指定的列，列序号从 1 开始。
+前两行中如有 \"#SEP=,\" 这样的，表示分隔符，\t与空格用tab/space。"></textarea>
+    <button onclick="processData()">行序列：画折线图</button> <button onclick="processColData()">列序列：画折线图</button>
+    <p>
     <div id="statisticsTableContainer"></div>
     <canvas id="lineChart"></canvas>
 
