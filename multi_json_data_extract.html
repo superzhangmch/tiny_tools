@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Extractor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        input {
+            width: calc(33.33% - 10px);
+            margin-right: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+
+<h1>JSON Data Extractor</h1>
+
+<table><tr>
+<td valign=top style='width:70%'><textarea id="jsonInput" placeholder="Enter JSON data, one per line"></textarea>
+<br>
+<ul>
+        <li><input type="text" id="expr1" placeholder="Enter 抽取1, 格式举例：[0].a 、a[1].b、a、a.b" value=''>
+        <li><input type="text" id="expr2" placeholder="Enter 抽取2">
+        <li><input type="text" id="expr3" placeholder="Enter 抽取3">
+</ul>
+<button onclick="extractData()">Extract Data</button>
+<button onclick="exportToExcel()">Export to Excel</button>
+<td valign=top><textarea style='' id="filterConditions" rows="5" cols="50" placeholder="Enter filter conditions, one per line"></textarea>
+        根据抽取出的第一列做过滤：
+        <br><label><input type="radio" name="filterType" value="includes">含以上的子串的 - 子串匹配</label>
+        <br><label><input type="radio" name="filterType" value="excludes">不含以上子串的 - 子串匹配</label>
+        <br><label><input type="radio" name="filterType" value="equals">含以上的 - 精确匹配</label>
+        <br><label><input type="radio" name="filterType" value="notEquals">不含以上的 - 精确匹配</label>
+        <br><label><input type="radio" name="filterType" value="none" checked> No Filter</label>
+</table>
+
+<table id="resultTable">
+    <thead>
+        <tr>
+            <th>Index</th>
+            <th>抽取1</th>
+            <th>抽取2</th>
+            <th>抽取3</th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+
+<script>
+    function transformExpression(expr) {
+        return expr.replace(/\.?([a-zA-Z0-9_]+)/g, "['$1']").replace(/$$ '(\d+)' $$/g, "[$1]").replace("[[", "[").replace("]]", "]");
+    }
+
+function applyFilter(value, conditions, filterType) {
+    if (filterType === 'none') return true;
+    if (value === null || value === undefined) return true;
+    switch (filterType) {
+        case 'includes':
+            // 子串包含以上任一
+            return conditions.some(condition => value.includes(condition));
+
+        case 'excludes':
+            // 不子串包含以上任一
+            return conditions.every(condition => !value.includes(condition));
+
+        case 'equals':
+            // 等于以上任一
+            return conditions.some(condition => value === condition);
+
+        case 'notEquals':
+            // 与以上全不等
+            return conditions.every(condition => value !== condition);
+
+        default:
+            return false;
+    }
+}
+
+function convertToString(data) {
+    if (data === null || data === undefined) {
+        return data;
+    }
+    
+    if (typeof data === 'object') {
+        // 处理对象和数组
+        try {
+            return JSON.stringify(data);
+        } catch (error) {
+            console.error("Cannot stringify circular structure", error);
+            return null; // 处理循环引用等
+        }
+    }
+    
+    // 处理其他基本类型（如数字、布尔值、字符串）
+    return data.toString();
+}
+
+    var filterConditions = [];
+    var filterType = 'none';
+    function extractData() {
+        const tableBody = document.querySelector('#resultTable tbody');
+        tableBody.innerHTML = '';
+
+        const jsonInput = document.getElementById('jsonInput').value.trim();
+        const expr1 = document.getElementById('expr1').value.trim();
+        const expr2 = document.getElementById('expr2').value.trim();
+        const expr3 = document.getElementById('expr3').value.trim();
+
+        const exprs = [expr1, expr2, expr3].map(transformExpression);
+        const jsonData = jsonInput.split('\n').map(line => tryParseJSON(line));
+        
+        filterConditions = document.getElementById('filterConditions').value.trim().split('\n').map(cond => cond.trim().replace(/^"|"$/g, '')).filter(cond => cond);
+        filterType = document.querySelector('input[name="filterType"]:checked').value
+        if (!filterConditions || filterConditions.length == 0) {
+            filterType = 'none';
+        }
+
+        // Counters for each expression
+        const exprCounts = [0, 0, 0];
+
+        jsonData.forEach((data, index) => {
+            if (!data) return;
+            const row = document.createElement('tr');
+            const indexCell = document.createElement('td');
+            indexCell.textContent = index + 1;
+            row.appendChild(indexCell);
+
+            var should_filter = 0;
+            exprs.forEach((expr, i) => {
+                if (should_filter) return;
+                const cell = document.createElement('td');
+                if (expr && data) {
+                    try {
+                        const result = convertToString(eval('data' + expr));
+                        if (result !== undefined) {
+                            if (i == 0 && !applyFilter(result, filterConditions, filterType)) {
+                                should_filter = 1;
+                                return;
+                            } 
+                            cell.textContent = result;
+                            exprCounts[i]++;
+                        }
+                    } catch (err) {
+                        console.error('Error evaluating expression:', expr, err);
+                    }
+                }
+                row.appendChild(cell);
+            });
+
+            if (should_filter) return;
+            tableBody.appendChild(row);
+        });
+
+        // Update header with counts
+        const headers = document.querySelectorAll('#resultTable th');
+        headers.forEach((header, i) => {
+            if (i > 0) header.textContent = `Expression ${i} (${exprCounts[i-1]})`;
+        });
+    }
+
+    function tryParseJSON(jsonString) {
+        try {
+            return JSON.parse(jsonString);
+        } catch (e) {
+            console.error('Invalid JSON:', jsonString);
+            return null;
+        }
+    }
+
+    function exportToExcel() {
+        const table = document.getElementById('resultTable');
+        const wb = XLSX.utils.table_to_book(table, {sheet: "Sheet1"});
+        XLSX.writeFile(wb, '抽取结果.xlsx');
+    }
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+</body>
+</html>
