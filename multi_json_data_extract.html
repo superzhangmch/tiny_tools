@@ -41,7 +41,7 @@
 
 <table><tr>
 <td valign=top style='width:70%'><textarea id="jsonInput" placeholder="Enter JSON data, one per line"></textarea>
-<br>
+<br>或从文件读取：<input type="file" id="fileInput" accept=".txt,.csv,.json,.jsonl,.dat"><br>
 <ul>
         <li><input type="text" id="expr1" placeholder="Enter 抽取1, 格式举例：[0].a 、a[1].b、a、a.b" value=''>
         <li><input type="text" id="expr2" placeholder="Enter 抽取2">
@@ -72,10 +72,23 @@
 </table>
 
 <script>
-    function transformExpression(expr) {
-        return expr.replace(/\.?([a-zA-Z0-9_]+)/g, "['$1']").replace(/$$ '(\d+)' $$/g, "[$1]").replace("[[", "[").replace("]]", "]");
-    }
-
+function transformExpression(expr) {
+    return expr.replace(/\.?([a-zA-Z0-9_]+)/g, "['$1']").replace(/$$ '(\d+)' $$/g, "[$1]").replace("[[", "[").replace("]]", "]");
+}
+    document.getElementById('fileInput').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const textarea = document.getElementById('jsonInput');
+                textarea.value = e.target.result;
+            };
+            reader.onerror = function(e) {
+                console.error("File could not be read! Code " + e.target.error.code);
+            };
+            reader.readAsText(file);
+        }
+    });
 function applyFilter(value, conditions, filterType) {
     if (filterType === 'none') return true;
     if (value === null || value === undefined) return true;
