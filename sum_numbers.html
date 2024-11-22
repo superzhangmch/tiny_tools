@@ -27,11 +27,67 @@
 <body>
 
     <h1>sum of numbers</h1>
-    <textarea id="inputText" placeholder="input text here which contains numbers ..."></textarea>
-    <button onclick="calculateSum()">sum them up</button>
+    <textarea id="inputText" placeholder="1. 直接求和：一段文本里面有数字，则把所有数字相加
+2. 表达式计算：数学表达式，可以有多行，会把有全加起来"></textarea>
+    <button onclick="calculateSum()">数字求和</button>
+    <button onclick="evaluateExpressions()">表达式计算</button>
     <p id="result"></p>
 
     <script>
+        function evaluateExpressions() {
+            const input = document.getElementById('inputText').value;
+            // Split the input into lines
+
+            const lines = input.split('\n');
+            let totalSum = 0;
+            let results = [];
+
+            // Regular expression to match and replace functions
+            const functionRegex = /\b(sin|cos|tan|log|sqrt|abs|exp|PI)\b/g;
+
+            var c = 0
+            var e = 0
+            for (let line of lines) {
+                // Trim whitespace and skip empty lines
+                line = line.trim();
+                if (line === '') continue;
+
+                // Replace functions with Math functions
+                let expression = line.replace(functionRegex, (match) => {
+                    if (match === 'PI') return 'Math.PI';
+                    return `Math.${match}`;
+                });
+
+                // Replace ^ with ** for exponentiation
+                expression = expression.replace(/\^/g, '**');
+
+                try {
+                    // Evaluate the expression
+                    const result = eval(expression);
+                    totalSum += result;
+                    results.push(`${line} = ${result}`);
+                    c += 1
+                } catch (error) {
+                    results.push(`Error evaluating <font color=red> '${line}': </font>${error.message}`);
+                    e += 1
+                }
+            }
+
+            // Get the output div
+            const outputDiv = document.getElementById('result');
+            outputDiv.innerHTML = ''
+            // Display the total sum
+            if (c > 1) {
+                if (e>0) {
+                    outputDiv.innerHTML += `<p style='color:red'>有表达式语法错误！</p>`;
+                }
+                outputDiv.innerHTML += `<p>Total Sum: ${totalSum}</p>`;
+            }
+            // Display each result on a new line
+            results.forEach(result => {
+                outputDiv.innerHTML += `<p>${result}</p>`;
+            });
+        }
         function calculateSum() {
             // 获取 textarea 的值
             const inputText = document.getElementById('inputText').value;
@@ -48,12 +104,12 @@
                 // 显示结果
                 document.getElementById('result').innerHTML = `sum = ${sum}`;
 
-	              // 高亮显示匹配的数字
+                // 高亮显示匹配的数字
                 const highlightedText = inputText.replace(regex, match => `<font color=red>${match}</font>`);
-				        document.getElementById('result').innerHTML += "<hr><pre>" + highlightedText + "</pre>";
-			    } else {
+                document.getElementById('result').innerHTML += "<hr><pre>" + highlightedText + "</pre>";
+            } else {
                 document.getElementById('result').innerHTML = "no number found";
-					}
+            }
       }
     </script>
 
