@@ -55,7 +55,37 @@
 	    return result;
 	}
    
-        function fix_and_return_json(data) {
+	function json_fix_kv(arr) {
+		return arr.map(item => {
+			const regex = /^\s*(['"]?[a-zA-Z0-9_]+['"]?)\s*:\s*(['"]?[^'":,\[\]\{\}]+['"]?)\s*(,?)\s*$/;
+			const match = item.match(regex);
+			if (match) {
+				let [, key, value, comma] = match;
+				console.log('vv', key, value)
+				key = key.trim().replace(/^['"]|['"]$/g, '');
+				value = value.trim();
+				var value1 = value.replace(/^['"]|['"]$/g, '');
+      				if (/^[-+]?\d*\.?\d+$/.test(value1)) { // number
+					if (value != value1) {
+						value1 = `"${value}"`;
+					}
+      				} else if (value == value1 && ['true', 'false', 'null'].includes(value1.toLowerCase())) {
+        				value1 = value1.toLowerCase();
+      				} else {
+        				value = `"${value1}"`;
+				}
+      				var ret = `"${key}": ${value}${comma}`;
+				return ret;
+    			}
+    			return item;
+	 	});
+	}
+        function fix_and_return_json(data, original_input, pos) {
+	    if (pos !== null) {
+	    	var d = data.slice(0, pos)
+		//console.log('vvv|', d, '|')
+                try { return JSON.parse(d); } catch (e) {}
+	    }
 	    var data_ori = data;
 	    // ,] | ,}情况
             data = data.replace(/,\s*([\]}])/g, '$1');
@@ -143,7 +173,7 @@
 	    // 遍历：多一个字符，少一个字符的情况
             const regex = /[,"\[\]{}:]/g;
             const matches = [...data_ori.matchAll(regex)]
-            console.log(matches, data_ori)
+            // console.log(matches, data_ori)
             var char_set = [',', '"', '[', ']', '{', '}', ':'];
             for (var idx in matches) {
                 var i = matches[idx].index;
@@ -164,29 +194,70 @@
                 tail = data_ori.slice(i+1)
                 try { return JSON.parse(h+tail); } catch (e) {}
 	    }
+
+	    // 是不是被包在了单引号里？
+	    if (data_ori[0] == "'" && data_ori[data_ori.length - 1] == "'") {
+	    	try { return JSON.parse(data_ori.slice(1, -1)); } catch (e) {}
+	    }
+	    if (original_input.includes("\n")) {
+	    	var d = original_input;
+		d = d.replace(/#[^'"]*$/gm, ''); // 是不是被注释影响了？
+		d = d.replace(/\/\/[^'"]*$/gm, '');
+		var arr = d.split("\n")
+
+		arr = json_fix_kv(arr);
+		d = arr.join(" "); try { return JSON.parse(d); } catch (e) {}
+		d = d.replace(/,\s*([\]}])/g, '$1'); try { return JSON.parse(d); } catch (e) {}
+		d = d.replace(/'/gm, '"'); try { return JSON.parse(d); } catch (e) {}
+	    }
+
 	    // 直接当做字符串解释
 	    try { return JSON.parse('"' + data_ori + '"'); } catch (e) {}
             return null
         }
         function formatJSON() {
             const input = document.getElementById('jsonInput').value;
-            const singleLineInput = input.replace(/\n/g, '').replace(/\t/g, '        '); // 拼接成单行
+            const singleLineInput = input.replace(/\n/g, '').replace(/\t/g, '        ').trim(); // 拼接成单行
             const outputDiv = document.getElementById('output');
             outputDiv.innerHTML = ''; // Clear previous output
-           //console.log(singleLineInput)
+            //console.log(singleLineInput)
+            if (!singleLineInput) {
+            	outputDiv.innerHTML = 'please input a json data'; // Clear previous output
+	    	return;
+	    }
 
             try {
                 const jsonObj = JSON.parse(singleLineInput);
                 const formattedHTML = formatValue(jsonObj);
                 outputDiv.appendChild(formattedHTML);
             } catch (e) {
-		const jsonObj = fix_and_return_json(singleLineInput);
+	    	
+		var err_msg = e.message;
+		var pos = null;
+		var positionMatch = err_msg.match(/position (\d+)/);
+		if (positionMatch) {
+  			pos = parseInt(positionMatch[1], 10);
+		}
+		var newHtml = "解析报错：<pre style='background-color:lightgray; white-space: pre-wrap;'>"+err_msg+"</pre><br>"
+		if (pos) {
+			newHtml += "<div style='border: 2px solid black;'><span style='font-size:9px; color:'>" + singleLineInput.slice(0, pos) + "<span style='color:red; font-weight:bold;'>[可能错在这里]</span>" + singleLineInput.slice(pos) + "</span></div><br>"
+		}
+
+		const jsonObj = fix_and_return_json(singleLineInput, input, pos);
 		if (jsonObj === null) {
-                	outputDiv.textContent = 'Invalid JSON input.';
+                	outputDiv.innerHTML = newHtml
 			return
 		}
-                const formattedHTML = formatValue(jsonObj);
+		var json_fixed = JSON.stringify(jsonObj);
+		var formattedHTML = formatValue(jsonObj);
                 outputDiv.appendChild(formattedHTML);
+		if ((typeof jsonObj) === 'string') {
+			newHtml +=  "不是 json 是个字符串吧？<pre style='background-color:lightgray'>" + json_fixed.replace("<", "&lt") +"</pre><br>";
+                	outputDiv.insertAdjacentHTML('afterbegin', newHtml);
+		} else {
+			newHtml =  "解析失败，尝试修复后如下, 请检查:<pre style='background-color:lightgray; white-space: pre-wrap;'>" + json_fixed.replace("<", "&lt") +"</pre><br>";
+                	outputDiv.insertAdjacentHTML('afterbegin', newHtml);
+		}
             }
         }
 
@@ -210,8 +281,23 @@
                 keyCell.textContent = key;
                 keyCell.style.backgroundColor = 'lightgreen';
 
+		
+		if (key == '_base64前_' || key == '_原始_') {
+			keyCell.style.color = 'gray';        // 设置字体颜色为灰色
+			keyCell.style.fontStyle = 'italic';  // 设置字体样式为斜体
+		}
+
                 const valueCell = row.insertCell();
-                valueCell.appendChild(formatValue(val));
+		if (key == '_base64前_' || key == '_原始_') {
+		    var node = document.createTextNode(val)
+		    var span = document.createElement("span");
+		    span.appendChild(node);
+		    span.style.fontStyle = "italic"; // 使文本斜体
+		    span.style.color = "gray"; // 使文本变灰色
+                    valueCell.appendChild(span);
+		} else {
+                    valueCell.appendChild(formatValue(val));
+		}
             }
             return table;
         }
@@ -249,8 +335,21 @@
         }
 
         function formatString(str) {
+	    var ori_str = str;
+	    var de_base64 = "";
+	    if (str.length > 20) {
+	    	const regex = /^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=|[A-Za-z0-9+\/]{4})$/;
+		if (regex.test(str)) {
+			try {
+				str = atob(str);
+				de_base64 = str;
+			} catch (e) {}	
+		}
+	    }
             try {
                 const parsedStr = JSON.parse(str);
+		parsedStr["_原始_"] = ori_str;
+		if (de_base64) parsedStr['_base64前_'] = de_base64;
                 return formatValue(parsedStr);
             } catch {
                 // console.log('xxx', str,str.includes('\\n' ));
@@ -261,9 +360,16 @@
                     const pre = document.createElement('pre');
                     // pre.textContent = str.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
                     pre.textContent = str;
+		    if (de_base64) {
+		    	pre.textContent += "<hr>__原始内容__: " + de_base64;
+		    }
                     return pre;
                 } else {
-                    return document.createTextNode(str);
+		    if (de_base64) {
+                    	return document.createTextNode(str + "<br>__原始内容__: " + de_base64);
+		    } else {
+                    	return document.createTextNode(str);
+		    }
                 }
             }
         }
