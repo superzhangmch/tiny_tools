@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/algebrite@1.4.0/dist/algebrite.bundle-for-browser.min.js"></script>
+    <title>符号计算</title>
+    <style>
+        .highlight {
+            color: red;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+        }
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+        p {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>符号计算</h1>
+    <textarea id="inputText" placeholder="背后使用algebrite. 可以每行一个计算。一些操作举例：
+求导：d(x^2)
+积分：integral(x^2) | integral(x*y,x,y) | defint(x^2,y,0,sqrt(1-x^2),x,-1,1)
+泰勒展开：taylor(sin(x))
+多项式展开：expand((x+y)^100)
+化简：simplify(n!/(n+1)!)
+解方程: 只能单方程 roots, nroots
+"></textarea>
+    <button onclick="evaluateExpressions_simple()">计算</button> (背后使用 <a target=_blank href='http://algebrite.org/docs/latest-stable/reference.html'>algebrite</a>)
+    <div id="result"></div>
+
+    <script>
+      function evaluateExpressions_simple() {
+        Algebrite.clearall();
+        const input = document.getElementById('inputText').value;
+        var resultDiv = document.getElementById('result');
+	resultDiv.innerHTML = ''
+	var arr = input.split('\n')
+	var f = 0
+	for (var i in arr) {
+		var line = arr[i].trim()
+		if (!line) continue
+
+        	const expression = line;
+        	const expression_result = Algebrite.run('' + expression + '');
+		if (!expression_result) {
+			continue
+		}
+
+		f += 1
+
+    // Convert expressions to LaTeX
+		if (!expression_result.includes('error') && !expression_result.includes('expected')) {
+			resultDiv.innerHTML += "<hr><p>" + expression + " → " + expression_result + "";
+			if (!/^[0-9\.-]+$/.test(expression_result)) {
+        			const expressionLatex = Algebrite.run('printlatex(' + expression + ')');
+				console.log('latex_run', expression, '|', expressionLatex, '|')
+				resultDiv.innerHTML += " $$" + expressionLatex + "$$ ";
+			}
+		} else {
+			resultDiv.innerHTML += "<hr><p>" + expression + " → <span style='color:red'>" + expression_result + "</span>";
+		}
+		resultDiv.innerHTML += "</p>"
+        }
+	if (f) {
+		MathJax.typesetPromise([resultDiv]).catch((err) => console.error(err.message));
+	}
+    }
+    </script>
+</body>
+</html>
