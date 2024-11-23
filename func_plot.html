@@ -28,20 +28,20 @@
     <div class="controls">
     <table>
         <tr>
-		<td><label for="function">函数: </label>
-        	<td><input type="text" id="function" value="1/x" style='width:100%'>
+                <td><label for="function">函数: </label>
+                <td><input type="text" id="function" value="sin(sin(x))" style='width:100%'>
         <tr>
-		<td><label for="xMin">xMin: </label>
-        	<td><input type="number" id="xMin" value="-10">
+                <td><label for="xMin">xMin: </label>
+                <td><input type="number" id="xMin" value="-10">
         <label for="xMax">xMax: </label>
         <input type="number" id="xMax" value="10">
-	<tr><td><!--
-		<label for="yInfty">yInfty: </label>
-        	<td><input type="text" id="yInfty" value="" placeholder='奇异点附近阈值'>
-		-->
-		<td><button onclick="drawFunction()">绘制</button>
-	    x范围：<span id=xDiff></span>
-	</table>
+        <tr><td><!--
+                <label for="yInfty">yInfty: </label>
+                <td><input type="text" id="yInfty" value="" placeholder='奇异点附近阈值'>
+                -->
+                <td><button onclick="drawFunction()">绘制</button>
+            x范围：<span id=xDiff></span> <a href='javascript:reset_x()'>reset</a>
+        </table>
     </div>
     <canvas id="canvas" width="600" height="400"></canvas>
     <div class="zoom-controls">
@@ -51,51 +51,59 @@
 
     <script>
         var input_func = null;
+        function reset_x()
+        {
+                document.getElementById('xMin').value = "-10";
+                document.getElementById('xMax').value = "10";
+                document.getElementById('xDiff').innerHTML = "20";
+                drawFunction();
+        }
         function parseFunction(input) {
-            return input
+            return input.toLowerCase()
                 .replace(/sin/g, 'Math.sin')
                 .replace(/cos/g, 'Math.cos')
                 .replace(/tan/g, 'Math.tan')
-		.replace(/[\^]/g, '**')
                 .replace(/log/g, 'Math.log')
+                .replace(/Pi/g, 'Math.PI')
+                .replace(/[\^]/g, '**')
                 .replace(/exp/g, 'Math.exp');
         }
 
         let dragging = false;
         let lastX = 0;
 
-function formatNumber(num) {
-  var num1 = Math.abs(num)
-  if (num1 < 0.001) { return num.toFixed(5)
-  } else if (num1 < 0.01) { return num.toFixed(4)
-  } else if (num1 < 0.1)  { return num.toFixed(3)
-  } else if (num1 < 10)   { return num.toFixed(2)
-  } else if (num1 < 100)  { return num.toFixed(1)}
-  let str = num.toPrecision(5);
-  return str
-}
+        function formatNumber(num) {
+                var num1 = Math.abs(num);
+                if (num1 < 0.001) { return num.toFixed(5)
+                } else if (num1 < 0.01) { return num.toFixed(4)
+                } else if (num1 < 0.1)  { return num.toFixed(3)
+                } else if (num1 < 10)   { return num.toFixed(2)
+                } else if (num1 < 100)  { return num.toFixed(1)}
+                let str = num.toPrecision(5);
+                return str
+        }
         function drawFunction() {
             const canvas = document.getElementById('canvas');
             const ctx = canvas.getContext('2d');
             const funcInput = document.getElementById('function').value;
             const func = parseFunction(funcInput);
-	    input_func = new Function("x", `return ${func}`)
+            input_func = new Function("x", `return ${func}`)
 
             let xMin = parseFloat(document.getElementById('xMin').value);
             let xMax = parseFloat(document.getElementById('xMax').value);
 
-	    var y_infity = null;
-	    function isFinite_1(y) {
-		    if (y_infity === null) {
-			    return isFinite(y)
-		    }
-		    return Math.abs(y) < y_infity;
-	    }
+            var y_infity = null;
+            function isFinite_1(y) {
+                    if (y_infity === null) {
+                            return isFinite(y)
+                    }
+                    return Math.abs(y) < y_infity;
+            }
             //let y_inf = parseFloat(document.getElementById('yInfty').value);
-	    //if (!isNaN(y_inf) && y_inf > 0) {y_infity = y_inf;}
+            //if (!isNaN(y_inf) && y_inf > 0) {y_infity = y_inf;}
 
             const xDiff = document.getElementById('xDiff');
-	    xDiff.innerHTML = formatNumber(xMax - xMin)
+            xDiff.innerHTML = formatNumber(xMax - xMin)
 
             const width = canvas.width;
             const height = canvas.height;
@@ -106,14 +114,14 @@ function formatNumber(num) {
             let yMin = Infinity;
             let yMax = -Infinity;
 
-	    var arr = [] 
+            var arr = [] 
             for (let i = 0; i < width; i++) {
                 const x = xMin + (i / width) * xRange;
                 let y;
                 try {
                     y = input_func(x);
                     if (isFinite_1(y)) {
-		    	arr.push(y)
+                        arr.push(y)
                         yMin = Math.min(yMin, y);
                         yMax = Math.max(yMax, y);
                     }
@@ -121,13 +129,13 @@ function formatNumber(num) {
                     continue;
                 }
             }
-	    arr = arr.sort((a, b) => a - b);
-	    let i1 = Math.ceil((arr.length * 99.5) / 100);
-	    let i2 = Math.ceil((arr.length * 0.5) / 100);
-	    try {
-		    yMax = arr[i1];
-		    yMin = arr[i2];
-	    } catch (error) {}
+            arr = arr.sort((a, b) => a - b);
+            let i1 = Math.ceil((arr.length * 99.5) / 100);
+            let i2 = Math.ceil((arr.length * 0.5) / 100);
+            try {
+                    yMax = arr[i1];
+                    yMin = arr[i2];
+            } catch (error) {}
   
 
             const yRange = yMax - yMin;
@@ -141,17 +149,17 @@ function formatNumber(num) {
             const adjustedXRange = adjustedXMax - adjustedXMin;
             const adjustedYRange = adjustedYMax - adjustedYMin;
 
-	    // 计算原点的位置
-	    const xOrigin = (0 - adjustedXMin) / adjustedXRange * width;
-	    const yOrigin = height - (0 - adjustedYMin) / adjustedYRange * height;
+            // 计算原点的位置
+            const xOrigin = (0 - adjustedXMin) / adjustedXRange * width;
+            const yOrigin = height - (0 - adjustedYMin) / adjustedYRange * height;
 
-	    // 绘制红色原点
-	    if (xOrigin >= 0 && xOrigin < width && yOrigin >= 0 && yOrigin < height) {
-		    ctx.beginPath();
-		    ctx.arc(xOrigin, yOrigin, 3, 0, 2 * Math.PI); // 半径为 5 的圆
-		    ctx.fillStyle = 'red';
-		    ctx.fill();
-	    }
+            // 绘制红色原点
+            if (xOrigin >= 0 && xOrigin < width && yOrigin >= 0 && yOrigin < height) {
+                    ctx.beginPath();
+                    ctx.arc(xOrigin, yOrigin, 3, 0, 2 * Math.PI); // 半径为 5 的圆
+                    ctx.fillStyle = 'red';
+                    ctx.fill();
+            }
 
             ctx.beginPath();
             ctx.strokeStyle = 'lightgray';
@@ -178,35 +186,36 @@ function formatNumber(num) {
 
             ctx.beginPath();
             let firstPoint = true;
-	    var last_is_infty = false;
+            var last_is_infty = false;
             for (let i = 0; i < width; i++) {
                 const x = adjustedXMin + (i / width) * adjustedXRange;
-		var y = null
-		try {
-                	y = input_func(x);
-			if (y === null || !isFinite_1(y)) {
-	    			last_is_infty = true;
-				continue;
-			}
+                var y = null
+                try {
+                        y = input_func(x);
+                        if (y === null || !isFinite_1(y)) {
+                                last_is_infty = true;
+                                continue;
+                        }
                 } catch (error) {
-	    		last_is_infty = true;
-			continue
-		}
+                        last_is_infty = true;
+                        continue
+                }
 
                 const canvasY = height - (y - adjustedYMin) / adjustedYRange * height;
-		if (last_is_infty) firstPoint = true // 跳过奇异点
+                if (last_is_infty) firstPoint = true // 跳过奇异点
                 if (firstPoint) {
                     ctx.moveTo(i, canvasY);
                     firstPoint = false;
                 } else {
                     ctx.lineTo(i, canvasY);
                 }
-	    	last_is_infty = false;
+                last_is_infty = false;
             }
             ctx.strokeStyle = 'blue';
             ctx.stroke();
         }
 
+	var initialDistance = null
         function setupCanvasInteraction() {
             const canvas = document.getElementById('canvas');
 
@@ -238,32 +247,64 @@ function formatNumber(num) {
                 }
             });
             // <<
-	    // 监听 touchstart 事件
-	    canvas.addEventListener('touchstart', (event) => {
-			    dragging = true;
-			    lastX = event.touches[0].clientX; // 获取第一个触摸点的 X 坐标
-			    canvas.style.cursor = 'grabbing';
-			    });
+            // 监听 touchstart 事件
+            canvas.addEventListener('touchstart', (event) => {
+                    if (event.touches.length === 1) {
+                        dragging = true;
+                        lastX = event.touches[0].clientX; // 获取第一个触摸点的 X 坐标
+                        canvas.style.cursor = 'grabbing';
+                    } else if (event.touches.length === 2) {
+                        const dx = event.touches[0].clientX - event.touches[1].clientX;
+                        const dy = event.touches[0].clientY - event.touches[1].clientY;
+                        initialDistance = Math.sqrt(dx * dx + dy * dy);
+                    }
+                            });
 
-	    // 监听 touchmove 事件
-	    canvas.addEventListener('touchmove', (event) => {
-			    if (dragging) {
-			    const xMinInput = document.getElementById('xMin');
-			    const xMaxInput = document.getElementById('xMax');
-			    const dx = (lastX - event.touches[0].clientX) * (parseFloat(xMaxInput.value) - parseFloat(xMinInput.value)) / canvas.width;
-			    xMinInput.value = parseFloat(xMinInput.value) + dx;
-			    xMaxInput.value = parseFloat(xMaxInput.value) + dx;
-			    lastX = event.touches[0].clientX;
-			    drawFunction();
-			    }
-			    });
+            // 监听 touchmove 事件
+            canvas.addEventListener('touchmove', (event) => {
+                    if (event.touches.length === 1) {
+                            if (dragging) {
+                            const xMinInput = document.getElementById('xMin');
+                            const xMaxInput = document.getElementById('xMax');
+                            const dx = (lastX - event.touches[0].clientX) * (parseFloat(xMaxInput.value) - parseFloat(xMinInput.value)) / canvas.width;
+                            xMinInput.value = parseFloat(xMinInput.value) + dx;
+                            xMaxInput.value = parseFloat(xMaxInput.value) + dx;
+                            lastX = event.touches[0].clientX;
+                            drawFunction();
+                            }
+                    }
+                    if (event.touches.length === 2 && initialDistance !== null) {
+                        // 计算当前距离
+                        const dx = event.touches[0].clientX - event.touches[1].clientX;
+                        const dy = event.touches[0].clientY - event.touches[1].clientY;
+                        const currentDistance = Math.sqrt(dx * dx + dy * dy);
 
-	    // 监听 touchend 事件
-	    canvas.addEventListener('touchend', () => {
-			    dragging = false;
-			    canvas.style.cursor = 'grab';
-			    });
-	    // >
+                        // 根据距离变化缩放
+                        if (initialDistance !== 0) {
+                        const scale = currentDistance / initialDistance;
+                        const xMinInput = document.getElementById('xMin');
+                        const xMaxInput = document.getElementById('xMax');
+                        const xMin = parseFloat(xMinInput.value);
+                        const xMax = parseFloat(xMaxInput.value);
+                        const xCenter = (xMin + xMax) / 2;
+                        const xRange = (xMax - xMin) / scale;
+                        xMinInput.value = xCenter - xRange / 2;
+                        xMaxInput.value = xCenter + xRange / 2;
+                        drawFunction();
+                        }
+                    }
+            });
+
+            // 监听 touchend 事件
+            canvas.addEventListener('touchend', () => {
+                            dragging = false;
+                            canvas.style.cursor = 'grab';
+			    initialDistance = null
+                            });
+            document.addEventListener('touchmove', (event) => {
+                            if (event.target === canvas) {event.preventDefault();}
+                            }, { passive: false });
+            // >>
         }
 
         function zoomIn() {
@@ -276,7 +317,7 @@ function formatNumber(num) {
             const xRange = (xMax - xMin) / 2;
             xMinInput.value = xCenter - xRange / 2;
             xMaxInput.value = xCenter + xRange / 2;
-	    xDiff.innerHTML = formatNumber(xMax - xMin)
+            xDiff.innerHTML = formatNumber(xMax - xMin)
             drawFunction();
         }
 
@@ -290,7 +331,7 @@ function formatNumber(num) {
             const xRange = (xMax - xMin) * 2;
             xMinInput.value = xCenter - xRange / 2;
             xMaxInput.value = xCenter + xRange / 2;
-	    xDiff.innerHTML = formatNumber(xMax - xMin)
+            xDiff.innerHTML = formatNumber(xMax - xMin)
             drawFunction();
         }
 
