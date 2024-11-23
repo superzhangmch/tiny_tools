@@ -237,6 +237,33 @@ function formatNumber(num) {
                     drawFunction();
                 }
             });
+            // <<
+	    // 监听 touchstart 事件
+	    canvas.addEventListener('touchstart', (event) => {
+			    dragging = true;
+			    lastX = event.touches[0].clientX; // 获取第一个触摸点的 X 坐标
+			    canvas.style.cursor = 'grabbing';
+			    });
+
+	    // 监听 touchmove 事件
+	    canvas.addEventListener('touchmove', (event) => {
+			    if (dragging) {
+			    const xMinInput = document.getElementById('xMin');
+			    const xMaxInput = document.getElementById('xMax');
+			    const dx = (lastX - event.touches[0].clientX) * (parseFloat(xMaxInput.value) - parseFloat(xMinInput.value)) / canvas.width;
+			    xMinInput.value = parseFloat(xMinInput.value) + dx;
+			    xMaxInput.value = parseFloat(xMaxInput.value) + dx;
+			    lastX = event.touches[0].clientX;
+			    drawFunction();
+			    }
+			    });
+
+	    // 监听 touchend 事件
+	    canvas.addEventListener('touchend', () => {
+			    dragging = false;
+			    canvas.style.cursor = 'grab';
+			    });
+	    // >
         }
 
         function zoomIn() {
