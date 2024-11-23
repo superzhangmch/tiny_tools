@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>函数绘制器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+        canvas {
+            border: 1px solid black;
+            cursor: grab;
+        }
+        .controls {
+            margin-bottom: 10px;
+        }
+        .zoom-controls {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+    <table>
+        <tr>
+		<td><label for="function">函数: </label>
+        	<td><input type="text" id="function" value="1/x" style='width:100%'>
+        <tr>
+		<td><label for="xMin">xMin: </label>
+        	<td><input type="number" id="xMin" value="-10">
+        <label for="xMax">xMax: </label>
+        <input type="number" id="xMax" value="10">
+        <button onclick="drawFunction()">绘制</button>
+	<span id=xDiff></span>
+	</table>
+    </div>
+    <canvas id="canvas" width="600" height="400"></canvas>
+    <div class="zoom-controls">
+        <button onclick="zoomIn()">放大</button>
+        <button onclick="zoomOut()">缩小</button>
+    </div>
+
+    <script>
+        var input_func = null;
+        function parseFunction(input) {
+            return input
+                .replace(/sin/g, 'Math.sin')
+                .replace(/cos/g, 'Math.cos')
+                .replace(/tan/g, 'Math.tan')
+                .replace(/log/g, 'Math.log')
+                .replace(/exp/g, 'Math.exp');
+        }
+
+        let dragging = false;
+        let lastX = 0;
+
+function formatNumber(num) {
+  var num1 = Math.abs(num)
+  if (num1 < 0.001) { return num.toFixed(5)
+  } else if (num1 < 0.01) { return num.toFixed(4)
+  } else if (num1 < 0.1)  { return num.toFixed(3)
+  } else if (num1 < 10)   { return num.toFixed(2)
+  } else if (num1 < 100)  { return num.toFixed(1)}
+  let str = num.toPrecision(5);
+  return str
+}
+        function drawFunction() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const funcInput = document.getElementById('function').value;
+            const func = parseFunction(funcInput);
+	    input_func = new Function("x", `return ${func}`)
+
+            let xMin = parseFloat(document.getElementById('xMin').value);
+            let xMax = parseFloat(document.getElementById('xMax').value);
+            const xDiff = document.getElementById('xDiff');
+	    xDiff.innerHTML = formatNumber(xMax - xMin)
+
+            const width = canvas.width;
+            const height = canvas.height;
+            const xRange = xMax - xMin;
+
+            ctx.clearRect(0, 0, width, height);
+
+            let yMin = Infinity;
+            let yMax = -Infinity;
+
+	    var y_arr = [];
+            for (let i = 0; i < width; i++) {
+                const x = xMin + (i / width) * xRange;
+                let y;
+                try {
+                    y = input_func(x);
+		    y_arr.push(y)
+                    if (isFinite(y)) {
+                        yMin = Math.min(yMin, y);
+                        yMax = Math.max(yMax, y);
+                    }
+                } catch (error) {
+		    y_arr.push(null)
+                    continue;
+                }
+            }
+
+            const yRange = yMax - yMin;
+            const xPadding = xRange * 0.1;
+            const yPadding = yRange * 0.1;
+
+            const adjustedXMin = xMin - xPadding;
+            const adjustedXMax = xMax + xPadding;
+            const adjustedYMin = yMin - yPadding;
+            const adjustedYMax = yMax + yPadding;
+            const adjustedXRange = adjustedXMax - adjustedXMin;
+            const adjustedYRange = adjustedYMax - adjustedYMin;
+
+	    // 计算原点的位置
+	    const xOrigin = (0 - adjustedXMin) / adjustedXRange * width;
+	    const yOrigin = height - (0 - adjustedYMin) / adjustedYRange * height;
+
+	    // 绘制红色原点
+	    if (xOrigin >= 0 && xOrigin < width && yOrigin >= 0 && yOrigin < height) {
+		    ctx.beginPath();
+		    ctx.arc(xOrigin, yOrigin, 3, 0, 2 * Math.PI); // 半径为 5 的圆
+		    ctx.fillStyle = 'red';
+		    ctx.fill();
+	    }
+
+            ctx.beginPath();
+            ctx.strokeStyle = 'lightgray';
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.moveTo(width / 2, 0);
+            ctx.lineTo(width / 2, height);
+            ctx.stroke();
+            ctx.fillStyle = 'black';
+
+            ctx.textAlign = 'center';
+            for (let i = 0; i <= 10; i++) {
+                const xLabel = adjustedXMin + (i / 10) * adjustedXRange;
+                const xPos = (xLabel - adjustedXMin) / adjustedXRange * width;
+                ctx.fillText(formatNumber(xLabel), xPos, height / 2 + 15);
+            }
+
+            ctx.textAlign = 'right';
+            for (let i = 0; i <= 10; i++) {
+                const yLabel = adjustedYMin + (i / 10) * adjustedYRange;
+                const yPos = height - (yLabel - adjustedYMin) / adjustedYRange * height;
+                ctx.fillText(formatNumber(yLabel), width / 2 - 5, yPos + 3);
+            }
+
+            ctx.beginPath();
+            let firstPoint = true;
+            for (let i = 0; i < width; i++) {
+                const x = adjustedXMin + (i / width) * adjustedXRange;
+                let y = y_arr[i]
+		if (y === null || !isFinite(y)) continue;
+
+                const canvasY = height - (y - adjustedYMin) / adjustedYRange * height;
+                if (firstPoint) {
+                    ctx.moveTo(i, canvasY);
+                    firstPoint = false;
+                } else {
+                    ctx.lineTo(i, canvasY);
+                }
+            }
+            ctx.strokeStyle = 'blue';
+            ctx.stroke();
+        }
+
+        function setupCanvasInteraction() {
+            const canvas = document.getElementById('canvas');
+
+            canvas.addEventListener('mousedown', (event) => {
+                dragging = true;
+                lastX = event.clientX;
+                canvas.style.cursor = 'grabbing';
+            });
+
+            canvas.addEventListener('mouseup', () => {
+                dragging = false;
+                canvas.style.cursor = 'grab';
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                dragging = false;
+                canvas.style.cursor = 'grab';
+            });
+
+            canvas.addEventListener('mousemove', (event) => {
+                if (dragging) {
+                    const xMinInput = document.getElementById('xMin');
+                    const xMaxInput = document.getElementById('xMax');
+                    const dx = (lastX - event.clientX) * (parseFloat(xMaxInput.value) - parseFloat(xMinInput.value)) / canvas.width;
+                    xMinInput.value = parseFloat(xMinInput.value) + dx;
+                    xMaxInput.value = parseFloat(xMaxInput.value) + dx;
+                    lastX = event.clientX;
+                    drawFunction();
+                }
+            });
+        }
+
+        function zoomIn() {
+            const xMinInput = document.getElementById('xMin');
+            const xMaxInput = document.getElementById('xMax');
+            const xDiff = document.getElementById('xDiff');
+            const xMin = parseFloat(xMinInput.value);
+            const xMax = parseFloat(xMaxInput.value);
+            const xCenter = (xMin + xMax) / 2;
+            const xRange = (xMax - xMin) / 2;
+            xMinInput.value = xCenter - xRange / 2;
+            xMaxInput.value = xCenter + xRange / 2;
+	    xDiff.innerHTML = formatNumber(xMax - xMin)
+            drawFunction();
+        }
+
+        function zoomOut() {
+            const xMinInput = document.getElementById('xMin');
+            const xMaxInput = document.getElementById('xMax');
+            const xDiff = document.getElementById('xDiff');
+            const xMin = parseFloat(xMinInput.value);
+            const xMax = parseFloat(xMaxInput.value);
+            const xCenter = (xMin + xMax) / 2;
+            const xRange = (xMax - xMin) * 2;
+            xMinInput.value = xCenter - xRange / 2;
+            xMaxInput.value = xCenter + xRange / 2;
+	    xDiff.innerHTML = formatNumber(xMax - xMin)
+            drawFunction();
+        }
+
+        setupCanvasInteraction();
+        drawFunction();
+    </script>
+</body>
+</html>
