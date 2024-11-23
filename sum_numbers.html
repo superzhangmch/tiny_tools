@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>sum of numbers</title>
+    <title>求和</title>
     <style>
+        .highlight {
+            color: red;
+        }
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
@@ -27,9 +30,10 @@
 <body>
 
     <h1>sum of numbers</h1>
-    <textarea id="inputText" placeholder="1. 直接求和：一段文本里面有数字，则把所有数字相加
+    <textarea id="inputText" placeholder="1. 直接求和：一段文本里面有数字，则把所有数字相加. 
+   同时对里面的不带括号四则计算式如1+2*3会当整体
 2. 表达式计算：数学表达式，可以有多行，会把有全加起来"></textarea>
-    <button onclick="calculateSum()">数字求和</button>
+    <button onclick="evaluateExpressions_simple()">数字求和</button>
     <button onclick="evaluateExpressions()">表达式计算</button>
     <p id="result"></p>
 
@@ -60,6 +64,9 @@
 
                 // Replace ^ with ** for exponentiation
                 expression = expression.replace(/\^/g, '**');
+                expression = expression.replace(/×/g, '*');
+                expression = expression.replace(/x/g, '*');
+                expression = expression.replace(/÷/g, '/');
 
                 try {
                     // Evaluate the expression
@@ -111,6 +118,39 @@
                 document.getElementById('result').innerHTML = "no number found";
             }
       }
+      function evaluateExpressions_simple() {
+            const input = document.getElementById('inputText').value;
+            const lines = input.split('\n');
+            let totalSum = 0;
+            let outputHTML = '';
+
+	    const expressionRegex = /\d+(\.\d+)?(\s*[+\-*/×x÷]\s*\d+(\.\d+)?)*/g;
+
+            lines.forEach((line, index) => {
+                let lineHTML = line;
+                let match;
+                while ((match = expressionRegex.exec(line)) !== null) {
+                    var expression = match[0];
+		    var expression_ori = match[0];
+                    expression = expression.replace(/×/g, '*');
+                    expression = expression.replace(/x/g, '*');
+		    expression = expression.replace(/÷/g, '/');
+                    try {
+
+                        const value = eval(expression);
+                        totalSum += value;
+                        lineHTML = lineHTML.replace(expression_ori, `<span class="highlight">${expression_ori}</span>`);
+                    } catch (error) {
+                        console.error(`Error evaluating expression_ori "${expression_ori}" on line ${index + 1}: ${error.message}`);
+                        lineHTML = lineHTML.replace(expression_ori, `<span class="highlight" style="background-color: yellow;">${expression_ori} (Error)</span>`);
+                    }
+                }
+                outputHTML += lineHTML + '<br>';
+            });
+
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `Total Sum: ${totalSum}<br><br>${outputHTML}`;
+        }
     </script>
 
 </body>
