@@ -66,7 +66,7 @@
                 .replace(/\b(E|R)\b/g, '\\mathbb{$1}')
                 .replace(/\b(E|R)_/g, '\\mathbb{$1}_')
                 .replace(/\b([a-zA-Z0-9\.]+)\s*\/\s*([a-zA-Z0-9\.]+)\b/g, '\\frac{$1}{$2}')
-                .replace(/\b([\^])\s*([a-zA-Z0-9\.]+)\b/g, '^{$2}')
+                .replace(/([\^])\s*([a-zA-Z0-9\.]+)\b/g, '^{$2}')
                 .replace(/\b([_])\s*([a-zA-Z0-9]+)\b/g, '_{$2}')
                 .replace(/[\~]/g, '\\sim ')
                 //.replace(/([^ \t\n]+)\s*\n/g, '$1 \\\\\n')
