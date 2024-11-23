@@ -27,20 +27,14 @@
 <body>
     <div class="controls">
     <table>
-        <tr>
-                <td><label for="function">函数: </label>
-                <td><input type="text" id="function" value="sin(sin(x))" style='width:100%'>
-        <tr>
-                <td><label for="xMin">xMin: </label>
-                <td><input type="number" id="xMin" value="-10">
-        <label for="xMax">xMax: </label>
-        <input type="number" id="xMax" value="10">
-        <tr><td><!--
-                <label for="yInfty">yInfty: </label>
-                <td><input type="text" id="yInfty" value="" placeholder='奇异点附近阈值'>
-                -->
-                <td><button onclick="drawFunction()">绘制</button>
-            x范围：<span id=xDiff></span> <a href='javascript:reset_x()'>reset</a>
+        <tr><td><label for="function">函数: </label><td><input type="text" id="function" value="sin(sin(x))" style='width:95%'>
+		<td>
+        <tr><td><label for="xMin">xMin: </label><td><input type="number" id="xMin" value="-10" style='width:95%'>
+		<!--td>x:<span id=cur_x></span-->
+	<tr><td><label for="xMax">xMax: </label><td><input type="number" id="xMax" value="10" style='width:95%'>
+	<!--td>y: <span id=cur_y></span-->
+        <tr><td><td><button onclick="drawFunction()">绘制</button>
+            x 长度：<span id=xDiff></span> <a href='javascript:reset_x()'>reset</a><span id=debug></span>
         </table>
     </div>
     <canvas id="canvas" width="600" height="400"></canvas>
@@ -216,6 +210,8 @@
         }
 
 	var initialDistance = null
+	var initialxCenter = null
+	var initialxRange = null
         function setupCanvasInteraction() {
             const canvas = document.getElementById('canvas');
 
@@ -257,8 +253,17 @@
                         const dx = event.touches[0].clientX - event.touches[1].clientX;
                         const dy = event.touches[0].clientY - event.touches[1].clientY;
                         initialDistance = Math.sqrt(dx * dx + dy * dy);
-                    }
-                            });
+
+                        const xMinInput = document.getElementById('xMin');
+                        const xMaxInput = document.getElementById('xMax');
+                        const xMin = parseFloat(xMinInput.value);
+                        const xMax = parseFloat(xMaxInput.value);
+                        const xCenter = (xMin + xMax) / 2;
+                        const xRange = (xMax - xMin) / 2;
+
+                        initialxCenter = xCenter;
+                        initialxRange = xRange;
+                    }});
 
             // 监听 touchmove 事件
             canvas.addEventListener('touchmove', (event) => {
@@ -282,14 +287,13 @@
                         // 根据距离变化缩放
                         if (initialDistance !== 0) {
                         const scale = currentDistance / initialDistance;
+			// document.getElementById('debug').innerHTML = 'xxx'+initialxCenter+" " + initialxRange + " " + scale
+
                         const xMinInput = document.getElementById('xMin');
                         const xMaxInput = document.getElementById('xMax');
-                        const xMin = parseFloat(xMinInput.value);
-                        const xMax = parseFloat(xMaxInput.value);
-                        const xCenter = (xMin + xMax) / 2;
-                        const xRange = (xMax - xMin) / scale;
-                        xMinInput.value = xCenter - xRange / 2;
-                        xMaxInput.value = xCenter + xRange / 2;
+
+                        xMinInput.value = initialxCenter - initialxRange / scale;
+                        xMaxInput.value = initialxCenter + initialxRange / scale;
                         drawFunction();
                         }
                     }
