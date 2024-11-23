@@ -32,14 +32,14 @@
     <h1>sum of numbers</h1>
     <textarea id="inputText" placeholder="1. 直接求和：一段文本里面有数字，则把所有数字相加. 
    同时对里面的不带括号四则计算式如1+2*3会当整体
-2. 表达式计算：数学表达式，可以有多行，会把有全加起来"></textarea>
+2. 表达式计算：数学表达式(三角函数,log，括号等)，可以有多行，会把有全加起来"></textarea>
     <button onclick="evaluateExpressions_simple()">数字求和</button>
     <button onclick="evaluateExpressions()">表达式计算</button>
     <p id="result"></p>
 
     <script>
         function evaluateExpressions() {
-            const input = document.getElementById('inputText').value;
+            const input = document.getElementById('inputText').value.toLowerCase();
             // Split the input into lines
 
             const lines = input.split('\n');
@@ -47,7 +47,7 @@
             let results = [];
 
             // Regular expression to match and replace functions
-            const functionRegex = /\b(sin|cos|tan|log|sqrt|abs|exp|PI)\b/g;
+            const functionRegex = /\b(sin|cos|tan|log|sqrt|abs|exp|pi)\b/g;
 
             var c = 0
             var e = 0
@@ -58,7 +58,7 @@
 
                 // Replace functions with Math functions
                 let expression = line.replace(functionRegex, (match) => {
-                    if (match === 'PI') return 'Math.PI';
+                    if (match === 'pi') return 'Math.PI';
                     return `Math.${match}`;
                 });
 
