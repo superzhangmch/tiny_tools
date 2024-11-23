@@ -46,7 +46,7 @@
     <script>
       function evaluateExpressions_simple() {
         Algebrite.clearall();
-        const input = document.getElementById('inputText').value;
+        const input = document.getElementById('inputText').value.toLowerCase();
         var resultDiv = document.getElementById('result');
 	resultDiv.innerHTML = ''
 	var arr = input.split('\n')
