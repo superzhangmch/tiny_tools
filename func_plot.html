@@ -56,6 +56,7 @@
                 .replace(/sin/g, 'Math.sin')
                 .replace(/cos/g, 'Math.cos')
                 .replace(/tan/g, 'Math.tan')
+		.replace(/[\^]/g, '**')
                 .replace(/log/g, 'Math.log')
                 .replace(/exp/g, 'Math.exp');
         }
