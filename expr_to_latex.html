@@ -55,7 +55,8 @@
 
         function convertExpressionToLatex(expression) {
             // 简单的替换正则表达式，将一些常用函数转换为 LaTeX 格式
-            let latex = expression
+            let latex = expression		    
+                .replace(/\b([a-zA-Z0-9\.]+)\s*\/\s*([a-zA-Z0-9\.]+)\b/g, '\\frac{$1}{$2}')
                 .replace(/(?<!\\)\b(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi)\b/g, '\\$1')
                 .replace(/_(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi)\b/g, '_\\$1')
                 .replace(/(?<!\\)\b(left|right)\b/g, '\\$1')
@@ -65,7 +66,6 @@
                 .replace(/(?<!\\)\b(lim|int|sum|prod|sin|cos|log|exp|tan|sqrt|frac|in|exists|times|div|cdot)_/g, '\\$1_')
                 .replace(/\b(E|R)\b/g, '\\mathbb{$1}')
                 .replace(/\b(E|R)_/g, '\\mathbb{$1}_')
-                .replace(/\b([a-zA-Z0-9\.]+)\s*\/\s*([a-zA-Z0-9\.]+)\b/g, '\\frac{$1}{$2}')
                 .replace(/([\^])\s*([a-zA-Z0-9\.]+)\b/g, '^{$2}')
                 .replace(/\b([_])\s*([a-zA-Z0-9]+)\b/g, '_{$2}')
                 .replace(/[\~]/g, '\\sim ')
