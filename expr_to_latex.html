@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expression to LaTeX Converter</title>
+    <style>
+        textarea {
+            width: 45%;
+            height: 100px;
+            margin: 10px;
+            display: block;
+        }
+        #renderedMath {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px;
+            min-height: 50px;
+        }
+        button {
+            margin: 10px;
+            padding: 5px 10px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <h1>Expression to LaTeX Converter</h1>
+    <textarea id="expressionInput" placeholder="Enter expression, e.g., sin(x)*cos(x)"></textarea>
+    <textarea id="latexInput" placeholder="Enter LaTeX code"></textarea>
+    <button id="copyButton">Copy LaTeX</button><span id=copyStatus></span>
+    <div id="renderedMath"></div>
+
+    <script>
+        const expressionInput = document.getElementById('expressionInput');
+        const latexInput = document.getElementById('latexInput');
+        const renderedMath = document.getElementById('renderedMath');
+
+        expressionInput.addEventListener('input', () => {
+            const expression = expressionInput.value;
+            const latex = convertExpressionToLatex(expression);
+            latexInput.value = latex;
+            renderLatex(latex);
+        });
+
+        latexInput.addEventListener('input', () => {
+            const latex = latexInput.value;
+            renderLatex(latex);
+        });
+        copyButton.addEventListener('click', () => {
+            latexInput.select();
+            document.execCommand('copy');
+	    document.getElementById('copyStatus').innerHTML = "copy OK"
+        });
+
+        function convertExpressionToLatex(expression) {
+            // 简单的替换正则表达式，将一些常用函数转换为 LaTeX 格式
+            let latex = expression
+                .replace(/(?<!\\)\b(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi)\b/g, '\\$1')
+                .replace(/_(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi)\b/g, '_\\$1')
+                .replace(/(?<!\\)\b(left|right)\b/g, '\\$1')
+                .replace(/(?<!\\)\b(text|hat|cap|cup|uplus|sqcap|sqcup|vee|wedge|oplus|ominus|otimes|oslash|odot|bigcirc|triangleleft|triangleright|bigtriangledown|bullet|setminus|wr|diamond|bigstar|leq|geq|neq|approx|sim|simeq|equiv|subset|supset|subseteq|supseteq|nsubseteq|nsupseteq|ni|notin|forall|nexists|lor|neg|top|bot|vdash|vDash|models|perp|parallel|nparallel|angle|measuredangle|sphericalangle|triangle|bigtriangleup|infty|partial|square|blacksquare|circ|cdots|ldots|vdots|ddots|aleph|beth|gimel|daleth|hbar|ell|Re|Im|wp|complement|emptyset|varnothing|nabla|surd|triangle|backslash|land|lor|lnot|neg|flat|sharp|natural|clubsuit|diamondsuit|heartsuit|spadesuit)\b/g, '\\$1')
+                .replace(/(?<!\\)\b(text|hat|cap|cup|uplus|sqcap|sqcup|vee|wedge|oplus|ominus|otimes|oslash|odot|bigcirc|triangleleft|triangleright|bigtriangledown|bullet|setminus|wr|diamond|bigstar|leq|geq|neq|approx|sim|simeq|equiv|subset|supset|subseteq|supseteq|nsubseteq|nsupseteq|ni|notin|forall|nexists|lor|neg|top|bot|vdash|vDash|models|perp|parallel|nparallel|angle|measuredangle|sphericalangle|triangle|bigtriangleup|infty|partial|square|blacksquare|circ|cdots|ldots|vdots|ddots|aleph|beth|gimel|daleth|hbar|ell|Re|Im|wp|complement|emptyset|varnothing|nabla|surd|triangle|backslash|land|lor|lnot|neg|flat|sharp|natural|clubsuit|diamondsuit|heartsuit|spadesuit)_/g, '\\$1_')
+                .replace(/(?<!\\)\b(lim|int|sum|prod|sin|cos|log|exp|tan|sqrt|frac|in|exists|times|div|cdot)\b/g, '\\$1')
+                .replace(/(?<!\\)\b(lim|int|sum|prod|sin|cos|log|exp|tan|sqrt|frac|in|exists|times|div|cdot)_/g, '\\$1_')
+                .replace(/\b(E|R)\b/g, '\\mathbb{$1}')
+                .replace(/\b(E|R)_/g, '\\mathbb{$1}_')
+                .replace(/\b([a-zA-Z0-9]+)\s*\/\s*([a-zA-Z0-9]+)\b/g, '\\frac{$1}{$2}')
+                .replace(/\b([\^])\s*([a-zA-Z0-9]+)\b/g, '^{$2}')
+                .replace(/\b([_])\s*([a-zA-Z0-9]+)\b/g, '_{$2}')
+                .replace(/[\~]/g, '\\sim ')
+                //.replace(/([^ \t\n]+)\s*\n/g, '$1 \\\\\n')
+                .replace(/->/g, '\\rightarrow ')
+                .replace(/<->/g, '\\leftrightarrow ')
+                .replace(/=>/g, '\\Rightarrow ')
+                .replace(/<=>/g, '\\Leftrightarrow ')
+                .replace(/<=/g, '\\le ')
+                .replace(/>=/g, '\\ge ')
+                .replace(/!=/g, '\\ne ')
+                .replace(/==/g, '\\equiv ')
+                .replace(/\bbig\(/g, '\\left(')
+                .replace(/\bbig\)/g, '\\right)')
+                .replace(/(?<!left)\(/g, '{(')
+                .replace(/(?<!right)\)/g, ')}')
+                .replace(/\bT\b/g, '\\text')
+                .replace(/\*/g, '');
+            var ret = latex.trim();
+            if (ret.includes("CASES") || ret.includes("ALIGN") || ret.includes("CASES")) {
+                ret = ret.replace(/([^ \t\n]+)\s*\n/g, '$1 \\\\\n')
+                if (ret.includes("ALIGN")) {
+                        latex = ret.replace("CASES", "").replace("CASE", "").replace("ALIGN", "")
+                        latex = "\\begin{align}\n" + latex + "\n\\end{align}"
+                } else {
+                        latex = ret.replace("CASES", "").replace("CASE", "").replace("ALIGN", "")
+                        latex = "\\begin{cases}\n" + latex + "\n\\end{cases}"
+                }
+            }
+            return `${latex}`;
+        }
+
+        function renderLatex(latex) {
+	    document.getElementById('copyStatus').innerHTML = ""
+            renderedMath.innerHTML = '$$'+latex+'$$';
+            MathJax.typesetPromise([renderedMath]).catch((err) => console.error(err));
+        }
+    </script>
+</body>
+</html>
