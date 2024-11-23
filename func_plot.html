@@ -35,8 +35,12 @@
         	<td><input type="number" id="xMin" value="-10">
         <label for="xMax">xMax: </label>
         <input type="number" id="xMax" value="10">
-        <button onclick="drawFunction()">绘制</button>
-	<span id=xDiff></span>
+	<tr><td><!--
+		<label for="yInfty">yInfty: </label>
+        	<td><input type="text" id="yInfty" value="" placeholder='奇异点附近阈值'>
+		-->
+		<td><button onclick="drawFunction()">绘制</button>
+	    x范围：<span id=xDiff></span>
 	</table>
     </div>
     <canvas id="canvas" width="600" height="400"></canvas>
@@ -78,6 +82,17 @@ function formatNumber(num) {
 
             let xMin = parseFloat(document.getElementById('xMin').value);
             let xMax = parseFloat(document.getElementById('xMax').value);
+
+	    var y_infity = null;
+	    function isFinite_1(y) {
+		    if (y_infity === null) {
+			    return isFinite(y)
+		    }
+		    return Math.abs(y) < y_infity;
+	    }
+            //let y_inf = parseFloat(document.getElementById('yInfty').value);
+	    //if (!isNaN(y_inf) && y_inf > 0) {y_infity = y_inf;}
+
             const xDiff = document.getElementById('xDiff');
 	    xDiff.innerHTML = formatNumber(xMax - xMin)
 
@@ -90,22 +105,29 @@ function formatNumber(num) {
             let yMin = Infinity;
             let yMax = -Infinity;
 
-	    var y_arr = [];
+	    var arr = [] 
             for (let i = 0; i < width; i++) {
                 const x = xMin + (i / width) * xRange;
                 let y;
                 try {
                     y = input_func(x);
-		    y_arr.push(y)
-                    if (isFinite(y)) {
+                    if (isFinite_1(y)) {
+		    	arr.push(y)
                         yMin = Math.min(yMin, y);
                         yMax = Math.max(yMax, y);
                     }
                 } catch (error) {
-		    y_arr.push(null)
                     continue;
                 }
             }
+	    arr = arr.sort((a, b) => a - b);
+	    let i1 = Math.ceil((arr.length * 99.5) / 100);
+	    let i2 = Math.ceil((arr.length * 0.5) / 100);
+	    try {
+		    yMax = arr[i1];
+		    yMin = arr[i2];
+	    } catch (error) {}
+  
 
             const yRange = yMax - yMin;
             const xPadding = xRange * 0.1;
@@ -155,18 +177,30 @@ function formatNumber(num) {
 
             ctx.beginPath();
             let firstPoint = true;
+	    var last_is_infty = false;
             for (let i = 0; i < width; i++) {
                 const x = adjustedXMin + (i / width) * adjustedXRange;
-                let y = y_arr[i]
-		if (y === null || !isFinite(y)) continue;
+		var y = null
+		try {
+                	y = input_func(x);
+			if (y === null || !isFinite_1(y)) {
+	    			last_is_infty = true;
+				continue;
+			}
+                } catch (error) {
+	    		last_is_infty = true;
+			continue
+		}
 
                 const canvasY = height - (y - adjustedYMin) / adjustedYRange * height;
+		if (last_is_infty) firstPoint = true // 跳过奇异点
                 if (firstPoint) {
                     ctx.moveTo(i, canvasY);
                     firstPoint = false;
                 } else {
                     ctx.lineTo(i, canvasY);
                 }
+	    	last_is_infty = false;
             }
             ctx.strokeStyle = 'blue';
             ctx.stroke();
