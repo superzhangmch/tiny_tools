@@ -27,8 +27,8 @@
 <body>
     <div class="controls">
     <table>
-        <tr><td><label for="function">函数: </label><td><input type="text" id="function" value="sin(sin(x))" style='width:95%'>
-		<td>
+        <tr><td><label for="function1">函数(蓝): </label><td><input type="text" id="function1" value="x" style='width:95%'><td>
+        <tr><td><label for="function2">函数(红): </label><td><input type="text" id="function2" value="x*log(x)" style='width:95%'><td>
         <tr><td><label for="xMin">xMin: </label><td><input type="number" id="xMin" value="-10" style='width:95%'>
 		<!--td>x:<span id=cur_x></span-->
 	<tr><td><label for="xMax">xMax: </label><td><input type="number" id="xMax" value="10" style='width:95%'>
@@ -44,7 +44,8 @@
     </div>
 
     <script>
-        var input_func = null;
+        var input_func1 = null;
+        var input_func2 = null;
         function reset_x()
         {
                 document.getElementById('xMin').value = "-10";
@@ -54,13 +55,8 @@
         }
         function parseFunction(input) {
             return input.toLowerCase()
-                .replace(/sin/g, 'Math.sin')
-                .replace(/cos/g, 'Math.cos')
-                .replace(/tan/g, 'Math.tan')
-                .replace(/log/g, 'Math.log')
-                .replace(/Pi/g, 'Math.PI')
-                .replace(/[\^]/g, '**')
-                .replace(/exp/g, 'Math.exp');
+                .replace(/\b(sqrt|sin|cos|tan|ceil|floor|log|exp|abs)\b/g, 'Math.$1')
+                .replace(/[\^]/g, '**');
         }
 
         let dragging = false;
@@ -77,20 +73,42 @@
                 return str
         }
         function drawFunction() {
+	    input_func1 = null
+	    input_func2 = null
             const canvas = document.getElementById('canvas');
             const ctx = canvas.getContext('2d');
-            const funcInput = document.getElementById('function').value;
-            const func = parseFunction(funcInput);
-            input_func = new Function("x", `return ${func}`)
+            const funcInput1 = document.getElementById('function1').value.trim();
+	    if (funcInput1) {
+            	const func1 = parseFunction(funcInput1);
+		try {
+            		input_func1 = new Function("x", `return ${func1}`)
+		} catch (err) {
+			alert('函数1有问题')
+			return;
+		}
+	    }
+
+            const funcInput2 = document.getElementById('function2').value.trim();
+	    if (funcInput2) {
+            	const func2 = parseFunction(funcInput2);
+		try {
+            		input_func2 = new Function("x", `return ${func2}`)
+		} catch (err) {
+			alert('函数2有问题')
+			return;
+		}
+	    }
+	    //console.log('aa', input_func1(10), input_func2(10))
 
             let xMin = parseFloat(document.getElementById('xMin').value);
             let xMax = parseFloat(document.getElementById('xMax').value);
 
             var y_infity = null;
             function isFinite_1(y) {
+	    	    if (y == null) return false
                     if (y_infity === null) {
-                            return isFinite(y)
-                    }
+		    	return isFinite(y)
+		    }
                     return Math.abs(y) < y_infity;
             }
             //let y_inf = parseFloat(document.getElementById('yInfty').value);
@@ -113,16 +131,29 @@
                 const x = xMin + (i / width) * xRange;
                 let y;
                 try {
-                    y = input_func(x);
+                    y = input_func1 ? input_func1(x) : null;
+		    //console.log('aa', x, y)
                     if (isFinite_1(y)) {
                         arr.push(y)
                         yMin = Math.min(yMin, y);
                         yMax = Math.max(yMax, y);
                     }
                 } catch (error) {
-                    continue;
-                }
+		    //console.log('error.messages')
+		}
+                try {
+                    y = input_func2 ? input_func2(x) : null;
+		    //console.log('aa', x, y)
+                    if (isFinite_1(y)) {
+                        arr.push(y)
+                        yMin = Math.min(yMin, y);
+                        yMax = Math.max(yMax, y);
+                    }
+                } catch (error) { 
+		    //console.log('1error.messages')
+		   }
             }
+	    //console.log(yMin, yMax, 'min, max')
             arr = arr.sort((a, b) => a - b);
             let i1 = Math.ceil((arr.length * 99.5) / 100);
             let i2 = Math.ceil((arr.length * 0.5) / 100);
@@ -130,7 +161,7 @@
                     yMax = arr[i1];
                     yMin = arr[i2];
             } catch (error) {}
-  
+	    //console.log(yMin, yMax, 'min, max')
 
             const yRange = yMax - yMin;
             const xPadding = xRange * 0.1;
@@ -178,35 +209,42 @@
                 ctx.fillText(formatNumber(yLabel), width / 2 - 5, yPos + 3);
             }
 
-            ctx.beginPath();
-            let firstPoint = true;
-            var last_is_infty = false;
-            for (let i = 0; i < width; i++) {
-                const x = adjustedXMin + (i / width) * adjustedXRange;
-                var y = null
-                try {
-                        y = input_func(x);
-                        if (y === null || !isFinite_1(y)) {
-                                last_is_infty = true;
-                                continue;
-                        }
-                } catch (error) {
-                        last_is_infty = true;
-                        continue
-                }
-
-                const canvasY = height - (y - adjustedYMin) / adjustedYRange * height;
-                if (last_is_infty) firstPoint = true // 跳过奇异点
-                if (firstPoint) {
-                    ctx.moveTo(i, canvasY);
-                    firstPoint = false;
-                } else {
-                    ctx.lineTo(i, canvasY);
-                }
-                last_is_infty = false;
-            }
-            ctx.strokeStyle = 'blue';
-            ctx.stroke();
+	    //<<
+	    function draw_one_func(input_func, color) {
+		    if (input_func == null) return;
+	            ctx.beginPath();
+	            let firstPoint = true;
+	            var last_is_infty = false;
+	            for (let i = 0; i < width; i++) {
+	                const x = adjustedXMin + (i / width) * adjustedXRange;
+	                var y = null
+	                try {
+	                        y = input_func(x);
+	                        if (y === null || !isFinite_1(y)) {
+	                                last_is_infty = true;
+	                                continue;
+	                        }
+	                } catch (error) {
+	                        last_is_infty = true;
+	                        continue
+	                }
+	
+	                const canvasY = height - (y - adjustedYMin) / adjustedYRange * height;
+	                if (last_is_infty) firstPoint = true // 跳过奇异点
+	                if (firstPoint) {
+	                    ctx.moveTo(i, canvasY);
+	                    firstPoint = false;
+	                } else {
+	                    ctx.lineTo(i, canvasY);
+	                }
+	                last_is_infty = false;
+	            }
+	            ctx.strokeStyle = color;
+	            ctx.stroke();
+	    }
+	    //>>
+	    draw_one_func(input_func1, 'blue')
+	    draw_one_func(input_func2, 'red')
         }
 
 	var initialDistance = null
