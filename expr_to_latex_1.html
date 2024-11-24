@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>String Parser</title>
+    <style>
+        textarea {
+            width: 100%;
+            height: 200px;
+        }
+        pre {
+            background-color: #f0f0f0;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <textarea id="inputText" placeholder="Enter your string here..."></textarea>
+    <button onclick="parseString()">Parse</button>
+    <div id="div_err"></div>
+    <pre id="output"></pre>
+
+    <script>
+    	function p(...x) {console.log(x)}
+        function parseString() {
+            const input = document.getElementById('inputText').value;
+            const output = document.getElementById('output');
+            const tokens = tokenize(input);
+            output.textContent = JSON.stringify(tokens, null, 2);
+            const syntaxTree = buildSyntaxTree(tokens, input);
+            output.textContent += "\n__xxxx___\n" + JSON.stringify(syntaxTree, null, 2);
+        }
+
+	function show_err1(input, pos, pos_len, msg, left_pos, left_len) {
+            const output = document.getElementById('div_err');
+	    output.innerHTML = "错误：" + msg + "<br>"
+	    if (pos === 0 || pos) {
+	    	function t(s) {return s.replace("<", "&lt;").replace(">", "&gt;");}
+	    	if (left_pos === 0 || left_pos) {
+			var p1 = t(input.slice(0, left_pos));
+			var p2 = t(input.slice(left_pos, left_pos + left_len));
+			var p3 = t(input.slice(left_pos + left_len, pos));
+			var p4 = t(input.slice(pos, pos+pos_len));
+			var p5 = t(input.slice(pos+pos_len));
+
+	    		output.innerHTML += `<pre>${p1}<font color=red><b>${p2}</b></font>${p3}<font color=red><b>${p4}</b></font>${p5}</pre>`
+		} else {
+			var p1 = t(input.slice(0, pos));
+			var p2 = t(input.slice(pos, pos+pos_len));
+			var p3 = t(input.slice(pos+pos_len));
+	    		output.innerHTML += `<pre>${p1}<font color=red><b>${p2}</b></font>${p3}</pre>`
+		}
+	    }
+	}
+	function show_err(input, pos, msg, left_pos) {
+            const output = document.getElementById('div_err');
+	    output.innerHTML = "错误：" + msg + "<br>"
+	    if (pos === 0 || pos) {
+	    	function t(s) {return s.replace("<", "&lt;").replace(">", "&gt;");}
+	    	if (left_pos === 0 || left_pos) {
+	    		output.innerHTML += "<pre>"
+					+t(input.slice(0, left_pos)) + "<font color=red><b>[左]</b></font>"
+					+t(input.slice(left_pos, pos)) + "<font color=red><b>[和左不匹配]</b></font>"
+					+t(input.slice(pos))+"</pre>"
+		} else {
+	    		output.innerHTML += "<pre>"+t(input.slice(0, pos)) + "<font color=red><b>[may here]</b></font>" + t(input.slice(pos))+"</pre>"
+		}
+	    }
+	}
+        function tokenize(input) {
+            document.getElementById('div_err').innerHTML = '';
+            const tokenPatterns = [
+                { type: 'STRING', regex: /"[^"]*"|'[^']*'/ },
+                { type: 'BRACKET', regex: /[(){}\[\]]/ },
+                { type: 'ESCAPED_BRACE', regex: /\\[{}]/ },
+                { type: 'SPECIAL_LEFT', regex: /\bleft\(|\bleft\{|\bleft\[|\bbig\(|\bbig\{|\bbig\[/ },
+                { type: 'SPECIAL_RIGHT', regex: /\bright\)|\bright\}|\bright\]|\bbig\)|\bbig\}|\bbig\]/ },
+                { type: 'OTHER1', regex: /\\[\^_]/ },
+                { type: 'ESCAPE', regex: /[\\]/ },
+                { type: 'AFTER_HAS_BRACE', regex: /\b(frac|sqrt|stackrel|vec|overrightarrow|overline|underline|widetilde|widehat)\b|[\^_]/ }, // 后面紧跟{}block
+                { type: 'OTHER', regex: /[^"'{}\[\]()\\]+/ }
+            ];
+            const result = [];
+            let currentInput = input;
+        
+	    var pos = 0;
+            while (currentInput.length > 0) {
+                let matched = false;
+        
+                for (const { type, regex } of tokenPatterns) {
+                    const match = regex.exec(currentInput);
+        
+                    if (match && match.index === 0) {
+                        let value = match[0];
+        
+                        if (type === 'OTHER') {
+                            // Check for 'SPECIAL_LEFT' or 'SPECIAL_RIGHT' within 'OTHER'
+                            const specialLeftMatch = tokenPatterns[3].regex.exec(currentInput);
+                            const specialRightMatch = tokenPatterns[4].regex.exec(currentInput);
+        
+                            const specialMatch = specialLeftMatch || specialRightMatch;
+        
+                            if (specialMatch && specialMatch.index < value.length) {
+                                value = value.slice(0, specialMatch.index);
+                            }
+                        }
+        
+                        result.push({ type, value, pos });
+			pos += value.length;
+                        currentInput = currentInput.slice(value.length);
+                        matched = true;
+                        break;
+                    }
+                }
+        
+                if (!matched) {
+                    // This should not happen if all cases are handled
+		    var msg = `No matching token found at position ${input.length - currentInput.length}`
+		    show_err(input, pos, msg);
+                    throw new Error(msg);
+                }
+            }
+        
+            return result;
+        }
+        
+        function buildSyntaxTree(tokens, input) {
+            const root = { type: 'ROOT', children: [] };
+            const stack = [root];
+        
+	    const matchingBraces = {'(': ')', '{': '}', '[': ']', '\\{': '\\}',
+        			    'left(': 'right)', 'left{': 'right}', 'left[': 'right]',
+        			    'big(': 'big)', 'big{': 'big}', 'big[': 'big]'};
+	    var left_bracket = ['(', '[', '{'];
+	    var right_bracket = [')', ']', '}'];
+
+            tokens.forEach(token => {
+                const currentNode = stack[stack.length - 1];
+        
+                if (left_bracket.indexOf(token.value) >=0 || token.value === '\\{' || token.type === 'SPECIAL_LEFT') {
+                    // If it's an opening brace or special left, push a new node onto the stack
+                    const newNode = { type: token.type, value: token.value, pos: token.pos, children: [] };
+                    currentNode.children.push(newNode);
+                    stack.push(newNode);
+                } else if (right_bracket.indexOf(token.value) >=0 || token.value == '\\}' || token.type === 'SPECIAL_RIGHT') {
+                    // For closing braces, check if it matches the top of the stack
+		    if (stack.length == 0) { // no left found
+		    	var msg = `没发现左括号和  ${token.value} 匹配`
+		    	show_err1(input, token.pos, token.value.length, msg)
+                        throw new Error(msg);
+		    }
+		    var left_b = stack[stack.length - 1]
+                    const expectedValue = matchingBraces[left_b.value];
+                    if (token.value === expectedValue) {
+                        stack.pop();
+                    } else { // not match
+		    	var msg = `左括号 ${left_b.value} 和右括号 ${token.value} 不匹配`
+			//console.log('aaa', token, left_b, '|', token.pos, msg, left_b.pos)
+		    	show_err1(input, token.pos, token.value.length, msg, left_b.pos, left_b.value.length)
+                        throw new Error(msg);
+                    }
+                } else {
+                    // For other types, just add them to the current node's children
+                    currentNode.children.push(token);
+                }
+            });
+        
+            if (stack.length > 1) { // no right found
+		var left_b = stack[stack.length - 1]
+		var msg = `没发现右括号和  ${left_b.value} 匹配`
+		//console.log(stack)
+		show_err1(input, left_b.pos, left_b.value.length, msg)
+		throw new Error(msg);
+            }
+        
+            return root;
+        }
+
+    </script>
+</body>
+</html>
