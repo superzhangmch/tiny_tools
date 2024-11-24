@@ -30,6 +30,8 @@
             output.textContent = JSON.stringify(tokens, null, 2);
             const syntaxTree = buildSyntaxTree(tokens, input);
             output.textContent += "\n__xxxx___\n" + JSON.stringify(syntaxTree, null, 2);
+	    var latex = buildLatex(syntaxTree, input);
+            output.textContent = latex + "\n------\n" + output.textContent;
         }
 
 	function show_err1(input, pos, pos_len, msg, left_pos, left_len) {
@@ -68,25 +70,26 @@
 		}
 	    }
 	}
+
         function tokenize(input) {
             document.getElementById('div_err').innerHTML = '';
             const tokenPatterns = [
                 { type: 'TEXT', regex: /"[^"]*"|'[^']*'/ },    // "xxx"
                 { type: 'BRACKET', regex: /[(){}\[\]]/ },      // () [] {}
                 { type: 'ESCAPED_BRACE', regex: /\\[{}]/ },    // \{ \}
-                { type: 'SPECIAL_LEFT', regex: /\bleft\(|\bleft\{|\bleft\[|\bbig\(|\bbig\{|\bbig\[/ },       // left(
-                { type: 'SPECIAL_RIGHT', regex: /\bright\)|\bright\}|\bright\]|\bbig\)|\bbig\}|\bbig\]/ },   // right)
-                { type: 'STRING1', regex: /\\[\^_]/ },    // \^ \_
-                { type: 'STRING2', regex: /\\\\/ },       // \\
-                { type: 'OTHER1', regex: /\\[ ]/ },       // "\ "
-                { type: 'ESCAPE', regex: /[\\]/ },        // \
-                { type: 'SPACE', regex: /[ \t]+/ },       // " "
-                { type: 'DOUBLE_DIV', regex: /\/\// },    //  //
-                { type: 'NUMBER', regex: /-?\d+(\.\d+)?/ },  // -2.5
-                { type: 'OP', regex: /[\+\-\*\/]/ },         // +-*/
-                { type: 'AFTER_HAS_BRACE', regex: /\b(frac|sqrt|stackrel|vec|overrightarrow|overline|underline|widetilde|widehat)\b|[\^_]/ }, // 后面紧跟{}block
-                { type: 'STRING', regex: /[a-zA-Z0-9]+/ },    // abc123
-                { type: 'OTHER', regex: /[^"'{}\[\]()\\\^_\/ \t]+/ }
+                { type: 'STRING1', regex: /\\[_]/ },           // "\_"
+                { type: 'STRING2', regex: /\\[\^]|\\\\/ },    // "\^", "\\"
+                { type: 'SPACE1', regex: /\\[ ]|\\,/ },    //  space: "\ ", "\,"
+                { type: 'SPECIAL_LEFT',  regex:  /(\\|\b)(left|big)(\\{|\(|\[)|(\\|\b)left\|/ },    // left(
+                { type: 'SPECIAL_RIGHT', regex: /(\\|\b)(right|big)(\\}|\)|\])|(\\|\b)right\|/ },   // right)
+                { type: 'AFTER_HAS_BRACE', regex: /(\b|\\)(frac|sqrt|stackrel|vec|overrightarrow|overline|underline|widetilde|widehat)\b|[\^_]/ }, // 后面紧跟{}block
+                { type: 'ESCAPE', regex: /[\\]/ },          // \
+                { type: 'SPACE', regex: /[ \t\n]+/ },       // " "
+                { type: 'DOUBLE_DIV', regex: /\/\// },      //  //
+                { type: 'DIV', regex: /\// },        //  /
+                { type: 'NUMBER', regex: /-\d+(\.\d+)?\b|\b\d+(\.\d+)?\b/ },  // -2.5
+                { type: 'STRING', regex: /[a-zA-Z0-9\u4e00-\u9fa5\u3400-\u4DBF]+/ },    // abc123
+                { type: 'OTHER', regex: /[^"'{}\[\]()\\\^_\/ \t\n]+/ }
             ];
 	    var m_pat = {}
 	    for (var i in tokenPatterns) {
@@ -96,7 +99,13 @@
             let currentInput = input;
         
 	    var pos = 0;
+	    var cc = 0;
             while (currentInput.length > 0) {
+	        //console.log('xxx', currentInput.length, currentInput, result.length)
+		cc += 1
+		if ( cc > 1000) {
+                    throw new Error('dead?');
+		}
                 let matched = false;
         
                 for (const { type, regex } of tokenPatterns) {
@@ -121,8 +130,12 @@
                                 }
 			    }
                         }
-        
-                        result.push({ type, value, pos });
+			var type1 = type;
+       			if (type == 'STRING1') {
+			    type1 = 'STRING';
+			}
+			// console.log('vv', cc, regex, '|', value, value.length, '|')
+                        result.push({ type: type1, value, pos });
 			pos += value.length;
                         currentInput = currentInput.slice(value.length);
                         matched = true;
@@ -142,20 +155,140 @@
         }
         
         function buildLatex(node, input) {
-		// AFTER_HAS_BRACE: 后面的加 {}, DOUBLE_DIV： 变成 frac {} {}
-		var ret = '';
+
+		var arr_ret = [];
+		for (var i in node.children) {
+			var child = node.children[i];
+			var s = child.value;
+			if (child.type == 'ESCAPED_BRACE' || child.type == 'BRACKET' || child.type == 'SPECIAL_LEFT') {
+				s = buildLatex(child, input);
+			}
+			arr_ret.push(s)
+		}
+		//console.log(arr_ret)
+
+			var m_add_braces = {};
+			function add_braces(n, s, j, can_omit_bracket) {
+				if (m_add_braces[j]) return s;
+				m_add_braces[j] = 1;
+				if (n.type == 'BRACKET') {
+					if (can_omit_bracket) {
+						if (n.value.includes("{")) return "{" + s + "}";
+					} else {
+						if (n.value.includes("(")) return "{(" + s + ")}";
+						if (n.value.includes("[")) return "{[" + s + "]}";
+						if (n.value.includes("{")) return "{" + s + "}";
+					}
+				}
+				if (n.type == 'SPECIAL_LEFT') {
+					if (can_omit_bracket) {
+						if (n.value.includes("|")) return "{" + s + "}";
+					} else {
+						if (n.value.includes("(")) return "{\\left(" + s + "\\right)}";
+						if (n.value.includes("[")) return "{\\left[" + s + "\\right]}";
+						if (n.value.includes("{")) return "{\\left\\{" + s + "\\right\\}}";
+						if (n.value.includes("|")) return "{\\left|" + s + "\\right|}";
+					}
+				}
+				if (n.type == 'ESCAPED_BRACE') {
+					return "{\\{" + s + "\\}}";
+				}
+				return "{" + s + "}";
+			}
+			function add_bracket(n, s, j) {
+				if (m_add_braces[j]) return s;
+				if (n.type == 'BRACKET') {
+					if (n.value.includes("(")) return "(" + s + ")";
+					if (n.value.includes("[")) return "[" + s + "]";
+					if (n.value.includes("{")) return "{" + s + "}";
+				}
+				if (n.type == 'SPECIAL_LEFT' && !m_add_braces[j]) {
+					if (n.value.includes("(")) return "\\left(" + s + "\\right)";
+					if (n.value.includes("[")) return "\\left[" + s + "\\right]";
+					if (n.value.includes("{")) return "\\left\\{" + s + "\\right\\}";
+					if (n.value.includes("|")) return "\\left|" + s + "\\right|";
+				}
+				if (n.type == 'ESCAPED_BRACE' && !m_add_braces[j]) {
+					return "\\{" + arr_ret[i] + "\\}";
+				}
+				return s;
+			}
+
+		// AFTER_HAS_BRACE: 后面的加 {}
+		//console.log(node)
 		for (var i in node.children) {
 			var child = node.children[i]
+			if (child.type != 'AFTER_HAS_BRACE') continue;
+			var m_cnt = {'frac': 2, 'stackrel': 2}
+			var c = 0;
+			var cur_n = child.value.replace("\\", "");
+			var c1 = m_cnt[cur_n]; c1 = (c1) ? c1 : 1;
+			var ii = parseInt(i);
+			var can_omit = false;
+			if (cur_n == 'frac' || cur_n == 'sqrt' || cur_n == '^') {
+				can_omit = true;
+			}
+			for (var j = ii+1; j<= node.children.length; ++j) {
+				//console.log('aa', i, j, n)
+				var n = node.children[j];
+				if (n.type == 'SPACE') continue;
+				arr_ret[j] = add_braces(n, arr_ret[j], j, can_omit);
+				// 函数调用：
+				c += 1;
+				if (c >= c1) break;
+			}
 		}
+		// DOUBLE_DIV： 变成 frac {} {}
+		for (var i in node.children) {
+			var child = node.children[i];
+			if (child.type != 'DOUBLE_DIV') continue;
+			var last = null;
+			var next = null;
+			var ii = parseInt(i);
+			for (var j = ii+1; j < node.children.length; ++j) {
+				var n = node.children[j];
+				if (n.type == 'SPACE') continue;
+				arr_ret[j] = add_braces(n, arr_ret[j], j, true);
+				next = j;
+				break;
+			}
+			for (var j = ii-1; j >= 0; --j) {
+				var n = node.children[j];
+				if (n.type == 'SPACE') continue;
+				arr_ret[j] = add_braces(n, arr_ret[j], j, true);
+				last = j;
+				break;
+			}
+			// console.log('xxx', last, i, next)
+			if (last !== null && next !== null) {
+				// aa // bb => frac {aa} {bb}
+				[arr_ret[last], arr_ret[i], arr_ret[next]] = ["\\frac", arr_ret[last], arr_ret[next]]
+				m_add_braces[i] = 1;
+			}
+		}
+		for (var i in node.children) {
+			arr_ret[i] = add_bracket(node.children[i], arr_ret[i], i);
+		}
+		console.log(node, arr_ret)
+		return arr_ret.join("");
+	}
+
+	function bracket_match(left_b_n, right_b_n) {
+	        var left_b = left_b_n.value;
+	        var right_b = right_b_n.value;
+		if (left_b_n.type == right_b_n.type || left_b_n.type.includes("SPECIAL") && right_b_n.type.includes("SPECIAL")) {
+			if (left_b.includes("(") && right_b.includes(")")) return true;
+			if (left_b.includes("[") && right_b.includes("]")) return true;
+			if (left_b.includes("{") && right_b.includes("}")) return true;
+			if (left_b.includes("|") && right_b.includes("|")) return true;
+		}
+		return false;
 	}
 
         function buildSyntaxTree(tokens, input) {
             const root = { type: 'ROOT', children: [] };
             const stack = [root];
         
-	    const matchingBraces = {'(': ')', '{': '}', '[': ']', '\\{': '\\}',
-        			    'left(': 'right)', 'left{': 'right}', 'left[': 'right]',
-        			    'big(': 'big)', 'big{': 'big}', 'big[': 'big]'};
 	    var left_bracket = ['(', '[', '{'];
 	    var right_bracket = [')', ']', '}'];
 
@@ -175,8 +308,7 @@
                         throw new Error(msg);
 		    }
 		    var left_b = stack[stack.length - 1]
-                    const expectedValue = matchingBraces[left_b.value];
-                    if (token.value === expectedValue) {
+		    if (bracket_match(left_b, token)) {
                         stack.pop();
                     } else { // not match
 		    	var msg = `左括号 ${left_b.value} 和右括号 ${token.value} 不匹配`
@@ -186,6 +318,23 @@
                     }
                 } else {
                     // For other types, just add them to the current node's children
+		    // merge
+		    if (currentNode.children.length > 0) {
+		    	var last = currentNode.children[currentNode.children.length-1];
+			// console.log('aaa', last.type, token.type, last)
+			if ((last.type == 'STRING' || last.type == 'ESCAPE') && token.type == 'STRING') {
+				last.value += token.value;
+				last.type = 'STRING';
+				if (currentNode.children.length > 1) {
+		    			var last_1 = currentNode.children[currentNode.children.length-2];
+					if (last_1.type == 'STRING') {
+						last_1.value += last.value;
+						currentNode.children.pop()
+					}
+				}
+				return;
+			}
+		    }
                     currentNode.children.push(token);
                 }
             });
