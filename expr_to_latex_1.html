@@ -71,16 +71,27 @@
         function tokenize(input) {
             document.getElementById('div_err').innerHTML = '';
             const tokenPatterns = [
-                { type: 'STRING', regex: /"[^"]*"|'[^']*'/ },
-                { type: 'BRACKET', regex: /[(){}\[\]]/ },
-                { type: 'ESCAPED_BRACE', regex: /\\[{}]/ },
-                { type: 'SPECIAL_LEFT', regex: /\bleft\(|\bleft\{|\bleft\[|\bbig\(|\bbig\{|\bbig\[/ },
-                { type: 'SPECIAL_RIGHT', regex: /\bright\)|\bright\}|\bright\]|\bbig\)|\bbig\}|\bbig\]/ },
-                { type: 'OTHER1', regex: /\\[\^_]/ },
-                { type: 'ESCAPE', regex: /[\\]/ },
+                { type: 'TEXT', regex: /"[^"]*"|'[^']*'/ },    // "xxx"
+                { type: 'BRACKET', regex: /[(){}\[\]]/ },      // () [] {}
+                { type: 'ESCAPED_BRACE', regex: /\\[{}]/ },    // \{ \}
+                { type: 'SPECIAL_LEFT', regex: /\bleft\(|\bleft\{|\bleft\[|\bbig\(|\bbig\{|\bbig\[/ },       // left(
+                { type: 'SPECIAL_RIGHT', regex: /\bright\)|\bright\}|\bright\]|\bbig\)|\bbig\}|\bbig\]/ },   // right)
+                { type: 'STRING1', regex: /\\[\^_]/ },    // \^ \_
+                { type: 'STRING2', regex: /\\\\/ },       // \\
+                { type: 'OTHER1', regex: /\\[ ]/ },       // "\ "
+                { type: 'ESCAPE', regex: /[\\]/ },        // \
+                { type: 'SPACE', regex: /[ \t]+/ },       // " "
+                { type: 'DOUBLE_DIV', regex: /\/\// },    //  //
+                { type: 'NUMBER', regex: /-?\d+(\.\d+)?/ },  // -2.5
+                { type: 'OP', regex: /[\+\-\*\/]/ },         // +-*/
                 { type: 'AFTER_HAS_BRACE', regex: /\b(frac|sqrt|stackrel|vec|overrightarrow|overline|underline|widetilde|widehat)\b|[\^_]/ }, // 后面紧跟{}block
-                { type: 'OTHER', regex: /[^"'{}\[\]()\\]+/ }
+                { type: 'STRING', regex: /[a-zA-Z0-9]+/ },    // abc123
+                { type: 'OTHER', regex: /[^"'{}\[\]()\\\^_\/ \t]+/ }
             ];
+	    var m_pat = {}
+	    for (var i in tokenPatterns) {
+	    	m_pat[tokenPatterns[i].type] = tokenPatterns[i].regex;
+	    }
             const result = [];
             let currentInput = input;
         
@@ -95,15 +106,20 @@
                         let value = match[0];
         
                         if (type === 'OTHER') {
-                            // Check for 'SPECIAL_LEFT' or 'SPECIAL_RIGHT' within 'OTHER'
-                            const specialLeftMatch = tokenPatterns[3].regex.exec(currentInput);
-                            const specialRightMatch = tokenPatterns[4].regex.exec(currentInput);
-        
-                            const specialMatch = specialLeftMatch || specialRightMatch;
-        
-                            if (specialMatch && specialMatch.index < value.length) {
-                                value = value.slice(0, specialMatch.index);
-                            }
+			    for (var key of ['SPECIAL_LEFT', 'SPECIAL_RIGHT', 'AFTER_HAS_BRACE', 'NUMBER', 'STRING']) {
+                                const match1 = m_pat[key].exec(currentInput);
+                                if (match1 && match1.index < value.length) {
+                                    value = value.slice(0, match1.index);
+                                }
+			    }
+                        }
+                        if (type === 'STRING') {
+			    for (var key of ['SPECIAL_LEFT', 'SPECIAL_RIGHT', 'AFTER_HAS_BRACE']) {
+                                const match1 = m_pat[key].exec(currentInput);
+                                if (match1 && match1.index < value.length) {
+                                    value = value.slice(0, match1.index);
+                                }
+			    }
                         }
         
                         result.push({ type, value, pos });
@@ -125,6 +141,14 @@
             return result;
         }
         
+        function buildLatex(node, input) {
+		// AFTER_HAS_BRACE: 后面的加 {}, DOUBLE_DIV： 变成 frac {} {}
+		var ret = '';
+		for (var i in node.children) {
+			var child = node.children[i]
+		}
+	}
+
         function buildSyntaxTree(tokens, input) {
             const root = { type: 'ROOT', children: [] };
             const stack = [root];
