@@ -213,6 +213,24 @@
 				}
 				return s;
 			}
+			function is_func_call(n_arr, j, direction) {
+				if (direction > 0) {
+					if (j+1 <= n_arr.length - 1) {
+						if (n_arr[j].type == 'STRING' && /^(\\)?[a-zA-Z]([a-zA-Z0-9]|\\_)*$/.test(n_arr[j].value) 
+							&& n_arr[j+1].type == 'BRACKET' && n_arr[j+1].value == '(') {
+							return true;
+						}
+					}
+				}
+				if (direction < 0) {
+					if (j-1 >= 0) {
+						if (n_arr[j-1].type == 'STRING' && /^(\\)?[a-zA-Z]([a-zA-Z0-9]|\\_)*$/.test(n_arr[j-1].value) 
+							&& n_arr[j].type == 'BRACKET' && n_arr[j].value == '(') {
+							return true;
+						}
+					}
+				}
+			}
 
 		// AFTER_HAS_BRACE: 后面的加 {}
 		//console.log(node)
@@ -232,7 +250,15 @@
 				//console.log('aa', i, j, n)
 				var n = node.children[j];
 				if (n.type == 'SPACE') continue;
-				arr_ret[j] = add_braces(n, arr_ret[j], j, can_omit);
+				if (is_func_call(node.children, j, 1)) {
+					arr_ret[j] = "{" + arr_ret[j];
+					arr_ret[j+1] = "(" + arr_ret[j+1] + ")}";
+					m_add_braces[j] = 1;
+					m_add_braces[j+1] = 1;
+					j += 1;
+				} else {
+					arr_ret[j] = add_braces(n, arr_ret[j], j, can_omit);
+				}
 				// 函数调用：
 				c += 1;
 				if (c >= c1) break;
@@ -243,25 +269,56 @@
 			var child = node.children[i];
 			if (child.type != 'DOUBLE_DIV') continue;
 			var last = null;
+			var last1 = null;
 			var next = null;
+			var next1 = null;
 			var ii = parseInt(i);
 			for (var j = ii+1; j < node.children.length; ++j) {
 				var n = node.children[j];
 				if (n.type == 'SPACE') continue;
-				arr_ret[j] = add_braces(n, arr_ret[j], j, true);
-				next = j;
+				if (is_func_call(node.children, j, 1) && !m_add_braces[j] && !m_add_braces[j+1]) {
+					arr_ret[j] = "{" + arr_ret[j];
+					arr_ret[j+1] = "(" + arr_ret[j+1] + ")}";
+					m_add_braces[j] = 1;
+					m_add_braces[j+1] = 1;
+					next = j;
+					next1 = j+1;
+					j += 1;
+				} else {
+					arr_ret[j] = add_braces(n, arr_ret[j], j, true);
+					next = j;
+				}
 				break;
 			}
 			for (var j = ii-1; j >= 0; --j) {
 				var n = node.children[j];
 				if (n.type == 'SPACE') continue;
-				arr_ret[j] = add_braces(n, arr_ret[j], j, true);
-				last = j;
+				if (is_func_call(node.children, j, -1) && !m_add_braces[j] && !m_add_braces[j-1]) {
+					arr_ret[j-1] = "{" + arr_ret[j-1];
+					arr_ret[j] = "(" + arr_ret[j] + ")}";
+					m_add_braces[j] = 1;
+					m_add_braces[j-1] = 1;
+					last1 = j-1;
+					last = j;
+					j -= 1;
+				} else {
+					arr_ret[j] = add_braces(n, arr_ret[j], j, true);
+					last = j;
+				}
 				break;
 			}
 			// console.log('xxx', last, i, next)
-			if (last !== null && next !== null) {
-				// aa // bb => frac {aa} {bb}
+			// aa // bb => frac {aa} {bb}
+			if (last1 !== null && last !== null && next !== null && next1 !== null) {
+				[arr_ret[last1], arr_ret[last], arr_ret[i], arr_ret[next], arr_ret[next1]] = ["\\frac", arr_ret[last1], arr_ret[last], arr_ret[next], arr_ret[next1]]
+				m_add_braces[i] = 1;
+			} else if (last1 == null && last !== null && next !== null && next1 !== null) {
+				[arr_ret[last], arr_ret[i], arr_ret[next], arr_ret[next1]] = ["\\frac", arr_ret[last], arr_ret[next], arr_ret[next1]]
+				m_add_braces[i] = 1;
+			} else if (last1 !== null && last !== null && next !== null && next1 == null) {
+				[arr_ret[last1], arr_ret[last], arr_ret[i], arr_ret[next]] = ["\\frac", arr_ret[last1], arr_ret[last], arr_ret[next]]
+				m_add_braces[i] = 1;
+			} else if (last1 == null && last !== null && next !== null && next1 == null) {
 				[arr_ret[last], arr_ret[i], arr_ret[next]] = ["\\frac", arr_ret[last], arr_ret[next]]
 				m_add_braces[i] = 1;
 			}
