@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR and Dictionary</title>
+    <style>
+        #video {
+            width: 100%;
+            max-width: 600px;
+        }
+        #canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>OCR and Dictionary</h1>
+    <video id="video" autoplay></video>
+    <button id="capture">Capture</button>
+    <canvas id="canvas"></canvas>
+    <div id="ocr-output"></div>
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureButton = document.getElementById('capture');
+        const ocrOutput = document.getElementById('ocr-output');
+
+        // 访问摄像头
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error accessing the camera: ", err);
+            });
+
+        // 拍摄图片
+        captureButton.addEventListener('click', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/png');
+            performOCR(imageData);
+        });
+    </script>
+</body>
+</html>
+
+<!-- 在 HTML 文件中 -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+    function performOCR(imageData) {
+        Tesseract.recognize(
+            imageData,
+            'eng',
+            {
+                logger: info => console.log(info)
+            }
+        ).then(({ data: { text } }) => {
+            displayText(text);
+        });
+    }
+
+    function displayText(text) {
+        const words = text.split(/\s+/);
+        ocrOutput.innerHTML = '';
+        words.forEach(word => {
+            const span = document.createElement('span');
+            span.textContent = word + ' ';
+            span.style.cursor = 'pointer';
+            span.addEventListener('click', () => lookupWord(word));
+            ocrOutput.appendChild(span);
+        });
+    }
+
+	function lookupWord(word) {
+    fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data[0] && data[0].meanings) {
+                const meaning = data[0].meanings[0].definitions[0].definition;
+                alert(`Definition of ${word}: ${meaning}`);
+            } else {
+                alert(`No definition found for ${word}.`);
+            }
+        })
+        .catch(err => {
+            console.error("Error fetching the definition: ", err);
+        });
+}
+</script>
+
+
