@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>生成二维码</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script> 
+    <meta charset="utf8">
+    <title>QR code</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.js"></script> 
 <style>
 /* style.css */
 body {
@@ -26,28 +26,26 @@ input, button {
 </style>
 </head>
 <body>
-    <textarea id="text" type="text" placeholder="输入内容" cols=100 rows=10></textarea>
+    <textarea id="text" type="text" placeholder="input text here .." cols=100 rows=10></textarea>
     <span id=err></span>
-    <button id="generate">生成二维码</button>
+    <button id="generate">gen qrCode</button>
     <div id="qrcode"></div>
 
 </body>
 </html>
 <script>
 document.getElementById('generate').addEventListener('click', function() {
-    var text = "[\n" + document.getElementById('text').value + "\n]";
+    var text = "the content: " + document.getElementById('text').value;
     if(text) {
 	document.getElementById('err').innerHTML = "";
-	try {
-	// 清除旧的二维码
         document.getElementById('qrcode').innerHTML = "";
-        // 生成新的二维码
-        new QRCode(document.getElementById("qrcode"), text);
+	try {
+        	new QRCode(document.getElementById("qrcode"), { text: text, width: 256, height: 256,correctLevel : QRCode.CorrectLevel.L})
 	}catch(e) {
-        	document.getElementById('err').innerHTML = e.message;
+        	document.getElementById('err').innerHTML = e.message + "<br>("+text.length+")";
 	}
     } else {
-        alert("请输入内容！");
+        document.getElementById('err').innerHTML = "please input text!";
     }
 });
 </script>
