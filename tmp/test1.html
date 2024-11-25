@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iOS Camera Capture</title>
+    <title>Camera Capture and OCR</title>
     <style>
         #video, #photo {
             width: 100%;
@@ -14,23 +14,31 @@
             border: 1px solid #ddd;
             display: none; /* Initially hidden */
         }
+        #ocr-output {
+            margin-top: 20px;
+            font-weight: bold;
+            color: #333;
+        }
     </style>
 </head>
 <body>
-    <h1>Camera Capture on iOS</h1>
+    <h1>Camera Capture and OCR</h1>
     <video id="video" autoplay playsinline></video>
     <button id="capture">Capture Photo</button>
     <canvas id="canvas" style="display:none;"></canvas>
     <img id="photo" alt="Captured Photo">
+    <div id="ocr-output"></div>
 
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const photo = document.getElementById('photo');
         const captureButton = document.getElementById('capture');
+        const ocrOutput = document.getElementById('ocr-output');
 
-        // 访问摄像头
-        navigator.mediaDevices.getUserMedia({ video: true })
+        // 访问后置摄像头
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
             .then(stream => {
                 video.srcObject = stream;
             })
@@ -38,7 +46,7 @@
                 console.error("Error accessing the camera: ", err);
             });
 
-        // 拍摄图片
+        // 拍摄图片并进行OCR识别
         captureButton.addEventListener('click', () => {
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
@@ -49,7 +57,25 @@
             const imageData = canvas.toDataURL('image/png');
             photo.src = imageData;
             photo.style.display = 'block'; // 显示图像
+
+            // 进行OCR识别
+            performOCR(imageData);
         });
+
+        function performOCR(imageData) {
+            ocrOutput.textContent = 'Processing OCR...'; // 显示处理状态
+            Tesseract.recognize(
+                imageData,
+                'eng',
+                {
+                    logger: info => console.log(info)
+                }
+            ).then(({ data: { text } }) => {
+                ocrOutput.textContent = 'OCR Result: ' + text;
+            }).catch(err => {
+                ocrOutput.textContent = 'Error during OCR: ' + err.message;
+            });
+        }
     </script>
 </body>
 </html>
