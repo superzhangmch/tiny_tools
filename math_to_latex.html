@@ -21,8 +21,9 @@
 	<textarea id="inputText" placeholder="输入一般性的数学公式 sin(x)*x^2+sqrt(x) 或 latex 公式，最终都转为为latex 公式。 规则：
 (1). latex 命令前的'\' (如\sin) 基本都可以省略。
 (2). a // b 表示 \\frac a b。 字符串加引号 &quote;abc&quote; 表示\\text{abc}
-(3). 尽量按自然方式输入(比如输入 -&gt; 自动转 →)，则会自动转 latex
-(4). 首行以 CASES / ALIGN(或有行含字符 &) 则转为 \begin{cases/align}..\end{cases/align} 
+(3). abc(..)会自动当做一个叫abc的函数的调用，如果不是，则要加空格。比如: sum_i (a_n)，不能是 sum_i(a_n)
+(4). 尽量按自然方式输入(比如输入 -&gt; 自动转 →)
+(5). 首行以 CASES / ALIGN(或有行含字符 &) 则转为 \begin{cases/align}..\end{cases/align} 
 "></textarea>
     <textarea id="latexInput" placeholder="Enter LaTeX code"></textarea>
     <button id="copyButton">Copy LaTeX</button><span id=copyStatus></span>
