@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>String Parser</title>
+    <title>数学公式转Latex</title>
     <style>
 	textarea {
 	    width: 100%;
@@ -17,7 +17,13 @@
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
-    <textarea id="inputText" placeholder="Enter expression, e.g., sin(x)*cos(x)"></textarea>
+	<h1>Expression to LaTeX Converter</h1>
+	<textarea id="inputText" placeholder="输入一般性的数学公式 sin(x)*x^2+sqrt(x) 或 latex 公式，最终都转为为latex 公式。
+规则：
+(1). latex 命令前的'\'(\sin)基本都可以省略。
+(2). 要把除法按分式表示, 除号用'//'
+(4). 尽量按自然方式输入(比如输入 -> 自动转 →)，则会自动转 latex
+"></textarea>
     <textarea id="latexInput" placeholder="Enter LaTeX code"></textarea>
     <button id="copyButton">Copy LaTeX</button><span id=copyStatus></span>
     <div id="renderedMath"></div>
@@ -60,6 +66,30 @@
 	    const syntaxTree = buildSyntaxTree(tokens, input);
 	    //output.textContent += "\n__xxxx___\n" + JSON.stringify(syntaxTree, null, 2);
 	    var latex = buildLatex(syntaxTree, input);
+	    latex = latex.replace(/(?<!\\)[ \t]+/g, " ");
+	    latex = latex.replace(/\b([a-zA-Z0-9\.]+)\s*\/\s*([a-zA-Z0-9\.]+)\b/g, '\\frac{$1}{$2}')
+		.replace(/(?<!\\)\b(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi)\b/g, '\\$1')
+		.replace(/_(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi)\b/g, '_\\$1')
+		.replace(/(?<!\\)\b(left|right)\b/g, '\\$1')
+		.replace(/(?<!\\)\b(text|hat|cap|cup|uplus|sqcap|sqcup|vee|wedge|oplus|ominus|otimes|oslash|odot|bigcirc|triangleleft|triangleright|bigtriangledown|bullet|setminus|wr|diamond|bigstar|leq|geq|neq|approx|sim|simeq|equiv|subset|supset|subseteq|supseteq|nsubseteq|nsupseteq|ni|notin|forall|nexists|lor|neg|top|bot|vdash|vDash|models|perp|parallel|nparallel|angle|measuredangle|sphericalangle|triangle|bigtriangleup|infty|partial|square|blacksquare|circ|cdots|ldots|vdots|ddots|aleph|beth|gimel|daleth|hbar|ell|Re|Im|wp|complement|emptyset|varnothing|nabla|surd|triangle|backslash|land|lor|lnot|neg|flat|sharp|natural|clubsuit|diamondsuit|heartsuit|spadesuit)\b/g, '\\$1')
+		.replace(/(?<!\\)\b(text|hat|cap|cup|uplus|sqcap|sqcup|vee|wedge|oplus|ominus|otimes|oslash|odot|bigcirc|triangleleft|triangleright|bigtriangledown|bullet|setminus|wr|diamond|bigstar|leq|geq|neq|approx|sim|simeq|equiv|subset|supset|subseteq|supseteq|nsubseteq|nsupseteq|ni|notin|forall|nexists|lor|neg|top|bot|vdash|vDash|models|perp|parallel|nparallel|angle|measuredangle|sphericalangle|triangle|bigtriangleup|infty|partial|square|blacksquare|circ|cdots|ldots|vdots|ddots|aleph|beth|gimel|daleth|hbar|ell|Re|Im|wp|complement|emptyset|varnothing|nabla|surd|triangle|backslash|land|lor|lnot|neg|flat|sharp|natural|clubsuit|diamondsuit|heartsuit|spadesuit)_/g, '\\$1_')
+		.replace(/(?<!\\)\b(lim|int|sum|prod|sin|cos|log|exp|tan|sqrt|frac|in|exists|times|div|cdot)\b/g, '\\$1')
+		.replace(/(?<!\\)\b(lim|int|sum|prod|sin|cos|log|exp|tan|sqrt|frac|in|exists|times|div|cdot)_/g, '\\$1_')
+		.replace(/(?<!mathbb\{)\b(E|R)\b/g, '\\mathbb{$1}')
+		.replace(/(?<!mathbb)\b(E|R)_/g, '\\mathbb{$1}_')
+		.replace(/[\~]/g, '\\sim ')
+		//.replace(/([^ \t\n]+)\s*\n/g, '$1 \\\\\n')
+		.replace(/<->/g, '\\leftrightarrow ')
+		.replace(/<=>/g, '\\Leftrightarrow ')
+		.replace(/->/g, '\\rightarrow ')
+		.replace(/=>/g, '\\Rightarrow ')
+		.replace(/<=/g, '\\le ')
+		.replace(/>=/g, '\\ge ')
+		.replace(/!=/g, '\\ne ')
+		.replace(/==/g, '\\equiv ')
+		.replace(/'([^']*)'/g, '\\text{$1}')
+		.replace(/"([^"]*)"/g, '\\text{$1}')
+		.replace(/\*/g, '');
 	    latexInput.value = latex;
 	    renderLatex(latex);
 	}
@@ -198,78 +228,80 @@
 		}
 		//console.log(arr_ret)
 
-			var m_add_braces = {};
-			function add_braces(n, s, j, can_omit_bracket) {
-				if (m_add_braces[j]) return s;
-				m_add_braces[j] = 1;
-				if (n.type == 'BRACKET') {
-					if (can_omit_bracket) {
-						if (n.value.includes("{")) return "{" + s + "}";
-					} else {
-						if (n.value.includes("(")) return "{(" + s + ")}";
-						if (n.value.includes("[")) return "{[" + s + "]}";
-						if (n.value.includes("{")) return "{" + s + "}";
-					}
-				}
-				if (n.type == 'SPECIAL_LEFT') {
-					if (can_omit_bracket) {
-						if (n.value.includes("|")) return "{" + s + "}";
-					} else {
-						if (n.value.includes("(")) return "{\\left(" + s + "\\right)}";
-						if (n.value.includes("[")) return "{\\left[" + s + "\\right]}";
-						if (n.value.includes("{")) return "{\\left\\{" + s + "\\right\\}}";
-						if (n.value.includes("|")) return "{\\left|" + s + "\\right|}";
-					}
-				}
-				if (n.type == 'ESCAPED_BRACE') {
-					return "{\\{" + s + "\\}}";
-				}
-				if (s.length == 1) return s;
-				return "{" + s + "}";
-			}
-			function add_bracket(n, s, j) {
-				if (m_add_braces[j]) return s;
-				if (n.type == 'BRACKET') {
-					if (n.value.includes("(")) return "(" + s + ")";
-					if (n.value.includes("[")) return "[" + s + "]";
+		var m_add_braces = {};
+		function add_braces(n, s, j, can_omit_bracket) {
+			if (m_add_braces[j]) return s;
+			m_add_braces[j] = 1;
+			if (n.type == 'BRACKET') {
+				if (can_omit_bracket) {
+					if (n.value.includes("{")) return "{" + s + "}";
+				} else {
+					if (n.value.includes("(")) return "{(" + s + ")}";
+					if (n.value.includes("[")) return "{[" + s + "]}";
 					if (n.value.includes("{")) return "{" + s + "}";
 				}
-				if (n.type == 'SPECIAL_LEFT' && !m_add_braces[j]) {
-					if (n.value.includes("(")) return "\\left(" + s + "\\right)";
-					if (n.value.includes("[")) return "\\left[" + s + "\\right]";
-					if (n.value.includes("{")) return "\\left\\{" + s + "\\right\\}";
-					if (n.value.includes("|")) return "\\left|" + s + "\\right|";
-				}
-				if (n.type == 'ESCAPED_BRACE' && !m_add_braces[j]) {
-					return "\\{" + arr_ret[i] + "\\}";
-				}
-				return s;
 			}
-			function is_func_call(n_arr, j, direction) {
-				if (direction > 0) {
-					if (j+1 <= n_arr.length - 1) {
-						if (n_arr[j].type == 'STRING' && /^(\\)?[a-zA-Z]([a-zA-Z0-9]|\\_)*$/.test(n_arr[j].value) 
-							&& n_arr[j+1].type == 'BRACKET' && n_arr[j+1].value == '(') {
-							return true;
-						}
-					}
-				}
-				if (direction < 0) {
-					if (j-1 >= 0) {
-						if (n_arr[j-1].type == 'STRING' && /^(\\)?[a-zA-Z]([a-zA-Z0-9]|\\_)*$/.test(n_arr[j-1].value) 
-							&& n_arr[j].type == 'BRACKET' && n_arr[j].value == '(') {
-							return true;
-						}
-					}
+			if (n.type == 'SPECIAL_LEFT') {
+				if (can_omit_bracket) {
+					if (n.value.includes("|")) return "{" + s + "}";
+				} else {
+					if (n.value.includes("(")) return "{\\left(" + s + "\\right)}";
+					if (n.value.includes("[")) return "{\\left[" + s + "\\right]}";
+					if (n.value.includes("{")) return "{\\left\\{" + s + "\\right\\}}";
+					if (n.value.includes("|")) return "{\\left|" + s + "\\right|}";
 				}
 			}
-
+			if (n.type == 'ESCAPED_BRACE') {
+				return "{\\{" + s + "\\}}";
+			}
+			if (s.length == 1) return s;
+			return "{" + s + "}";
+		}
+		function add_bracket(n, s, j) {
+			if (m_add_braces[j]) return s;
+			if (n.type == 'BRACKET') {
+				if (n.value.includes("(")) return "(" + s + ")";
+				if (n.value.includes("[")) return "[" + s + "]";
+				if (n.value.includes("{")) return "{" + s + "}";
+			}
+			if (n.type == 'SPECIAL_LEFT' && !m_add_braces[j]) {
+				if (n.value.includes("(")) return "\\left(" + s + "\\right)";
+				if (n.value.includes("[")) return "\\left[" + s + "\\right]";
+				if (n.value.includes("{")) return "\\left\\{" + s + "\\right\\}";
+				if (n.value.includes("|")) return "\\left|" + s + "\\right|";
+			}
+			if (n.type == 'ESCAPED_BRACE' && !m_add_braces[j]) {
+				return "\\{" + arr_ret[i] + "\\}";
+			}
+			return s;
+		}
+		function is_func_call(n_arr, j, direction) {
+			if (direction > 0) {
+				if (j+1 <= n_arr.length - 1) {
+					if (n_arr[j].type == 'STRING' && /^(\\)?[a-zA-Z]([a-zA-Z0-9]|\\_)*$/.test(n_arr[j].value) 
+						&& n_arr[j+1].type == 'BRACKET' && n_arr[j+1].value == '(') {
+						return true;
+					}
+				}
+			}
+			if (direction < 0) {
+				if (j-1 >= 0) {
+					if (n_arr[j-1].type == 'STRING' && /^(\\)?[a-zA-Z]([a-zA-Z0-9]|\\_)*$/.test(n_arr[j-1].value) 
+						&& n_arr[j].type == 'BRACKET' && n_arr[j].value == '(') {
+						return true;
+					}
+				}
+			}
+		}
 		// AFTER_HAS_BRACE: 后面的加 {}
 		//console.log(node)
 		for (var i in node.children) {
 			var child = node.children[i]
 			if (child.type != 'AFTER_HAS_BRACE') continue;
 			var m_cnt = {'frac': 2, 'stackrel': 2}
+			if (/[a-zZ-Z0-9]/.test(arr_ret[i][arr_ret[i].length-1])) {
+			    arr_ret[i] += ' ';
+			}
 			var cur_n = child.value.replace("\\", "");
 			var c1 = m_cnt[cur_n]; c1 = (c1) ? c1 : 1;
 			var can_omit = false;
@@ -313,7 +345,7 @@
 				if (n.type == 'NUMBER') right_num = j;
 				if (n.type == 'BRACKET' && "([".includes(n.value)) {
 					var v = arr_ret[j].toLowerCase().replace(new RegExp("\\b("+basic_math_func+")\\b", "g"), " ");
-					console.log(v, 'v')
+					//console.log(v, 'v')
 					var reg = /^[0-9\+\-\*\/\(\)\[\]\{\}\.\^ \\]+$/g;
 					if (reg.test(v)) {
 						right_num = j;
@@ -399,7 +431,7 @@
 		for (var i in node.children) {
 			arr_ret[i] = add_bracket(node.children[i], arr_ret[i], i);
 		}
-		console.log(node, arr_ret)
+		//console.log(node, arr_ret)
 		return arr_ret.join("");
 	}
 
