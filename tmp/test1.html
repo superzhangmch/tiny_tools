@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iOS Camera Capture</title>
+    <style>
+        #video, #photo {
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 20px;
+        }
+        #photo {
+            border: 1px solid #ddd;
+            display: none; /* Initially hidden */
+        }
+    </style>
+</head>
+<body>
+    <h1>Camera Capture on iOS</h1>
+    <video id="video" autoplay playsinline></video>
+    <button id="capture">Capture Photo</button>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <img id="photo" alt="Captured Photo">
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const photo = document.getElementById('photo');
+        const captureButton = document.getElementById('capture');
+
+        // 访问摄像头
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error accessing the camera: ", err);
+            });
+
+        // 拍摄图片
+        captureButton.addEventListener('click', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // 显示拍摄的图像
+            const imageData = canvas.toDataURL('image/png');
+            photo.src = imageData;
+            photo.style.display = 'block'; // 显示图像
+        });
+    </script>
+</body>
+</html>
