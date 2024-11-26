@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<!-- 下面都是拼凑出来的。所以会很乱 -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数学公式转可读形式</title>
+    <style>
+	textarea {
+	    width: 100%;
+	    height: 100px;
+	}
+	pre {
+	    background-color: #f0f0f0;
+	    padding: 10px;
+	}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+	<h1>math expr to readable</h1>
+	<textarea id="inputText" placeholder="math expr"></textarea>
+    <textarea id="latexInput" placeholder="readable math expr"></textarea>
+    <button id="copyButton">copy transformed expr</button><span id=copyStatus></span>
+    <div id="renderedMath"></div>
+
+
+    <div id="div_err"></div>
+
+    <script>
+ 	// <<
+	var m_latex2char = {'infty': '∞', 'vartheta': 'ϑ', 'varkappa': 'ϰ', 'varpi': 'ϖ', 'varrho': 'ϱ', 'varsigma': 'ς', 'varepsilon': 'ε', 'varphi': 'φ', 'alpha': 'α', 'beta': 'β',
+'gamma': 'γ', 'delta': 'δ', 'epsilon': 'ε', 'zeta': 'ζ', 'eta': 'η', 'theta': 'θ', 'iota': 'ι', 'kappa': 'κ', 'lambda': 'λ', 'mu': 'μ', 'nu': 'ν', 'xi': 'ξ',
+'pi': 'π', 'rho': 'ρ', 'sigma': 'σ', 'tau': 'τ', 'upsilon': 'υ', 'phi': 'φ', 'chi': 'χ', 'psi': 'ψ', 'omega': 'ω', 'Gamma': 'Γ', 'Delta': 'Δ', 'Theta': 'Θ',
+'Lambda': 'Λ', 'Xi': 'Ξ', 'Pi': 'Π', 'Sigma': 'Σ', 'Upsilon': 'Υ', 'Phi': 'Φ', 'Psi': 'Ψ', 'Omega': 'Ω', 'pm': '±', 'times': '×', 'div': '÷', 'cdot': '⋅',
+'leq': '≤', 'geq': '≥', 'neq': '≠', 'approx': '≈', 'equiv': '≡', 'sum': '∑', 'prod': '∏', 'int': '∫', 'partial': '∂', 'nabla': '∇', 'forall': '∀',
+'exists': '∃', 'not=': '≠', 'in': '∈', 'notin': '∉', 'subset': '⊂', 'supset': '⊃', 'subseteq': '⊆', 'supseteq': '⊇', 'cap': '∩', 'cup': '∪', 'emptyset': '∅',
+'to': '→', 'gets': '←', 'leftrightarrow': '↔', 'implies': '⇒', 'iff': '⇔', 'aleph': 'ℵ', 'hbar': 'ħ', 'degree': '°', 'prime': '′', 'land': '∧', 'lor': '∨',
+'neg': '¬', 'top': '⊤', 'bot': '⊥', 'vdash': '⊢', 'dashv': '⊣', 'leftarrow': '←', 'Leftarrow': '⇐', 'rightarrow': '→', 'Rightarrow': '⇒', 'Leftrightarrow': '⇔',
+'mapsto': '↦', 'hookleftarrow': '↩', 'hookrightarrow': '↪', 'leftharpoonup': '↼', 'rightharpoonup': '⇀', 'leftharpoondown': '↽', 'rightharpoondown': '⇁',
+'rightleftharpoons': '⇌', 'leadsto': '⇝', 'uparrow': '↑', 'Uparrow': '⇑', 'downarrow': '↓', 'Downarrow': '⇓', 'updownarrow': '↕', 'Updownarrow': '⇕', 'nearrow': '↗',
+'searrow': '↘', 'swarrow': '↙', 'nwarrow': '↖', 'longleftarrow': '⟵', 'Longleftarrow': '⟸', 'longrightarrow': '⟶', 'Longrightarrow': '⟹', 'longleftrightarrow': '⟷',
+'Longleftrightarrow': '⟺', 'longmapsto': '⟼', 'bigcap': '⋂', 'bigcup': '⋃', 'bigvee': '⋁', 'bigwedge': '⋀', 'bigodot': '⨀', 'bigoplus': '⨁', 'bigotimes': '⨂',
+'biguplus': '⨄', 'bigsqcup': '⨆', 'oint': '∮', 'coprod': '∐', 'smallint': '∬', 'ldots': '…', 'cdots': '⋯', 'vdots': '⋮', 'ddots': '⋱', 'imath': 'ı', 'jmath': 'ȷ',
+'ell': 'ℓ', 'wp': '℘', 'Re': 'ℜ', 'Im': 'ℑ', 'mho': '℧', 'Box': '□', 'Diamond': '◇', 'triangle': '△', 'angle': '∠', 'surd': '√', 'propto': '∝', 'flat': '♭',
+'natural': '♮', 'sharp': '♯', 'circ': '∘', 'bullet': '•', 'square': '□', 'blacksquare': '■', 'blacktriangle': '▲', 'triangledown': '▽', 'blacktriangledown': '▼',
+'lozenge': '◊', 'blacklozenge': '⬧', 'star': '⋆', 'ast': '∗', 'oplus': '⊕', 'ominus': '⊖', 'otimes': '⊗', 'oslash': '⊘', 'odot': '⊙', 'dagger': '†', 'ddagger': '‡',
+	   'amalg': '⨿', 'uplus': '⊎', 'vee': '∨', 'wedge': '∧', 'setminus': '\\', 'wr': '≀', 'diamond': '⋄', 'iint': '∬', 'iiint': '∭', 
+		    }
+
+	var m_sqrt = {2: '√', 3: '∛', 4: '∜'}
+	var sup1 = '0123456789abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUW+-=()';
+	var sup2 = '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁᵂ⁺⁻⁼⁽⁾';
+	var m_sup = {}; for (var i = 0; i < sup1.length; i++) { m_sup[sup1[i]] = sup2[i]; }
+	
+	var sub1 = '0123456789aehijklmnoprstuvx+-=()';
+	var sub2 = '₀₁₂₃₄₅₆₇₈₉ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ₊₋₌₍₎';
+	var m_sub = {}; for (var i = 0; i < sub1.length; i++) { m_sub[sub1[i]] = sub2[i]; }
+	function trans(m, s) {
+		var cc = 0;
+		var r = '';
+		for (var c of s) {
+			if (m[c]) {
+				r += m[c];
+			} else {
+				r += c;
+				if (c != ' ' && c != '\t') {
+					cc += 1;
+				}
+			}
+		}
+		if (cc == 0) return r;
+		return "";
+	}
+	// >> 
+
+	const expressionInput = document.getElementById('inputText');
+	const latexInput = document.getElementById('latexInput');
+	const renderedMath = document.getElementById('renderedMath');
+
+	expressionInput.addEventListener('input', () => {
+	    const expression = expressionInput.value;
+	    convertExpressionToLatex(expression);
+	});
+
+	latexInput.addEventListener('input', () => {
+	    const latex = latexInput.value;
+	    renderLatex(latex);
+	});
+	copyButton.addEventListener('click', () => {
+	    latexInput.select();
+	    document.execCommand('copy');
+	    document.getElementById('copyStatus').innerHTML = "copy OK"
+	});
+	function renderLatex(latex) {
+	    var latex1 = latex.replace(/\b([a-zA-Z0-9\.]+)\s*\/\s*([a-zA-Z0-9\.]+)\b/g, '\\frac{$1}{$2}')
+                .replace(/(?<!\\)\b(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi)\b/g, '\\$1')
+                .replace(/_(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi)\b/g, '_\\$1')
+                .replace(/(?<!\\)\b(left|right)\b/g, '\\$1')
+                .replace(/(?<!\\)\b(text|hat|cap|cup|uplus|sqcap|sqcup|vee|wedge|oplus|ominus|otimes|oslash|odot|bigcirc|triangleleft|triangleright|bigtriangledown|bullet|setminus|wr|diamond|bigstar|leq|geq|neq|approx|sim|simeq|equiv|subset|supset|subseteq|supseteq|nsubseteq|nsupseteq|ni|notin|forall|nexists|lor|neg|top|bot|vdash|vDash|models|perp|parallel|nparallel|angle|measuredangle|sphericalangle|triangle|bigtriangleup|infty|partial|square|blacksquare|circ|cdots|ldots|vdots|ddots|aleph|beth|gimel|daleth|hbar|ell|Re|Im|wp|complement|emptyset|varnothing|nabla|surd|triangle|backslash|land|lor|lnot|neg|flat|sharp|natural|clubsuit|diamondsuit|heartsuit|spadesuit)\b/g, '\\$1')
+                .replace(/(?<!\\)\b(text|hat|cap|cup|uplus|sqcap|sqcup|vee|wedge|oplus|ominus|otimes|oslash|odot|bigcirc|triangleleft|triangleright|bigtriangledown|bullet|setminus|wr|diamond|bigstar|leq|geq|neq|approx|sim|simeq|equiv|subset|supset|subseteq|supseteq|nsubseteq|nsupseteq|ni|notin|forall|nexists|lor|neg|top|bot|vdash|vDash|models|perp|parallel|nparallel|angle|measuredangle|sphericalangle|triangle|bigtriangleup|infty|partial|square|blacksquare|circ|cdots|ldots|vdots|ddots|aleph|beth|gimel|daleth|hbar|ell|Re|Im|wp|complement|emptyset|varnothing|nabla|surd|triangle|backslash|land|lor|lnot|neg|flat|sharp|natural|clubsuit|diamondsuit|heartsuit|spadesuit)_/g, '\\$1_')
+                .replace(/(?<!\\)\b(lim|int|sum|prod|sin|cos|log|exp|tan|sqrt|frac|in|exists|times|div|cdot)\b/g, '\\$1')
+                .replace(/(?<!\\)\b(lim|int|sum|prod|sin|cos|log|exp|tan|sqrt|frac|in|exists|times|div|cdot)_/g, '\\$1_')
+                .replace(/\b(E|R)\b/g, '\\mathbb{$1}')
+                .replace(/\b(E|R)_/g, '\\mathbb{$1}_')
+                .replace(/([\^])\s*([a-zA-Z0-9\.]+)\b/g, '^{$2}')
+                .replace(/\b([_])\s*([a-zA-Z0-9]+)\b/g, '_{$2}')
+                .replace(/[\~]/g, '\\sim ')
+                //.replace(/([^ \t\n]+)\s*\n/g, '$1 \\\\\n')
+                .replace(/->/g, '\\rightarrow ')
+                .replace(/<->/g, '\\leftrightarrow ')
+                .replace(/=>/g, '\\Rightarrow ')
+                .replace(/<=>/g, '\\Leftrightarrow ')
+                .replace(/<=/g, '\\le ')
+                .replace(/>=/g, '\\ge ')
+                .replace(/!=/g, '\\ne ')
+                .replace(/==/g, '\\equiv ')
+                .replace(/(?<!left)\(/g, '{(')
+                .replace(/(?<!right)\)/g, ')}')
+                .replace(/\*/g, '');
+
+	    document.getElementById('copyStatus').innerHTML = ""
+	    renderedMath.innerHTML = '$$'+latex1.replace("<", "&lt;").replace(">", "&gt;")+'$$';
+	    MathJax.typesetPromise([renderedMath]).catch((err) => console.error(err));
+	}
+
+	var basic_math_func = "sin|cos|log|ln|exp|sqrt|tan|asin|acos|atan|arctan|arcsin|arccos|frac|abs";
+	function p(...x) {console.log(x)}
+	function pp(arr) {
+		for (var a of arr) {
+			console.log('##', a)
+		}
+	}
+	function convertExpressionToLatex(input) {
+	    function do_replace(latex) {
+	      latex = latex.replace(/(?<!\\)[ \t]+/g, " ")
+		.replace(/<->/g, '\\leftrightarrow ')
+		.replace(/<=>/g, '\\Leftrightarrow ')
+		.replace(/->/g, '\\rightarrow ')
+		.replace(/=>/g, '\\Rightarrow ')
+		.replace(/<=/g, '≤')
+		.replace(/>=/g, '≥')
+		.replace(/!=/g, '≠')
+		.replace(/==/g, '\\equiv ')
+		.replace(/"mathbb\s*{\s*([^}]+)\s*}/g, '$1');
+	
+		//var pat = "(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi|text|hat|cap|cup|uplus|sqcap|sqcup|vee|wedge|oplus|ominus|otimes|oslash|odot|bigcirc|triangleleft|triangleright|bigtriangledown|bullet|setminus|wr|diamond|bigstar|leq|geq|neq|approx|sim|simeq|equiv|subset|supset|subseteq|supseteq|nsubseteq|nsupseteq|ni|notin|forall|nexists|lor|neg|top|bot|vdash|vDash|models|perp|parallel|nparallel|angle|measuredangle|sphericalangle|triangle|bigtriangleup|infty|partial|square|blacksquare|circ|cdots|ldots|vdots|ddots|aleph|beth|gimel|daleth|hbar|ell|Re|Im|wp|complement|emptyset|varnothing|nabla|surd|triangle|backslash|land|lor|lnot|neg|flat|sharp|natural|clubsuit|diamondsuit|heartsuit|spadesuit|int|sum|prod|sin|cos|log|exp|tan|sqrt|frac|in|exists|times|div|cdot|stackrel)";
+		var pat = "([a-zA-Z]+[ \t]?)";
+		var arr_pat = [
+				"({\\s*" + pat + "\\s*})", 
+				"({\\s*[\\\\]\s*" + pat + "\\s*})", 
+				"(\\\\" + pat + ")\\b", 
+				"(\\\\" + pat + ")_", 
+				"\\\\" + pat + "\\b", 
+				"\\\\" + pat + "_", 
+				"_" + pat + "\\b", 
+				"\\b" + pat + "\\b",
+				"\\b" + pat + "_",
+				"\\b" + pat + "\\b", 
+				"_" + pat + "\\b", 
+				"\\b" + pat + "_",
+				];
+
+		function replaceFunction(match) {
+			var s = match.replace(/[\{\}\\ ]/g, "")
+			if (m_latex2char[s]) return m_latex2char[s];
+			return match;
+		}
+		for (var reg_pat of arr_pat) {
+			//console.log('vv', reg_pat);
+			var reg = new RegExp(reg_pat, "g");
+			latex = latex.replace(reg, (match, group1) => {
+					const replacement = replaceFunction(group1);
+					return match.replace(group1, replacement);
+					});
+		}
+		return latex;
+	      }
+	    var input = input.trim();
+	    input = do_replace(input);
+	    var do_throw = false;
+	    const tokens = tokenize(input, do_throw);
+	    var debug = false;
+	    var output = document.getElementById('div_err');
+	    if (debug) output.innerHTML = "<pre>"+JSON.stringify(tokens, null, 2);
+	    const syntaxTree = buildSyntaxTree(tokens, input, do_throw);
+	    if (debug) output.innerHTML += "<pre>\n__xxxx___\n" + JSON.stringify(syntaxTree, null, 2);
+	    var latex = buildLatex(syntaxTree, input);
+	    latexInput.value = latex;
+	    renderLatex(latex);
+	}
+
+	function show_err1(input, pos, pos_len, msg, left_pos, left_len) {
+	    const output = document.getElementById('div_err');
+	    output.innerHTML = "错误：" + msg + "<br>"
+	    if (pos === 0 || pos) {
+		function t(s) {return s.replace("<", "&lt;").replace(">", "&gt;");}
+		if (left_pos === 0 || left_pos) {
+			var p1 = t(input.slice(0, left_pos));
+			var p2 = t(input.slice(left_pos, left_pos + left_len));
+			var p3 = t(input.slice(left_pos + left_len, pos));
+			var p4 = t(input.slice(pos, pos+pos_len));
+			var p5 = t(input.slice(pos+pos_len));
+
+			output.innerHTML += `<pre>${p1}<font color=red><b>${p2}</b></font>${p3}<font color=red><b>${p4}</b></font>${p5}</pre>`
+		} else {
+			var p1 = t(input.slice(0, pos));
+			var p2 = t(input.slice(pos, pos+pos_len));
+			var p3 = t(input.slice(pos+pos_len));
+			output.innerHTML += `<pre>${p1}<font color=red><b>${p2}</b></font>${p3}</pre>`
+		}
+	    }
+	}
+	function show_err(input, pos, msg, left_pos) {
+	    const output = document.getElementById('div_err');
+	    output.innerHTML = "错误：" + msg + "<br>"
+	    if (pos === 0 || pos) {
+	    	function t(s) {return s.replace("<", "&lt;").replace(">", "&gt;");}
+	    	if (left_pos === 0 || left_pos) {
+	    		output.innerHTML += "<pre>"
+					+t(input.slice(0, left_pos)) + "<font color=red><b>[左]</b></font>"
+					+t(input.slice(left_pos, pos)) + "<font color=red><b>[和左不匹配]</b></font>"
+					+t(input.slice(pos))+"</pre>"
+		} else {
+			output.innerHTML += "<pre>"+t(input.slice(0, pos)) + "<font color=red><b>[may here]</b></font>" + t(input.slice(pos))+"</pre>"
+		}
+	    }
+	}
+
+	function tokenize(input, do_throw) {
+	    document.getElementById('div_err').innerHTML = '';
+	    const tokenPatterns = [
+		{ type: 'TEXT', regex: /"[^"]*"|'[^']*'/ },    // "xxx"
+		{ type: 'BRACKET', regex: /[(){}\[\]]/ },      // () [] {}
+		{ type: 'ESCAPED_BRACE', regex: /\\[{}]/ },    // \{ \}
+		{ type: 'STRING1', regex: /\\[_]/ },	   // "\_"
+		{ type: 'STRING2', regex: /\\[\^]|\\\\/ },    // "\^", "\\"
+		{ type: 'SPACE', regex: /(\\[ ]|\\,|[ \t\n])+/ },    //  space: "\ ", "\,"
+		{ type: 'SPECIAL_LEFT',  regex:  /(\\|\b)(left|big)(\\{|\(|\[)|(\\|\b)left\|/ },    // left(
+		{ type: 'SPECIAL_RIGHT', regex: /(\\|\b)(right|big)(\\}|\)|\])|(\\|\b)right\|/ },   // right)
+		{ type: 'AFTER_HAS_BRACE', regex: /(\b|\\)(frac|sqrt|stackrel|vec|overrightarrow|overline|underline|widetilde|widehat)\b|[\^_]/ }, // 后面紧跟{}block
+		{ type: 'ESCAPE', regex: /[\\]/ },	  // \
+		{ type: 'NUMBER', regex: /-\d+(\.\d+)?\b|\b\d+(\.\d+)?\b/ },  // -2.5
+		{ type: 'STRING', regex: /[a-zA-Z0-9]+/ },    // abc123
+		{ type: 'OTHER', regex: /[^"'{}\[\]()\\\^_ \t\n]+/ }
+	    ];
+	    var m_pat = {}
+	    for (var i in tokenPatterns) {
+		m_pat[tokenPatterns[i].type] = tokenPatterns[i].regex;
+	    }
+	    const result = [];
+	    let currentInput = input;
+	
+	    var pos = 0;
+	    var cc = 0;
+	    var last_len = null;
+	    while (currentInput.length > 0) {
+		//console.log('xxx', currentInput.length, currentInput, result.length)
+		cc += 1
+		if ( cc > 1000 || last_len !== null && last_len == currentInput.length) {
+		    if (do_throw) throw new Error('dead?');
+		}
+		let matched = false;
+	
+		for (const { type, regex } of tokenPatterns) {
+		    const match = regex.exec(currentInput);
+	
+		    if (match && match.index === 0) {
+			let value = match[0];
+	
+			if (type === 'OTHER') {
+			    for (var key of ['SPECIAL_LEFT', 'SPECIAL_RIGHT', 'AFTER_HAS_BRACE', 'NUMBER', 'STRING']) {
+				const match1 = m_pat[key].exec(currentInput);
+				if (match1 && match1.index < value.length) {
+				    value = value.slice(0, match1.index);
+				}
+			    }
+			}
+			if (type === 'STRING') {
+			    for (var key of ['SPECIAL_LEFT', 'SPECIAL_RIGHT', 'AFTER_HAS_BRACE']) {
+				const match1 = m_pat[key].exec(currentInput);
+				if (match1 && match1.index < value.length) {
+				    value = value.slice(0, match1.index);
+				}
+			    }
+			}
+			var type1 = type;
+       			if (type == 'STRING1') {type1 = 'STRING';}
+			// console.log('vv', cc, regex, '|', value, value.length, '|')
+			result.push({ type: type1, value, pos });
+			pos += value.length;
+			currentInput = currentInput.slice(value.length);
+			matched = true;
+			break;
+		    }
+		}
+		last_len == currentInput.length;
+	
+		if (!matched) {
+		    // This should not happen if all cases are handled
+		    var msg = `No matching token found at position ${input.length - currentInput.length}`
+		    show_err(input, pos, msg);
+		    if (do_throw) throw new Error(msg);
+		}
+	    }
+	
+	    return result;
+	}
+	
+	function buildLatex(node, input) {
+		//p('bbb', node)
+
+		var arr_ret = [];
+		for (var i in node.children) {
+			var child = node.children[i];
+			var s = child.value;
+			if (child.type == 'ESCAPED_BRACE' || child.type == 'BRACKET' || child.type == 'SPECIAL_LEFT') {
+				s = buildLatex(child, input);
+			}
+			//p('push', i, s, '>');
+			arr_ret.push(s)
+		}
+		//console.log(arr_ret)
+
+		var m_add_braces = {};
+		function add_bracket(n, s, j) {
+			if (m_add_braces[j]) return s;
+			if (n.type == 'BRACKET' || n.type == 'SPECIAL_LEFT' || n.type == 'ESCAPED_BRACE') {
+				if (n.value.includes("(")) return "(" + s + ")";
+				if (n.value.includes("[")) return "[" + s + "]";
+				if (n.value.includes("{")) return "{" + s + "}";
+				if (n.value.includes("|")) return "|" + s + "|";
+			}
+			return s;
+		}
+		function is_func_call(n_arr, j, direction) {
+			if (direction > 0) {
+				if (j+1 <= n_arr.length - 1) {
+					if (n_arr[j].type == 'STRING' && /^(\\)?[a-zA-Z]([a-zA-Z0-9]|\\_)*$/.test(n_arr[j].value) 
+						&& n_arr[j+1].type == 'BRACKET' && n_arr[j+1].value == '(') {
+						return true;
+					}
+				}
+			}
+			if (direction < 0) {
+				if (j-1 >= 0) {
+					if (n_arr[j-1].type == 'STRING' && /^(\\)?[a-zA-Z]([a-zA-Z0-9]|\\_)*$/.test(n_arr[j-1].value) 
+						&& n_arr[j].type == 'BRACKET' && n_arr[j].value == '(') {
+						return true;
+					}
+				}
+			}
+		}
+		for (var j in node.children) {
+			j = parseInt(j);
+			var n = node.children[j]
+			if (n.type == 'STRING') {
+				if (is_func_call(node.children, j, 1)) {
+					arr_ret[j] = arr_ret[j] + "(" + arr_ret[j+1] + ")";
+					arr_ret[j+1] = "";
+					m_add_braces[j] = 1;
+					m_add_braces[j+1] = 1;
+					node.children[j+1].type = 'SPACE';
+				}
+			}
+		}
+
+		// AFTER_HAS_BRACE: 后面的加 {}
+		// console.log(node)
+		// for (var i in node.children) { arr_ret[i] = add_bracket(node.children[i], arr_ret[i], i); }
+		for (var i in node.children) {
+			var child = node.children[i]
+			if (child.type != 'AFTER_HAS_BRACE') continue;
+			var cur_n = child.value.replace("\\", "");
+			if (cur_n != 'frac' && cur_n != 'sqrt' && cur_n != '_' && cur_n != '^') continue;
+
+			var c1 = 2;
+			if (cur_n == '_' || cur_n == '^') {
+				c1 = 1;
+			}
+			function set_null(i1, i2) {
+				for (var k = i1+1; k < i2; ++k) {
+					arr_ret[k] = "";
+				}
+			}
+			function is_last_next_ok(j) {
+				var c = 0;
+				for (var k = j-1; k >= 0; --k) {
+					var n = node.children[k];
+					if (n.type == 'SPACE') continue;
+					if (c == 0 && /^([\^_]|\*\*|int|\\int)$/.test(n.value)) {
+						//console.log('aa1', j, k, c, n.value);
+						return false;
+					}
+					if (c == 1 && /^([\^_]|\*\*|int|\\int)$/.test(n.value)) {
+						//console.log('aa2', k, c, n.value);
+						return false;
+					}
+					c += 1;
+					if (c >= 2) break;
+				}
+				var c = 0;
+				for (var k = j+1; k < node.children.length; ++k) {
+					var n = node.children[k];
+					if (n.type == 'SPACE') continue;
+					if (/^([\^_]|\*\*|int|\\int)$/.test(n.value)) {
+						//console.log('aa3', k, c, n.value);
+						return false;
+					}
+					c += 1;
+					if (c >= 2) break;
+				}
+				return true;
+			}
+			var ii = parseInt(i);
+			if ((cur_n == '_' || cur_n == '^') && !is_last_next_ok(ii)) {
+				continue;
+			}
+
+			var c = 0;
+			var arr_idx = [];
+			for (var j = ii+1; j < node.children.length; ++j) {
+				var n = node.children[j];
+				if (n.type == 'SPACE') continue;
+				if (cur_n == '_') {
+					var s = trans(m_sub, arr_ret[j]);
+					if (s) {
+						arr_ret[j] = s;
+						arr_ret[i] = '';
+						m_add_braces[j] = 1;
+					} else {
+						arr_ret[j] = add_bracket(n, arr_ret[j], j);
+					}
+					m_add_braces[j] = 1;
+					set_null(ii, j);
+				}
+				if (cur_n == '^') {
+					var s = trans(m_sup, arr_ret[j]);
+					if (s) {
+						arr_ret[j] = s;
+						arr_ret[i] = '';
+						m_add_braces[j] = 1;
+					} else {
+						arr_ret[j] = add_bracket(n, arr_ret[j], j);
+					}
+					m_add_braces[j] = 1;
+					set_null(ii, j);
+				}
+				arr_idx.push(j);
+				if (cur_n == 'sqrt' && c == 0 && n.type == 'BRACKET' && n.value == '[') {
+				} else {
+					arr_ret[j] = add_bracket(n, arr_ret[j], j);
+				}
+				c += 1;
+				if (c >= c1) break;
+			}
+			if (cur_n == '_' || cur_n == '^') continue;
+			function trim_bracket(s) {if (/^[\(\[\{]([a-zA-Z0-9\.]+)[\)\]\}]$/.test(s)) return s.replace(/[\(\)\[\]\{\} \t]/g, ""); return s; }
+			var i1 = arr_idx[0];
+			var i2 = arr_idx[1];
+			if (cur_n == 'sqrt') {
+				var n1 = node.children[i1];
+				var n2 = node.children[i2];
+				if (n1 && n1.type== 'BRACKET' && n1.value == '[') {
+					if (n2) {
+						var sqrt_idx = m_sqrt[arr_ret[i1]];
+						if (sqrt_idx) {
+							[arr_ret[i], arr_ret[i1], arr_ret[i2]] = ["", sqrt_idx, trim_bracket(arr_ret[i2])]
+						} else {
+							[arr_ret[i], arr_ret[i1], arr_ret[i2]] = [trim_bracket(arr_ret[i2]), "^", "(1/"+arr_ret[i1]+")"]
+						}
+						m_add_braces[i] = 1; m_add_braces[i1] = 1; m_add_braces[i2] = 1;
+						set_null(ii, i1);
+						set_null(i1, i2);
+					} else {
+					}
+				} else {
+					[arr_ret[i], arr_ret[i1]] = [m_sqrt[2], trim_bracket(arr_ret[i1])]
+					m_add_braces[i] = 1; m_add_braces[i1] = 1;
+					set_null(ii, i1);
+				}
+			}
+			if (arr_idx.length == 2 && cur_n == 'frac') {
+				[arr_ret[i], arr_ret[i1], arr_ret[i2]] = ["("+trim_bracket(arr_ret[i1]), "/", trim_bracket(arr_ret[i2])+")"]
+				m_add_braces[i] = 1; m_add_braces[i1] = 1; m_add_braces[i2] = 1;
+				m_add_braces[i1];
+				set_null(ii, i1);
+				set_null(i1, i2);
+			}
+		}
+		//p('vvv', arr_ret)
+		for (var i in node.children) {
+			arr_ret[i] = add_bracket(node.children[i], arr_ret[i], i);
+		}
+		//console.log(node, arr_ret)
+		return arr_ret.join("");
+	}
+
+	function bracket_match(left_b_n, right_b_n) {
+		var left_b = left_b_n.value;
+		var right_b = right_b_n.value;
+		if (left_b_n.type == right_b_n.type || left_b_n.type.includes("SPECIAL") && right_b_n.type.includes("SPECIAL")) {
+			if (left_b.includes("(") && right_b.includes(")")) return true;
+			if (left_b.includes("[") && right_b.includes("]")) return true;
+			if (left_b.includes("{") && right_b.includes("}")) return true;
+			if (left_b.includes("|") && right_b.includes("|")) return true;
+		}
+		return false;
+	}
+
+	function buildSyntaxTree(tokens, input, do_throw) {
+	    // console.log('bbttt')
+	    const root = { type: 'ROOT', children: [] };
+	    const stack = [root];
+	
+	    var left_bracket = ['(', '[', '{'];
+	    var right_bracket = [')', ']', '}'];
+
+	    tokens.forEach(token => {
+		const currentNode = stack[stack.length - 1];
+	
+		if (left_bracket.indexOf(token.value) >=0 || token.value === '\\{' || token.type === 'SPECIAL_LEFT') {
+		    // If it's an opening brace or special left, push a new node onto the stack
+		    const newNode = { type: token.type, value: token.value, pos: token.pos, children: [] };
+		    currentNode.children.push(newNode);
+		    stack.push(newNode);
+		} else if (right_bracket.indexOf(token.value) >=0 || token.value == '\\}' || token.type === 'SPECIAL_RIGHT') {
+		    // For closing braces, check if it matches the top of the stack
+		    if (stack.length == 0) { // no left found
+			var msg = `没发现左括号和  ${token.value} 匹配`
+			show_err1(input, token.pos, token.value.length, msg)
+			if (do_throw) throw new Error(msg);
+		    }
+		    var left_b = stack[stack.length - 1]
+		    if (bracket_match(left_b, token)) {
+			stack.pop();
+		    } else { // not match
+			var msg = `左括号 ${left_b.value} 和右括号 ${token.value} 不匹配`
+			//console.log('aaa', token, left_b, '|', token.pos, msg, left_b.pos)
+			show_err1(input, token.pos, token.value.length, msg, left_b.pos, left_b.value.length)
+			if (do_throw) throw new Error(msg);
+		    }
+		} else {
+		    // For other types, just add them to the current node's children
+		    // merge
+		    if (currentNode.children.length > 0) {
+			var last = currentNode.children[currentNode.children.length-1];
+			// console.log('aaa', last.type, token.type, last)
+			if ((last.type == 'STRING' || last.type == 'ESCAPE') && token.type == 'STRING') {
+				last.value += token.value;
+				last.type = 'STRING';
+				if (currentNode.children.length > 1) {
+					var last_1 = currentNode.children[currentNode.children.length-2];
+					if (last_1.type == 'STRING') {
+						last_1.value += last.value;
+						currentNode.children.pop()
+					}
+				}
+				return;
+			}
+		    }
+		    currentNode.children.push(token);
+		}
+	    });
+	
+	    if (stack.length > 1) { // no right found
+		var left_b = stack[stack.length - 1]
+		var msg = `没发现右括号和  ${left_b.value} 匹配`
+		//console.log(stack)
+		show_err1(input, left_b.pos, left_b.value.length, msg)
+		if (do_throw) throw new Error(msg);
+	    }
+	
+	    return root;
+	}
+
+    </script>
+</body>
+</html>
