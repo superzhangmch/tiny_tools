@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>数学公式转可读形式</title>
+    <title>公式转可读形式</title>
     <style>
 	textarea {
 	    width: 100%;
@@ -18,8 +18,8 @@
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
-	<h1>math expr to readable</h1>
-	<textarea id="inputText" placeholder="math expr"></textarea>
+	<h1>expr to readable</h1>
+	<textarea id="inputText" placeholder="general math expr or latex expr"></textarea>
     <textarea id="latexInput" placeholder="readable math expr"></textarea>
     <button id="copyButton">copy transformed expr</button><span id=copyStatus></span>
     <div id="renderedMath"></div>
@@ -47,15 +47,15 @@
 'lozenge': '◊', 'blacklozenge': '⬧', 'star': '⋆', 'ast': '∗', 'oplus': '⊕', 'ominus': '⊖', 'otimes': '⊗', 'oslash': '⊘', 'odot': '⊙', 'dagger': '†', 'ddagger': '‡',
 	   'amalg': '⨿', 'uplus': '⊎', 'vee': '∨', 'wedge': '∧', 'setminus': '\\', 'wr': '≀', 'diamond': '⋄', 'iint': '∬', 'iiint': '∭', 
 		    }
-	
-	var m_sqrt = {2: '√', 3: '∛', 4: '∜'}
-	var sup1 = '0123456789abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUW+-=()βγδεθιφχ';
-	var sup2 = '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁᵂ⁺⁻⁼⁽⁾ᵝᵞᵟᵋᶿᶥᵠᵡ';
-	var m_sup = {}; for (var i = 0; i < sup1.length; i++) { m_sup[sup1[i]] = sup2[i]; }
-	
-	var sub1 = '0123456789aehijklmnoprstuvx+-=()βγρφχ';
-	var sub2 = '₀₁₂₃₄₅₆₇₈₉ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ₊₋₌₍₎ᵦᵧᵨᵩᵪ';
-	var m_sub = {}; for (var i = 0; i < sub1.length; i++) { m_sub[sub1[i]] = sub2[i]; }
+
+	    var m_sqrt = {2: '√', 3: '∛', 4: '∜'}
+	    var sup1 = '0123456789abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUW+-=()βγδεθιφχ';
+	    var sup2 = '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁᵂ⁺⁻⁼⁽⁾ᵝᵞᵟᵋᶿᶥᵠᵡ';
+	    var m_sup = {}; for (var i = 0; i < sup1.length; i++) { m_sup[sup1[i]] = sup2[i]; }
+
+	    var sub1 = '0123456789aehijklmnoprstuvx+-=()βγρφχ';
+	    var sub2 = '₀₁₂₃₄₅₆₇₈₉ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ₊₋₌₍₎ᵦᵧᵨᵩᵪ';
+	    var m_sub = {}; for (var i = 0; i < sub1.length; i++) { m_sub[sub1[i]] = sub2[i]; }
 
 	function trans(m, s) {
 		var cc = 0;
@@ -118,7 +118,9 @@
                 .replace(/==/g, '\\equiv ')
                 .replace(/(?<!left)\(/g, '{(')
                 .replace(/(?<!right)\)/g, ')}')
-                .replace(/\*/g, '');
+                .replace(/\*/g, '')
+                .replace(/([^\\])\\([ \t]|[\n]|$)/g, '{$1}\\setminus ');
+	    // console.log(latex1);
 
 	    document.getElementById('copyStatus').innerHTML = ""
 	    renderedMath.innerHTML = '$$'+latex1.replace("<", "&lt;").replace(">", "&gt;")+'$$';
@@ -147,15 +149,12 @@
 	
 		//var pat = "(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi|text|hat|cap|cup|uplus|sqcap|sqcup|vee|wedge|oplus|ominus|otimes|oslash|odot|bigcirc|triangleleft|triangleright|bigtriangledown|bullet|setminus|wr|diamond|bigstar|leq|geq|neq|approx|sim|simeq|equiv|subset|supset|subseteq|supseteq|nsubseteq|nsupseteq|ni|notin|forall|nexists|lor|neg|top|bot|vdash|vDash|models|perp|parallel|nparallel|angle|measuredangle|sphericalangle|triangle|bigtriangleup|infty|partial|square|blacksquare|circ|cdots|ldots|vdots|ddots|aleph|beth|gimel|daleth|hbar|ell|Re|Im|wp|complement|emptyset|varnothing|nabla|surd|triangle|backslash|land|lor|lnot|neg|flat|sharp|natural|clubsuit|diamondsuit|heartsuit|spadesuit|int|sum|prod|sin|cos|log|exp|tan|sqrt|frac|in|exists|times|div|cdot|stackrel)";
 		var pat = "([a-zA-Z]+[ \t]?)";
-		var arr_pat = [
-				"({\\s*" + pat + "\\s*})", 
-				"({\\s*[\\\\]\s*" + pat + "\\s*})", 
+		var arr_pat = [ "({\\s*" + pat + "\\s*})", 
 				"(\\\\" + pat + ")\\b", 
 				"(\\\\" + pat + ")_", 
 				"\\\\" + pat + "\\b", 
 				"\\\\" + pat + "_", 
 				"_" + pat + "\\b", 
-				"\\b" + pat + "\\b",
 				"\\b" + pat + "_",
 				"\\b" + pat + "\\b", 
 				"_" + pat + "\\b", 
@@ -175,6 +174,7 @@
 					return match.replace(group1, replacement);
 					});
 		}
+                latex = latex.replace(/\\([a-z])/, "$1").replace("**", "^");
 		return latex;
 	      }
 	    var input = input.trim();
@@ -327,6 +327,7 @@
 		function add_bracket(n, s, j) {
 			if (m_add_braces[j]) return s;
 			if (n.type == 'BRACKET' || n.type == 'SPECIAL_LEFT' || n.type == 'ESCAPED_BRACE') {
+				m_add_braces[j] = 1;
 				if (n.value.includes("(")) return "(" + s + ")";
 				if (n.value.includes("[")) return "[" + s + "]";
 				if (n.value.includes("{")) return "{" + s + "}";
@@ -456,7 +457,14 @@
 				if (c >= c1) break;
 			}
 			if (cur_n == '_' || cur_n == '^') continue;
-			function trim_bracket(s) {if (/^[\(\[\{]([a-zA-Z0-9\.]+)[\)\]\}]$/.test(s)) return s.replace(/[\(\)\[\]\{\} \t]/g, ""); return s; }
+			function trim_bracket(s) {
+				s = s.replace(/[ \t]/g, "");
+				if (/^[\(\[\{]([a-zA-Z0-9\.]+)[\)\]\}]$/.test(s) ||
+				    /^[\(\[\{][a-zA-Z0-9]+\([^\)]+\)[\)\]\}]$/.test(s)) {
+					return s.replace(/^[\(\[\{]/g, "").replace(/[\)\]\}]$/g, "");
+				}
+				return s; 
+			}
 			var i1 = arr_idx[0];
 			var i2 = arr_idx[1];
 			if (cur_n == 'sqrt') {
@@ -468,7 +476,7 @@
 						if (sqrt_idx) {
 							[arr_ret[i], arr_ret[i1], arr_ret[i2]] = ["", sqrt_idx, trim_bracket(arr_ret[i2])]
 						} else {
-							[arr_ret[i], arr_ret[i1], arr_ret[i2]] = [trim_bracket(arr_ret[i2]), "^", "(1/"+arr_ret[i1]+")"]
+							[arr_ret[i], arr_ret[i1], arr_ret[i2]] = [trim_bracket(arr_ret[i2]), "^", "(1/"+trim_bracket("("+arr_ret[i1]+")")+")"]
 						}
 						m_add_braces[i] = 1; m_add_braces[i1] = 1; m_add_braces[i2] = 1;
 						set_null(ii, i1);
