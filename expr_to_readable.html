@@ -242,7 +242,7 @@
 		{ type: 'ESCAPE', regex: /[\\]/ },	  // \
 		{ type: 'NUMBER', regex: /-\d+(\.\d+)?\b|\b\d+(\.\d+)?\b/ },  // -2.5
 		{ type: 'STRING', regex: /[a-zA-Z0-9]+/ },    // abc123
-		{ type: 'OTHER', regex: /[^"'{}\[\]()\\\^_ \t\n]+/ }
+		{ type: 'OTHER', regex: /[^"{}\[\]()\\\^_ \t\n]+/ }
 	    ];
 	    var m_pat = {}
 	    for (var i in tokenPatterns) {
