@@ -186,7 +186,7 @@
 	function tokenize(input, do_throw) {
 	    document.getElementById('div_err').innerHTML = '';
 	    const tokenPatterns = [
-		{ type: 'TEXT', regex: /"[^"]*"|'[^']*'/ },    // "xxx"
+		{ type: 'TEXT', regex: /"[^"]*"/ },    // "xxx"
 		{ type: 'BRACKET', regex: /[(){}\[\]]/ },      // () [] {}
 		{ type: 'ESCAPED_BRACE', regex: /\\[{}]/ },    // \{ \}
 		{ type: 'STRING1', regex: /\\[_]/ },	   // "\_"
@@ -202,7 +202,7 @@
 		{ type: 'MULTIPLY', regex: /[\*]/ },	//  /
 		{ type: 'NUMBER', regex: /-\d+(\.\d+)?\b|\b\d+(\.\d+)?\b/ },  // -2.5
 		{ type: 'STRING', regex: /[a-zA-Z0-9\u4e00-\u9fa5\u3400-\u4DBF]+/ },    // abc123
-		{ type: 'OTHER', regex: /[^"'{}\[\]()\\\^_\/ \t\n\*]+/ }
+		{ type: 'OTHER', regex: /[^"{}\[\]()\\\^_\/ \t\n\*]+/ }
 	    ];
 	    var m_pat = {}
 	    for (var i in tokenPatterns) {
