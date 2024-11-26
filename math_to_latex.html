@@ -260,7 +260,7 @@
 		    // This should not happen if all cases are handled
 		    var msg = `No matching token found at position ${input.length - currentInput.length}`
 		    show_err(input, pos, msg);
-		    if (do_throw) throw new Error(msg);
+		    throw new Error(msg);
 		}
 	    }
 	
