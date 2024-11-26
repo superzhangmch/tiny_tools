@@ -230,7 +230,7 @@
 	function tokenize(input, do_throw) {
 	    document.getElementById('div_err').innerHTML = '';
 	    const tokenPatterns = [
-		{ type: 'TEXT', regex: /"[^"]*"|'[^']*'/ },    // "xxx"
+		{ type: 'TEXT', regex: /"[^"]*"/ },    // "xxx"
 		{ type: 'BRACKET', regex: /[(){}\[\]]/ },      // () [] {}
 		{ type: 'ESCAPED_BRACE', regex: /\\[{}]/ },    // \{ \}
 		{ type: 'STRING1', regex: /\\[_]/ },	   // "\_"
