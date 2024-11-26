@@ -100,14 +100,15 @@
 	    // ===
 
 	    var do_throw = false;
+	    var debug = false;
 	    const tokens = tokenize(input, do_throw);
-	    //const output = document.getElementById('output');
-	    //output.textContent = ''; //JSON.stringify(tokens, null, 2);
+	    const output = document.getElementById('div_err');
+	    if (debug) output.textContent = JSON.stringify(tokens, null, 2);
 	    const syntaxTree = buildSyntaxTree(tokens, input, do_throw);
-	    //output.textContent += "\n__xxxx___\n" + JSON.stringify(syntaxTree, null, 2);
+	    if (debug) output.textContent += "\n__xxxx___\n" + JSON.stringify(syntaxTree, null, 2);
 	    var latex = buildLatex(syntaxTree, input);
 	    latex = latex.replace(/(?<!\\)[ \t]+/g, " ");
-	    latex = latex.replace(/\b([a-zA-Z0-9\.]+)\s*\/\s*([a-zA-Z0-9\.]+)\b/g, '\\frac{$1}{$2}')
+	    latex = latex.replace(/(?<!(\*\*|\^)\s*)\b([a-zA-Z0-9\.]+)\s*\/\s*([a-zA-Z0-9\.]+)\b/g, '\\frac{$2}{$3}')
 		.replace(/(?<!\\)\b(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi)(_|\b)/g, '\\$1$2')
 		.replace(/_(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi)\b/g, '_\\$1')
 		.replace(/(?<!\\)\b(left|right)\b/g, '\\$1')
@@ -126,6 +127,7 @@
 		.replace(/==/g, '\\equiv ')
 		.replace(/'([^']*)'/g, '\\text{$1}')
 		.replace(/"([^"]*)"/g, '\\text{$1}')
+		.replace(/\*\*/g, '^')
 		.replace(/\*/g, '')
 		.replace("CASES", "").replace("CASE", "").replace("ALIGN", "");
 	    if (/[E]/.test(latex) && !/mathbb\s*{\s*[E]\b/.test(latex)) {
@@ -192,7 +194,7 @@
 		{ type: 'SPACE1', regex: /\\[ ]|\\,/ },    //  space: "\ ", "\,"
 		{ type: 'SPECIAL_LEFT',  regex:  /(\\|\b)(left|big)(\\{|\(|\[)|(\\|\b)left\|/ },    // left(
 		{ type: 'SPECIAL_RIGHT', regex: /(\\|\b)(right|big)(\\}|\)|\])|(\\|\b)right\|/ },   // right)
-		{ type: 'AFTER_HAS_BRACE', regex: /(\b|\\)(frac|sqrt|stackrel|vec|overrightarrow|overline|underline|widetilde|widehat)\b|[\^_]/ }, // 后面紧跟{}block
+		{ type: 'AFTER_HAS_BRACE', regex: /(\b|\\)(frac|sqrt|stackrel|vec|overrightarrow|overline|underline|widetilde|widehat)\b|[\^_]|\*\*/ }, // 后面紧跟{}block
 		{ type: 'ESCAPE', regex: /[\\]/ },	  // \
 		{ type: 'SPACE', regex: /[ \t\n]+/ },       // " "
 		{ type: 'DOUBLE_DIV', regex: /\/\// },      //  //
@@ -423,39 +425,57 @@
 			var next = null;
 			var next1 = null;
 			var ii = parseInt(i);
+			var c=0;
 			for (var j = ii+1; j < node.children.length; ++j) {
 				var n = node.children[j];
 				if (n.type == 'SPACE') continue;
-				if (is_func_call(node.children, j, 1) && !m_add_braces[j] && !m_add_braces[j+1]) {
-					arr_ret[j] = "{" + arr_ret[j];
-					arr_ret[j+1] = "(" + arr_ret[j+1] + ")}";
-					m_add_braces[j] = 1;
-					m_add_braces[j+1] = 1;
-					next = j;
-					next1 = j+1;
-					j += 1;
+				if (c == 0) {
+					if (is_func_call(node.children, j, 1) && !m_add_braces[j] && !m_add_braces[j+1]) {
+						arr_ret[j] = "{" + arr_ret[j];
+						arr_ret[j+1] = "(" + arr_ret[j+1] + ")}";
+						m_add_braces[j] = 1;
+						m_add_braces[j+1] = 1;
+						next = j;
+						next1 = j+1;
+						j += 1;
+					} else {
+						arr_ret[j] = add_braces(n, arr_ret[j], j, true);
+						next = j;
+					}
 				} else {
-					arr_ret[j] = add_braces(n, arr_ret[j], j, true);
-					next = j;
+					if (n.type == 'AFTER_HAS_BRACE' && (n.value == '^' || n.value == '**')) {
+						next = null;
+						next1 = null;
+					}
 				}
-				break;
+				c += 1;
+				if (c >= 2) break;
 			}
+			c = 0;
 			for (var j = ii-1; j >= 0; --j) {
 				var n = node.children[j];
 				if (n.type == 'SPACE') continue;
-				if (is_func_call(node.children, j, -1) && !m_add_braces[j] && !m_add_braces[j-1]) {
-					arr_ret[j-1] = "{" + arr_ret[j-1];
-					arr_ret[j] = "(" + arr_ret[j] + ")}";
-					m_add_braces[j] = 1;
-					m_add_braces[j-1] = 1;
-					last1 = j-1;
-					last = j;
-					j -= 1;
+				if (c == 0) {
+					if (is_func_call(node.children, j, -1) && !m_add_braces[j] && !m_add_braces[j-1]) {
+						arr_ret[j-1] = "{" + arr_ret[j-1];
+						arr_ret[j] = "(" + arr_ret[j] + ")}";
+						m_add_braces[j] = 1;
+						m_add_braces[j-1] = 1;
+						last1 = j-1;
+						last = j;
+						j -= 1;
+					} else {
+						arr_ret[j] = add_braces(n, arr_ret[j], j, true);
+						last = j;
+					}
 				} else {
-					arr_ret[j] = add_braces(n, arr_ret[j], j, true);
-					last = j;
+					if (n.type == 'AFTER_HAS_BRACE') {
+						last = null;
+						last1 = null;
+					}
 				}
-				break;
+				c += 1;
+				if (c >= 2) break;
 			}
 			// console.log('xxx', last, i, next)
 			// aa // bb => frac {aa} {bb}
