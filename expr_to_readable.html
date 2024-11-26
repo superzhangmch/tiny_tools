@@ -47,15 +47,16 @@
 'lozenge': '◊', 'blacklozenge': '⬧', 'star': '⋆', 'ast': '∗', 'oplus': '⊕', 'ominus': '⊖', 'otimes': '⊗', 'oslash': '⊘', 'odot': '⊙', 'dagger': '†', 'ddagger': '‡',
 	   'amalg': '⨿', 'uplus': '⊎', 'vee': '∨', 'wedge': '∧', 'setminus': '\\', 'wr': '≀', 'diamond': '⋄', 'iint': '∬', 'iiint': '∭', 
 		    }
-
+	
 	var m_sqrt = {2: '√', 3: '∛', 4: '∜'}
-	var sup1 = '0123456789abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUW+-=()';
-	var sup2 = '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁᵂ⁺⁻⁼⁽⁾';
+	var sup1 = '0123456789abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUW+-=()βγδεθιφχ';
+	var sup2 = '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁᵂ⁺⁻⁼⁽⁾ᵝᵞᵟᵋᶿᶥᵠᵡ';
 	var m_sup = {}; for (var i = 0; i < sup1.length; i++) { m_sup[sup1[i]] = sup2[i]; }
 	
-	var sub1 = '0123456789aehijklmnoprstuvx+-=()';
-	var sub2 = '₀₁₂₃₄₅₆₇₈₉ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ₊₋₌₍₎';
+	var sub1 = '0123456789aehijklmnoprstuvx+-=()βγρφχ';
+	var sub2 = '₀₁₂₃₄₅₆₇₈₉ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ₊₋₌₍₎ᵦᵧᵨᵩᵪ';
 	var m_sub = {}; for (var i = 0; i < sub1.length; i++) { m_sub[sub1[i]] = sub2[i]; }
+
 	function trans(m, s) {
 		var cc = 0;
 		var r = '';
