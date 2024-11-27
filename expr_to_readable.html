@@ -191,12 +191,13 @@
 	    // a_i^j => aᵢ^j
 	    //console.log("<"+latex+">")
 	    // 暂且如此
-	    latex = latex.replace(/(?<!(∫|∬|∭|int))\s*_(\s*[^\^ \t]+\s*)\^(\s*[^\^_ \t\+\-\(\)]+)([ ]|\b|$)/g, function (match, p1, p2, p3, p4) {
+	    latex = latex.replace(/(?<!(∫|∬|∭|int))\s*_(\s*[^\^ \t]+\s*)\^(\s*[^\^_ \t\+\-\(\)]+)(\(| |\b|$)/g, function (match, p1, p2, p3, p4) {
 	        var p2_1 = p2.trim().slice(0).trim()
 	        var p3_1 = p3.trim().slice(0).trim()
+		if (p4 == '(') p3_1 = "";
 		var s = trans(m_sub, p2_1);
 		var s1 = trans(m_sup, p3_1);
-	    	//console.log(match,"|",p1,"|",p2,"|",p3,"|", "#", p2_1, "|" ,p3_1, "#", s, "|", s1);
+	    	//console.log(match,"#",p1,"|",p2,"|",p3,"|", p4, "#", p2_1, "|" ,p3_1, "#", s, "|", s1);
 		if (s && s1) {
 			return s + s1 + p4;
 		} else if (s) {
@@ -204,6 +205,10 @@
 		} else {
 			return match;
 		} });
+	    latex = latex.replace(/(?<!(∫|∬|∭|int))\s*_(\s*[^\^ \t]+\s*)\^/g, function (match, p1, p2) {
+	        var p2_1 = p2.trim().slice(0).trim()
+		var s = trans(m_sub, p2_1);
+		if (s) { return s+"^"; } else { return match; } });
 	    latexInput.value = latex;
 	    renderLatex(latex);
 	}
