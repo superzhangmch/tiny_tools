@@ -187,11 +187,23 @@
 	    const syntaxTree = buildSyntaxTree(tokens, input, do_throw);
 	    if (debug) output.innerHTML += "<pre>\n__xxxx___\n" + JSON.stringify(syntaxTree, null, 2);
 	    var latex = buildLatex(syntaxTree, input);
+
 	    // a_i^j => aᵢ^j
-	    latex = latex.replace(/(?<!(∫|∬|∭|int))\s*(_\s*.)\^/g, function (match, p1, p2) {
-	        p2 = p2.slice(-1)
-	        if (m_sub[p2]) return m_sub[p2]+"^"; else return match;
-					});
+	    //console.log("<"+latex+">")
+	    // 暂且如此
+	    latex = latex.replace(/(?<!(∫|∬|∭|int))\s*_(\s*[^\^ \t]+\s*)\^(\s*[^\^_ \t\+\-\(\)]+)([ ]|\b|$)/g, function (match, p1, p2, p3, p4) {
+	        var p2_1 = p2.trim().slice(0).trim()
+	        var p3_1 = p3.trim().slice(0).trim()
+		var s = trans(m_sub, p2_1);
+		var s1 = trans(m_sup, p3_1);
+	    	//console.log(match,"|",p1,"|",p2,"|",p3,"|", "#", p2_1, "|" ,p3_1, "#", s, "|", s1);
+		if (s && s1) {
+			return s + s1 + p4;
+		} else if (s) {
+			return s+"^"+p3 + p4; 
+		} else {
+			return match;
+		} });
 	    latexInput.value = latex;
 	    renderLatex(latex);
 	}
