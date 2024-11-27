@@ -187,6 +187,11 @@
 	    const syntaxTree = buildSyntaxTree(tokens, input, do_throw);
 	    if (debug) output.innerHTML += "<pre>\n__xxxx___\n" + JSON.stringify(syntaxTree, null, 2);
 	    var latex = buildLatex(syntaxTree, input);
+	    // a_i^j => aᵢ^j
+	    latex = latex.replace(/(?<!(∫|∬|∭|int))\s*(_\s*.)\^/g, function (match, p1, p2) {
+	        p2 = p2.slice(-1)
+	        if (m_sub[p2]) return m_sub[p2]+"^"; else return match;
+					});
 	    latexInput.value = latex;
 	    renderLatex(latex);
 	}
@@ -388,13 +393,14 @@
 			function is_last_next_ok(j) {
 				var c = 0;
 				for (var k = j-1; k >= 0; --k) {
+					// last last now:_or^
 					var n = node.children[k];
 					if (n.type == 'SPACE') continue;
-					if (c == 0 && /^([\^_]|\*\*|int|\\int)$/.test(n.value)) {
+					if (c == 0 && (/^([\^_]|\*\*)$/.test(n.value) || "∫|∬|∭|int|".includes(n.value.slice(-3)))) {
 						//console.log('aa1', j, k, c, n.value);
 						return false;
 					}
-					if (c == 1 && /^([\^_]|\*\*|int|\\int)$/.test(n.value)) {
+					if (c == 1 && (/^([\^_]|\*\*)$/.test(n.value))) {
 						//console.log('aa2', k, c, n.value);
 						return false;
 					}
@@ -403,9 +409,10 @@
 				}
 				var c = 0;
 				for (var k = j+1; k < node.children.length; ++k) {
+					// now:_or^ next next
 					var n = node.children[k];
 					if (n.type == 'SPACE') continue;
-					if (/^([\^_]|\*\*|int|\\int)$/.test(n.value)) {
+					if (/^([\^_]|\*\*)$/.test(n.value)) {
 						//console.log('aa3', k, c, n.value);
 						return false;
 					}
