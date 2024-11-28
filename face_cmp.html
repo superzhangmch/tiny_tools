@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>人脸比对</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        h1 {
+            color: #333;
+        }
+        #image-container {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+            width: 100%;
+        }
+        img {
+            max-width: 150px;
+            max-height: 150px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            display: none; /* 初始隐藏 */
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <h1>人脸比对</h1>
+    <input type="file" accept="image/*" id="file-input-1">
+    <input type="file" accept="image/*" id="file-input-2">
+    <div id="image-container">
+        <img id="image-1" alt="Image 1">
+        <img id="image-2" alt="Image 2">
+    </div>
+    <button id="compare-button" onclick="compareFaces()">比对人脸</button>
+    <p id="result">首次模型加载慢。得分 &gt; 0.6 算像</p>
+
+    <!-- 使用CDN加载face-api.js -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script>
+        let modelsLoaded = false;
+
+        async function loadModels() {
+            document.getElementById('result').textContent = '模型正在加载中...';
+            var p = './data/face_api/';
+            await faceapi.nets.ssdMobilenetv1.loadFromUri(p);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(p);
+            await faceapi.nets.faceRecognitionNet.loadFromUri(p);
+            modelsLoaded = true;
+            document.getElementById('result').textContent = '模型加载完成！';
+        }
+
+        async function compareFaces() {
+            const resultElement = document.getElementById('result');
+
+            if (!modelsLoaded) {
+                resultElement.textContent = '模型正在加载中，请稍候...';
+                return;
+            }
+
+            const img1 = document.getElementById('image-1');
+            const img2 = document.getElementById('image-2');
+
+            if (!img1.src || !img2.src) {
+                resultElement.textContent = '请上传两张照片。';
+                return;
+            }
+
+            const detections1 = await faceapi.detectSingleFace(img1).withFaceLandmarks().withFaceDescriptor();
+            const detections2 = await faceapi.detectSingleFace(img2).withFaceLandmarks().withFaceDescriptor();
+
+            if (!detections1 || !detections2) {
+                resultElement.textContent = '未检测到人脸，请确保照片中包含人脸。';
+                return;
+            }
+
+            const distance = faceapi.euclideanDistance(detections1.descriptor, detections2.descriptor);
+            const threshold = 0.6; // 通常0.6是一个合理的阈值
+
+            resultElement.textContent = `得分: ${(1 - distance).toFixed(2)}。${distance < threshold ? '两张照片是同一个人。' : '两张照片不是同一个人。'}`;
+        }
+
+        document.getElementById('file-input-1').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            const img = document.getElementById('image-1');
+            img.src = URL.createObjectURL(file);
+            img.style.display = 'block'; // 显示图像
+        });
+
+        document.getElementById('file-input-2').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            const img = document.getElementById('image-2');
+            img.src = URL.createObjectURL(file);
+            img.style.display = 'block'; // 显示图像
+        });
+
+        // 确保在页面加载后调用
+        loadModels();
+    </script>
+</body>
+</html>
