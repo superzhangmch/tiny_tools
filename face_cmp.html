@@ -103,9 +103,9 @@
             }
 
             const distance = faceapi.euclideanDistance(detections1.descriptor, detections2.descriptor);
-            const threshold = 0.6; // 通常0.6是一个合理的阈值
+            const threshold = 0.5;
 
-            resultElement.textContent = `得分: ${(1 - distance).toFixed(2)}(大于0.4为像)。 ${distance < threshold ? '两张照片是同一个人。' : '两张照片不是同一个人。'}`;
+            resultElement.textContent = `得分: ${distance.toFixed(2)}（欧氏距离）`;
         }
 
         document.getElementById('file-input-1').addEventListener('change', function(event) {
