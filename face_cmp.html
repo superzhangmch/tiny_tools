@@ -97,11 +97,14 @@
             const detections1 = await faceapi.detectSingleFace(img1).withFaceLandmarks().withFaceDescriptor();
             const detections2 = await faceapi.detectSingleFace(img2).withFaceLandmarks().withFaceDescriptor();
 
-            if (!detections1 || !detections2) {
-                resultElement.textContent = '未检测到人脸，请确保照片中包含人脸。';
+            if (!detections1) {
+                resultElement.textContent = '第一张未检测到人脸，请确保照片中包含人脸。';
                 return;
             }
-
+            if (!detections2) {
+                resultElement.textContent = '第二章未检测到人脸，请确保照片中包含人脸。';
+                return;
+            }
             const distance = faceapi.euclideanDistance(detections1.descriptor, detections2.descriptor);
             const threshold = 0.5;
 
