@@ -78,6 +78,45 @@
             document.getElementById('result').textContent = '模型加载完成！';
         }
 
+        async function detectFaceWithCropping(imgElement) {
+            let detections = await faceapi.detectSingleFace(imgElement).withFaceLandmarks().withFaceDescriptor();
+
+            if (detections) {
+                return detections;
+            }
+
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const imgWidth = imgElement.naturalWidth;
+            const imgHeight = imgElement.naturalHeight;
+
+            const cropFactor = 0.1; // 剪裁因子
+            const cropWidth = imgWidth * (1 - 2 * cropFactor);
+            const cropHeight = imgHeight * (1 - 2 * cropFactor);
+
+            // 调整canvas大小
+            canvas.width = cropWidth;
+            canvas.height = cropHeight;
+
+            // 绘制裁剪后的图像
+            context.drawImage(
+                imgElement,
+                imgWidth * cropFactor, imgHeight * cropFactor, // 起始点
+                cropWidth, cropHeight, // 裁剪的宽高
+                0, 0, // 在canvas上放置的起始点
+                cropWidth, cropHeight // 在canvas上放置的宽高
+            );
+
+            const croppedImg = new Image();
+            croppedImg.src = canvas.toDataURL();
+
+            return new Promise(resolve => {
+                croppedImg.onload = async () => {
+                    resolve(await faceapi.detectSingleFace(croppedImg).withFaceLandmarks().withFaceDescriptor());
+                };
+            });
+        }
+
         async function compareFaces() {
             const resultElement = document.getElementById('result');
 
@@ -89,26 +128,32 @@
             const img1 = document.getElementById('image-1');
             const img2 = document.getElementById('image-2');
 
-            if (!img1.src || !img2.src) {
+            if (!img1.src) {
+                resultElement.textContent = '请上传照片。';
+                return;
+            }
+
+	        const detections1 = await detectFaceWithCropping(img1);
+            if (!detections1) {
+                resultElement.textContent = '在第一张照片中未检测到人脸，尽管已尝试裁剪。';
+                return;
+            }
+
+            if (!img2.src) {
                 resultElement.textContent = '请上传两张照片。';
                 return;
             }
-
-            const detections1 = await faceapi.detectSingleFace(img1).withFaceLandmarks().withFaceDescriptor();
-            const detections2 = await faceapi.detectSingleFace(img2).withFaceLandmarks().withFaceDescriptor();
-
-            if (!detections1) {
-                resultElement.textContent = '第一张未检测到人脸，请确保照片中包含人脸。';
-                return;
-            }
+            
+            const detections2 = await detectFaceWithCropping(img2);
             if (!detections2) {
-                resultElement.textContent = '第二章未检测到人脸，请确保照片中包含人脸。';
+                resultElement.textContent = '在第二张照片中未检测到人脸，尽管已尝试裁剪。';
                 return;
             }
+
             const distance = 1 - faceapi.euclideanDistance(detections1.descriptor, detections2.descriptor);
             const threshold = 0.6;
 
-            resultElement.textContent = `得分: ${distance.toFixed(2)}（大于0.6很像）`;
+            resultElement.textContent = `得分: ${distance.toFixed(2)}（大于 0.6 为同一人）`;
         }
 
         document.getElementById('file-input-1').addEventListener('change', function(event) {
