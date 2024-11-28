@@ -6,35 +6,35 @@ function get_result_multi(words, do_prefix_lookup, cases_no_sentive) {
     var m_w = {};
     var m_w_to_wordstem = {}
     for (var w of set_words) {
-    	w = w.trim();
-	if (!w) continue;
+        w = w.trim();
+        if (!w) continue;
         var wordsToSearch = getWordForms(w);
-	var set_w = wordsToSearch['words'];
+        var set_w = wordsToSearch['words'];
         m_w_to_wordstem[w] = set_w 
-	for (var w1 of set_w) {
-		wd_arr.push(w1);
-	}
-	var m = wordsToSearch['weights'];
-	// console.log(m, 'a')
-	for (var k in m) {
-		m_w[k] = m[k];
-	}
+        for (var w1 of set_w) {
+                wd_arr.push(w1);
+        }
+        var m = wordsToSearch['weights'];
+        // console.log(m, 'a')
+        for (var k in m) {
+                m_w[k] = m[k];
+        }
     }
     // console.log(m_w, wd_arr)
     var ret = searchInDict({"weights": m_w, "words":  [...new Set(wd_arr)]}, words.join("|"), do_prefix_lookup, cases_no_sentive);
     var m1 = {}
     var m_used = {}
     for (var word_stem in m_w_to_wordstem) {
-	m1[word_stem] = [];
-	for (var w of m_w_to_wordstem[word_stem]) {
-    	    for (var i in ret) {
-	        var row = ret[i];
-		if (row[0].toLowerCase() == w.toLowerCase() && !m_used[row[0]]) {
-			m1[word_stem].push(row);
-			m_used[row[0]] = 1;
-		}
+        m1[word_stem] = [];
+        for (var w of m_w_to_wordstem[word_stem]) {
+            for (var i in ret) {
+                var row = ret[i];
+                if (row[0].toLowerCase() == w.toLowerCase() && !m_used[row[0]]) {
+                        m1[word_stem].push(row);
+                        m_used[row[0]] = 1;
+                }
             }
-	}
+        }
     }
     // console.log(ret, m1);
     return [ret, m1];
@@ -50,9 +50,9 @@ function getWordForms(word) {
     var forms = [word];
     var weights = [0.1];
     function forms_push(weight, word) {
-	// console.log('vvvvv', word, weight)
-    	forms.push(word)
-	weights.push(weight);
+        // console.log('vvvvv', word, weight)
+        forms.push(word)
+        weights.push(weight);
     }
 
     // 处理复数和不规则变化
@@ -76,7 +76,7 @@ function getWordForms(word) {
     if (word.endsWith('er')) {
         forms_push(1, word.slice(0, -1));  // 去掉r
         forms_push(3, word.slice(0, -2));  // 去掉er
-        forms_push(4, word.slice(0, -4));  // 尝试去掉尾4个字母
+        forms_push(4, word.slice(0, -3));  // 尝试去掉尾3个字母
     }
     if (word.endsWith('ier')) forms_push(3, word.slice(0, -3) + 'y');
 
@@ -98,10 +98,10 @@ function getWordForms(word) {
     var new_forms = [];
     for (var i in forms) {
         if (forms[i].length <= 2 && forms[i] != word) {
-		continue;
-	}
-	new_forms.push(forms[i]);
-    	m[forms[i]] = weights[i];
+                continue;
+        }
+        new_forms.push(forms[i]);
+        m[forms[i]] = weights[i];
     }
     //console.log('a', new_forms)
     //console.log('b', m)
@@ -117,30 +117,30 @@ function searchInDict(words_to_search, ori_word, do_prefix_lookup, cases_no_sent
     var regex = new RegExp(pattern, 'g'+(cases_no_sentive ? "i" : ""));
     var matches = dict_str.match(regex) || [];
     if (matches.length > 0) {
-    	// console.log(matches)
+        // console.log(matches)
     }
 
     // 如果没有匹配到，尝试头部匹配
     if (matches.length === 0 && do_prefix_lookup) {
         pattern = `@((${ori_word}`+"[^`]+)`[^@]+)@"; // 使用模板字符串以避免混淆
-    	// console.log(pattern);
+        // console.log(pattern);
         regex = new RegExp(pattern, 'g');
         matches = dict_str.match(regex) || [];
-	matches = matches.slice(0, 5)
+        matches = matches.slice(0, 5)
     }
     var out_arr = [];
     for (var row of matches) {
-    	//console.log(row)
-    	row = row.slice(1, -1);
-	var arr = row.split("`");
-	var w = 0.1;
-	if (arr[0] != ori_word) {
-		w = weights[arr[0]];
-	}
-	if (!w) {
-		w = 10000. + arr[0].length;
-	}
-	out_arr.push([arr[0], arr[1], w]);
+        //console.log(row)
+        row = row.slice(1, -1);
+        var arr = row.split("`");
+        var w = 0.1;
+        if (arr[0] != ori_word) {
+                w = weights[arr[0]];
+        }
+        if (!w) {
+                w = 10000. + arr[0].length;
+        }
+        out_arr.push([arr[0], arr[1], w]);
     }
     out_arr.sort(function(a, b) {return a[2] - b[2];});
 
@@ -211,4 +211,19 @@ function getTop10SimilarKeys(inputString, dict) {
 
     // 返回前10个最相似的键
     return distances.slice(0, 10).map(item => [item.key, item.distance, item.headMatchScore]);
+}
+
+function build_yb_to_word(m_w2yb)
+{
+        var m = {}
+        for (var w in m_w2yb) {
+                var yb_all = m_w2yb[w];
+                var arr_yb = yb_all.split(",")
+                for (var yb of arr_yb) {
+                        yb = yb.trim().slice(1, -1).replace(/[ˌˈ]/g, "").replace(/ɹ/g, "r").replace(/ɫ/g, "l");
+                        if (!m[yb]) m[yb] = [];
+                        m[yb].push(w);
+                }
+        }
+        return m;
 }
