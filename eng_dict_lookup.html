@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dictionary Search</title>
+    <style>
+        /* 简单的CSS样式 */
+        table, th, td {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+<body>
+
+<input type="text" id="wordInput" placeholder="查单词">
+<button onclick="searchWord()">Search</button>
+<div id="result"></div>
+<hr>
+<ul>
+<li>输入框：~开头则是模糊查, /开头是按音标查。
+<li>音标说明：
+<li>/ʊ/ as in put, /u/=/u:/ as in zoo
+<li>/I/ as in little, /i/=/i:/ as in meat
+<li>/æ/ as in bad, /ɛ/ as in bed
+<li>/ə/ as in about, /ɝ/=/ɝ:/=/ə:/ as in bird
+<li>/ɑ/=/ɑ:/ as in march, /ɔ/ as in boy or log
+<li>/aʊ/ as in about, /aɪ/ as in bike, /eɪ/ as in gate, /oʊ/ as in boat
+</ul>
+
+<script src="data/big_eng_dict.js"></script>
+<script src="js/dict_lookup.js"></script>
+<script src="data/dict_english_word_ipa.js"></script>
+</body>
+</html>
+<script>
+
+var m_yb2w = null;
+function searchYinBiao(input)
+{
+	input = input.replace(/ /g, "").replace(/\//g, "").replace(/[ˌˈ]/g, "").replace(/ɹ/g, "r").replace(/ɫ/g, "l");
+	if (m_yb2w === null) m_yb2w = build_yb_to_word(m_ipa);
+        var yb_arr = getTop10SimilarKeys(input, m_yb2w);
+	var res = [];
+	for (var yb_info of yb_arr) {
+		var arr = m_yb2w[yb_info[0]];
+		// console.log('aaa', arr, yb_info);
+		for (var a of arr) {
+			res.push([a, yb_info[1], yb_info[2]]);
+		}
+	}
+	// console.log(res)
+	return res;
+}
+function searchWord() {
+    var word = document.getElementById("wordInput").value.trim();
+    if (word.length == 0) {
+    	document.getElementById("result").innerHTML = "please input first";
+    	return;
+    }
+
+    var do_prefix_lookup = false;
+    var cases_no_sentive = true;
+
+    var results = null;
+    if (word[0] == '~' || word[0] == '/') {
+	var words = null;
+	if (word[0] == '~') {
+        	word = word.slice(1)
+        	words = getTop10SimilarKeys(word, m_ipa);
+	} else {
+        	words = searchYinBiao(word);
+	}
+	var arr_w = [];
+	var m_w = {};
+	for (var i in words) {
+		arr_w.push(words[i][0]);
+		m_w[words[i][0]] = words[i][1];
+	}
+	results = searchInDict({'words': arr_w, 'weights': m_w}, word, false, true);
+	var results1 = [];
+	for (var i in words) {
+		var w = words[i][0].toLowerCase();
+		for (var r of results) {
+			if (r[0].toLowerCase() == w) {
+				results1.push(r);
+			}
+		}
+	}
+	results = results1;
+
+	// console.log(results)
+	//console.log(words)
+    } else if (word.includes("|")) {
+    	var ret = get_result_multi(word.split("|"), do_prefix_lookup, cases_no_sentive);
+	results = ret[0];
+    } else {
+    	results = get_result(word, do_prefix_lookup, cases_no_sentive);
+    }
+    // console.log(results)
+    displayResults(results);
+}
+
+function displayResults(results) {
+    var resultDiv = document.getElementById("result");
+    resultDiv.innerHTML = '';  // 清空先前的结果
+
+    if (results.length === 0) {
+        resultDiv.innerHTML = '<p>No results found.</p>';
+        return;
+    }
+
+    var table = '<table><tr><th>Word</th><th>phonetic</th><th>Definition</th></tr>';
+    results.forEach(result => {
+         var word = result[0];
+         var definition = result[1];
+	 var phonetic = m_ipa[word.toLowerCase()];
+         if (phonetic == undefined) phonetic = '';
+         table += `<tr><td>${word}</td><td>${phonetic}</td><td>${definition}</td></tr>`;
+    });
+    table += '</table>';
+    resultDiv.innerHTML = table;
+}
+</script>
