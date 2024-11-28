@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phonetic Transformation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+        }
+        .output {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Phonetic Transformation Tool</h1>
+    <textarea id="inputText" placeholder="Enter text here..."></textarea>
+    <div class="output">
+        <h3>Results:</h3>
+        <p><strong>Original IPA:</strong><br> <span id="output1"></span></p>
+        <p><strong>Vowels to 'a':</strong><br> <span id="output2"></span></p>
+        <p><strong>Remove all vowels except first:</strong><br> <span id="output3"></span></p>
+        <p><strong>Original without vowels:</strong><br> <span id="output4"></span></p>
+    </div>
+
+    <script src="dict_english_word_ipa.js"></script>
+
+</body>
+</html>
+<script>
+document.getElementById('inputText').addEventListener('input', function() {
+    const inputText = this.value.toLowerCase().trim();
+    if (inputText) {
+        const [arr1, arr2, arr3, arr4] = transLine(inputText, m1, m2, m3);
+        document.getElementById('output1').textContent = arr1.join(' ').replace(/ ,/g, ',').replace(/ \?/g, '?').replace(/ \./g, '.');
+        document.getElementById('output2').textContent = arr2.join(' ').replace(/ ,/g, ',').replace(/ \?/g, '?').replace(/ \./g, '.');
+        document.getElementById('output3').textContent = arr3.join(' ').replace(/ ,/g, ',').replace(/ \?/g, '?').replace(/ \./g, '.');
+        document.getElementById('output4').textContent = arr4.join(' ').replace(/ ,/g, ',').replace(/ \?/g, '?').replace(/ \./g, '.');
+    } else {
+        document.getElementById('output1').textContent = '';
+        document.getElementById('output2').textContent = '';
+        document.getElementById('output3').textContent = '';
+        document.getElementById('output4').textContent = '';
+    }
+});
+
+function trans(s) {
+    let s1 = s;
+    if (s.endsWith('ng')) s = s.slice(0, -2) + "ŋ";
+    s = s.replace(/[aeiou]/gi, "a");
+    s = s[0] + s.slice(1).replace(/a+/gi, "a");
+    s = s.replace("aa", "a");
+
+    return [
+        s,
+        s[0] + s.slice(1).replace(/a/gi, ""),
+        s1[0] + s.slice(1).replace(/[aeiou]+/gi, "")
+    ];
+}
+
+
+function find_yb(word, m, tp) {
+    
+    var forms = [];
+    function forms_push(weight, word, a1, a2, a3) {
+        if (m[word]) {
+                if (tp == 1) forms.push([m[word] + a1, weight]);
+                else if (tp == 2) forms.push([m[word] + a2, weight]);
+                else if (tp == 3) forms.push([m[word] + a3, weight]);
+        }
+    }
+
+    // 处理复数和不规则变化
+    if (word.endsWith('s'))   forms_push(1, word.slice(0, -1), "s", "s", "s");
+    if (word.endsWith('ies')) forms_push(3, word.slice(0, -3) + 'y', "z", "z", "z");
+    if (word.endsWith('ves')) forms_push(3, word.slice(0, -3) + 'f', "z", "z", "z");
+    if (word.endsWith('es'))  forms_push(2, word.slice(0, -2), "iz", "az", "z");
+
+    // 形容词变形
+    if (word.endsWith('est')) {
+        forms_push(2, word.slice(0, -2), "ist", "ast", "st");  // 去掉st
+        forms_push(3, word.slice(0, -3), "ist", "ast", "st");  // 去掉est
+        forms_push(4, word.slice(0, -4), "ist", "ast", "st");  // 尝试去掉尾4个字母
+    }
+    if (word.endsWith('iest')) forms_push(4, word.slice(0, -4) + 'y', "ist", "ast", "st");
+
+    // 所有格
+    if (word.endsWith("'s")) forms_push(2, word.slice(0, -2), "s", "s", "s");
+    if (word.endsWith("'")) forms_push(2, word.slice(0, -1), "", "", "");
+
+    if (word.endsWith('er')) {
+        forms_push(1, word.slice(0, -1), "ə", "a", "");  // 去掉r
+        forms_push(3, word.slice(0, -2), "ə", "a", "");  // 去掉er
+        forms_push(4, word.slice(0, -3), "ə", "a", "");  // 尝试去掉尾4个字母
+    }
+    if (word.endsWith('ier')) forms_push(3, word.slice(0, -3) + 'y', "iə", "a", "");
+
+    // 处理过去式和过去分词
+    if (word.endsWith('ed')) {
+        forms_push(2, word.slice(0, -2), "id", "ad", "d");  // 去掉ed
+        forms_push(1, word.slice(0, -1), "id", "ad", "d");  // 去掉d
+        forms_push(3, word.slice(0, -3), "id", "ad", "d");  // 尝试去掉尾三个字母
+    }
+    if (word.endsWith('ied')) forms_push(3, word.slice(0, -3) + 'y', "", "", "");
+
+    // 处理现在分词
+    if (word.endsWith('ing')) {
+        forms_push(3, word.slice(0, -3), "iŋ", "aŋ", "ŋ");    // 去掉ing
+        forms_push(4, word.slice(0, -3) + 'e', "iŋ", "aŋ", "ŋ"); // 替换为e
+        forms_push(5, word.slice(0, -4), "iŋ", "aŋ", "ŋ");    // 尝试去掉尾4个字母
+    }
+    if (forms.length == 0) return null;
+    forms.sort((a, b) => {return a[1] - b[1];});
+    var ret = forms[0][0];
+    if (tp == 1) ret = ret.replace(/ii/g, "i");
+    if (tp == 2) ret = ret.replace(/aa/g, "a");
+    return ret;
+}
+
+function genYbToWords(mWord2yb) {
+    const m1 = {};
+    const m2 = {};
+    const m3 = {};
+    const vowel = "ɔɪiɛɝʊoæaɑəeuʌɐɒ";
+    const ng = ['ɔŋ', 'ɑŋ', 'aŋ', 'iŋ', 'ɪŋ', 'əŋ', 'æŋ', 'ɝŋ'];
+
+    for (const w in mWord2yb) {
+        const ybOri = mWord2yb[w];
+        const arrYb = ybOri.split(", ");
+        for (let yb of arrYb) {
+            yb_ori = yb.replace(/[ˌˈ'\/]/g, "").replace(/ɹ/g, "r").replace(/ɫ/g, "l")
+            yb = yb_ori.replace(":", "");
+            for (const n of ng) yb = yb.replace(n, "ŋ");
+            if (yb.includes('hw')) continue;
+
+            const res = [];
+            let lastIsVowel = false;
+
+            for (let i = 0; i < yb.length; i++) {
+                const c = yb[i];
+                const cIsVowel = vowel.includes(c);
+                const nextIsVowel = i + 1 < yb.length && vowel.includes(yb[i + 1]);
+                if (c === 'r' && !nextIsVowel) continue;
+
+                if (cIsVowel && lastIsVowel) continue;
+                lastIsVowel = cIsVowel;
+                res.push(cIsVowel ? 'a' : c);
+            }
+
+            const yb1 = res.join('');
+            const yb2 = yb_ori[0] + yb1.slice(1).replace(/a/g, '');
+            m1[w] = yb_ori;
+            m2[w] = yb1;
+            m3[w] = yb2;
+            break;
+        }
+    }
+    return [m1, m2, m3];
+}
+
+const [m1, m2, m3] = genYbToWords(m_ipa);
+
+function transLine(line, m1, m2, m3) {
+    const words = line.split(/\s+/);
+    const arr1 = words.map(w => m1[w] || find_yb(w, m1, 1)|| w);
+    const arr2 = words.map(w => m2[w] || find_yb(w, m2, 2) || trans(w)[0]);
+    const arr3 = words.map(w => m3[w] || find_yb(w, m3, 3) || trans(w)[1]);
+    const arr4 = words.map(w => trans(w)[2]);
+    return [arr1, arr2, arr3, arr4];
+}
+</script>
+
