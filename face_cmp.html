@@ -105,10 +105,10 @@
                 resultElement.textContent = '第二章未检测到人脸，请确保照片中包含人脸。';
                 return;
             }
-            const distance = faceapi.euclideanDistance(detections1.descriptor, detections2.descriptor);
-            const threshold = 0.5;
+            const distance = 1 - faceapi.euclideanDistance(detections1.descriptor, detections2.descriptor);
+            const threshold = 0.6;
 
-            resultElement.textContent = `得分: ${distance.toFixed(2)}（欧氏距离）`;
+            resultElement.textContent = `得分: ${distance.toFixed(2)}（大于0.6很像）`;
         }
 
         document.getElementById('file-input-1').addEventListener('change', function(event) {
