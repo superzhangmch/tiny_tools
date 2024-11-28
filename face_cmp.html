@@ -61,7 +61,7 @@
         <img id="image-2" alt="Image 2">
     </div>
     <button id="compare-button" onclick="compareFaces()">比对人脸</button>
-    <p id="result">首次模型加载慢。得分 &gt; 0.6 算像</p>
+    <p id="result">首次模型加载慢。</p>
 
     <!-- 使用CDN加载face-api.js -->
     <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
@@ -105,7 +105,7 @@
             const distance = faceapi.euclideanDistance(detections1.descriptor, detections2.descriptor);
             const threshold = 0.6; // 通常0.6是一个合理的阈值
 
-            resultElement.textContent = `得分: ${(1 - distance).toFixed(2)}。${distance < threshold ? '两张照片是同一个人。' : '两张照片不是同一个人。'}`;
+            resultElement.textContent = `得分: ${(1 - distance).toFixed(2)}(大于0.4为像)。 ${distance < threshold ? '两张照片是同一个人。' : '两张照片不是同一个人。'}`;
         }
 
         document.getElementById('file-input-1').addEventListener('change', function(event) {
