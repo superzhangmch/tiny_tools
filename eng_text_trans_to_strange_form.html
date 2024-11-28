@@ -35,14 +35,22 @@
 </body>
 </html>
 <script>
+function do_join(arr) {
+    // 过滤掉 null 或 undefined 值
+    var arr = arr.filter(function(item) {
+        return item !== null && item !== undefined && item !== 'undefined';
+    });
+    var ret = arr.join(' ').replace(/ ,/g, ',').replace(/ \?/g, '?').replace(/ \./g, '.');
+    return ret;
+}
 document.getElementById('inputText').addEventListener('input', function() {
     const inputText = this.value.toLowerCase().trim();
     if (inputText) {
         const [arr1, arr2, arr3, arr4] = transLine(inputText, m1, m2, m3);
-        document.getElementById('output1').textContent = arr1.join(' ').replace(/ ,/g, ',').replace(/ \?/g, '?').replace(/ \./g, '.');
-        document.getElementById('output2').textContent = arr2.join(' ').replace(/ ,/g, ',').replace(/ \?/g, '?').replace(/ \./g, '.');
-        document.getElementById('output3').textContent = arr3.join(' ').replace(/ ,/g, ',').replace(/ \?/g, '?').replace(/ \./g, '.');
-        document.getElementById('output4').textContent = arr4.join(' ').replace(/ ,/g, ',').replace(/ \?/g, '?').replace(/ \./g, '.');
+        document.getElementById('output1').textContent = do_join(arr1);
+        document.getElementById('output2').textContent = do_join(arr2);
+        document.getElementById('output3').textContent = do_join(arr3);
+        document.getElementById('output4').textContent = do_join(arr4);
     } else {
         document.getElementById('output1').textContent = '';
         document.getElementById('output2').textContent = '';
@@ -52,6 +60,7 @@ document.getElementById('inputText').addEventListener('input', function() {
 });
 
 function trans(s) {
+    if (s.length == 0) return s;
     let s1 = s;
     if (s.endsWith('ng')) s = s.slice(0, -2) + "ŋ";
     s = s.replace(/[aeiou]/gi, "a");
