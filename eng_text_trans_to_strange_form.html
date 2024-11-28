@@ -168,6 +168,7 @@ function genYbToWords(mWord2yb) {
 const [m1, m2, m3] = genYbToWords(m_ipa);
 
 function transLine(line, m1, m2, m3) {
+    line = line.replace(/,/g, " , ").replace(/\./g, " . ").replace(/[\?]/g, " ? ").replace(/[\-]/g, " - ").replace(/"/g, ' " ')
     const words = line.split(/\s+/);
     const arr1 = words.map(w => m1[w] || find_yb(w, m1, 1)|| w);
     const arr2 = words.map(w => m2[w] || find_yb(w, m2, 2) || trans(w)[0]);
