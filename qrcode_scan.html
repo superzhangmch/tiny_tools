@@ -19,7 +19,12 @@
     <div id="reader" style="width:auto;"></div>
     <pre id="xxx">二维码扫描</pre>
     <button id="scanButton">开始扫描</button>
+    <button id="but_cls">clear</button
     <script>
+        
+        // 扫描按钮事件
+        document.getElementById("but_cls").addEventListener("click", function() {
+            document.getElementById("xxx").textContent = "";});
         const html5QrCode = new Html5Qrcode("reader", { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE] });
         const qrCodeSuccessCallback = (decodedText, decodedResult) => {
             document.getElementById("xxx").textContent = decodedText;
