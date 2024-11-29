@@ -19,7 +19,7 @@
     <div id="reader" style="width:auto;"></div>
     <pre id="xxx">二维码扫描</pre>
     <button id="scanButton">开始扫描</button>
-    <button id="but_cls">clear</button
+    <button id="but_cls">clear</button>
     <script>
         
         // 扫描按钮事件
@@ -29,7 +29,7 @@
         const qrCodeSuccessCallback = (decodedText, decodedResult) => {
             document.getElementById("xxx").textContent = decodedText;
         };
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        const config = { fps: 10, qrbox: { width: 128, height: 128 } };
         
         let scanning = false;
 
