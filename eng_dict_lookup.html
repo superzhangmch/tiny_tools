@@ -19,7 +19,9 @@
 <ul>
 <li>输入框：~开头则是模糊查, /开头是按音标查。
 <li>音标输入,用下面代号时要空格隔开：
-        <ul><li>ae=æ, a:=ɑ <li>sh=ʃ, 3=ʒ<li>sth=θ, zth=ð<li>ng=ŋ</ul>
+        <ul><li>ae=æ, a:=ɑ <li>sh=ʃ, 3=ʒ<li>sth=θ, zth=ð
+                                        <li>ng=ŋ
+                </ul>
 <li>音标说明：
 <ul>
 <li>/ʊ/ as in put, /u/=/u:/ as in zoo
@@ -37,7 +39,11 @@
 </body>
 </html>
 <script>
-
+        function speak(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US'; // 'zh-CN'; 
+            window.speechSynthesis.speak(utterance);
+        }
 var m_yb2w = null;
 function searchYinBiao(input)
 {
@@ -126,6 +132,7 @@ function displayResults(results) {
          var definition = result[1];
          var phonetic = m_ipa[word.toLowerCase()];
          if (phonetic == undefined) phonetic = '';
+         if (phonetic) phonetic = "<a href='javascript:speak(\""+word+"\")'>听</a>&nbsp;" + phonetic
          table += `<tr><td>${word}</td><td>${phonetic}</td><td>${definition}</td></tr>`;
     });
     table += '</table>';
