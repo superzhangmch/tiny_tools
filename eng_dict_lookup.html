@@ -4,10 +4,119 @@
     <meta charset="UTF-8">
     <title>Dictionary Search</title>
     <style>
-        /* 简单的CSS样式 */
-        table, th, td {
-            border: 1px solid black;
-        }
+/* 基础样式重置 */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+ul {
+    list-style-type: none; /* 去除默认的列表符号 */
+    margin: 20px 0; /* 添加一些外边距以避免元素紧挨着 */
+    padding: 0; /* 去除默认的内边距 */
+    background: #f8f8f8; /* 轻灰色背景 */
+    border-radius: 4px; /* 圆角边框 */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* 轻微的阴影效果 */
+}
+
+li {
+    padding: 10px 20px; /* 增加一些内边距使文本不紧贴边框 */
+    border-bottom: 1px solid #ddd; /* 列表项之间的分隔线 */
+}
+
+li:last-child {
+    border-bottom: none; /* 去除最后一个列表项的底部边框 */
+}
+
+/* 响应式调整 */
+@media screen and (max-width: 600px) {
+    ul {
+        padding-left: 0; /* 在小屏幕上去除左边距，让列表占满更多空间 */
+    }
+
+    li {
+        text-align: center; /* 在小屏幕设备上使文本居中显示 */
+        padding: 10px; /* 调整内边距保持一致性 */
+    }
+}
+/* 美化表格 */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 20px;
+}
+
+th, td {
+    text-align: left;
+    padding: 8px;
+    border: 1px solid #ddd; /* 更轻的边框颜色 */
+}
+
+th {
+    background-color: gray; /* 深绿色背景 */
+    color: white;
+}
+
+tr:nth-child(even) {
+    background-color: #f2f2f2; /* 条纹效果 */
+}
+
+/* 美化输入框和按钮 */
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+    width: calc(100% - 24px); /* 减去padding的宽度 */
+    padding: 10px;
+    margin: 10px 0;
+    display: inline-block;
+    border: 1px solid #ccc;
+    border-radius: 4px; /* 圆角边框 */
+}
+
+button {
+    background-color: gray; /* 深绿色背景 */
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px; /* 圆角边框 */
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+/* 响应式设计：确保在小屏幕设备上也能良好显示 */
+@media screen and (max-width: 600px) {
+    table, th, td {
+        display: block;
+    }
+
+    th, td {
+        text-align: right;
+        padding-left: 50%;
+    }
+
+    th {
+        position: absolute;
+        left: 0;
+        top: auto;
+        width: 50%;
+        text-align: left;
+    }
+
+    tr {
+        margin-bottom: 10px;
+    }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    button {
+        width: 90%; /* 适应小屏幕 */
+        margin: 10px auto; /* 居中显示 */
+    }
+}
     </style>
 </head>
 <body>
