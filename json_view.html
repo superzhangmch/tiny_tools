@@ -284,13 +284,13 @@
                 keyCell.style.backgroundColor = 'lightgreen';
 
 		
-		if (key == '_base64前_' || key == '_原始_') {
+		if (key == '_base64前_' || key == '_原始_' || key == '_uriDecode前_') {
 			keyCell.style.color = 'gray';        // 设置字体颜色为灰色
 			keyCell.style.fontStyle = 'italic';  // 设置字体样式为斜体
 		}
 
                 const valueCell = row.insertCell();
-		if (key == '_base64前_' || key == '_原始_') {
+		if (key == '_base64前_' || key == '_原始_' || key == '_uriDecode前_') {
 		    var node = document.createTextNode(val)
 		    var span = document.createElement("span");
 		    span.appendChild(node);
