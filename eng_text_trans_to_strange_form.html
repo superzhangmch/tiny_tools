@@ -164,7 +164,7 @@ function genYbToWords(mWord2yb) {
             }
 
             const yb1 = res.join('');
-            const yb2 = yb_ori[0] + yb1.slice(1).replace(/a/g, '');
+            const yb2 = yb1[0] + yb1.slice(1).replace(/a/g, '');
             m1[w] = yb_ori;
             m2[w] = yb1;
             m3[w] = yb2;
