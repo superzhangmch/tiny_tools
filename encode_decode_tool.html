@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -87,9 +88,12 @@
 
             var last_str = inputText;
             do {
-                console.log(last_str)
                 previousLength = resultText.length;
+
+		//console.log(resultText.length, 'a2')
+                try { resultText = decodeURIComponent(resultText); } catch (e) {}
                 
+		//console.log(resultText.length, 'a0')
                 resultText = resultText.replace(base64Pattern, (match) => {
                     try {
                         return decodeURIComponent(escape(atob(match)));
@@ -97,8 +101,8 @@
                         return match;
                     }
                 });
+		//console.log(resultText.length, 'a1')
 
-                try { resultText = decodeURIComponent(resultText); } catch (e) { }
 
                 if (last_str != resultText) document.getElementById('result').textContent += '[result]\n' + resultText + "\n\n";
                 last_str = resultText;
