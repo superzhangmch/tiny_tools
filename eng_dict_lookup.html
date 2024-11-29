@@ -18,13 +18,17 @@
 <hr>
 <ul>
 <li>输入框：~开头则是模糊查, /开头是按音标查。
+<li>音标输入,用下面代号时要空格隔开：
+        <ul><li>ae=æ, a:=ɑ <li>sh=ʃ, 3=ʒ<li>sth=θ, zth=ð<li>ng=ŋ</ul>
 <li>音标说明：
+<ul>
 <li>/ʊ/ as in put, /u/=/u:/ as in zoo
-<li>/I/ as in little, /i/=/i:/ as in meat
+<li>/ɪ/ as in little, /i/=/i:/ as in meat
 <li>/æ/ as in bad, /ɛ/ as in bed
 <li>/ə/ as in about, /ɝ/=/ɝ:/=/ə:/ as in bird
 <li>/ɑ/=/ɑ:/ as in march, /ɔ/ as in boy or log
 <li>/aʊ/ as in about, /aɪ/ as in bike, /eɪ/ as in gate, /oʊ/ as in boat
+</ul>
 </ul>
 
 <script src="data/big_eng_dict.js"></script>
@@ -37,25 +41,32 @@
 var m_yb2w = null;
 function searchYinBiao(input)
 {
-	input = input.replace(/ /g, "").replace(/\//g, "").replace(/[ˌˈ]/g, "").replace(/ɹ/g, "r").replace(/ɫ/g, "l");
-	if (m_yb2w === null) m_yb2w = build_yb_to_word(m_ipa);
-        var yb_arr = getTop10SimilarKeys(input, m_yb2w);
-	var res = [];
-	for (var yb_info of yb_arr) {
-		var arr = m_yb2w[yb_info[0]];
-		// console.log('aaa', arr, yb_info);
-		for (var a of arr) {
-			res.push([a, yb_info[1], yb_info[2]]);
-		}
-	}
-	// console.log(res)
-	return res;
+        input = input.replace(/\//g, "")
+        input = " " + input + " "
+        input = input.replace(/ae/g, "æ").replace(/a:/g, "ɑ")
+        input = input.replace(/ sh /g, "ʃ").replace(/3/g, "ʒ").replace(/ sth /g, "θ").replace(/ zth /g, "ð").replace(/ ng /g, "ŋ").replace(/ th /g, "θ")
+        //input = input.replace(/sh/g, "ʃ").replace(/3/g, "ʒ").replace(/sth/g, "θ").replace(/zth/g, "ð").replace(/ng/g, "ŋ").replace(/th/g, "θ")
+        input = input.replace(/ /g, "").replace(/[ˌˈ]/g, "").replace(/ɹ/g, "r").replace(/ɫ/g, "l");
+        //console.log(input)
+                        
+        if (m_yb2w === null) m_yb2w = build_yb_to_word(m_ipa);
+        var yb_arr = getTop10SimilarKeys(input, m_yb2w, true);
+        var res = [];
+        for (var yb_info of yb_arr) {
+                var arr = m_yb2w[yb_info[0]];
+                // console.log('aaa', arr, yb_info);
+                for (var a of arr) {
+                        res.push([a, yb_info[1], yb_info[2]]);
+                }
+        }
+        // console.log(res)
+        return res;
 }
 function searchWord() {
     var word = document.getElementById("wordInput").value.trim();
     if (word.length == 0) {
-    	document.getElementById("result").innerHTML = "please input first";
-    	return;
+            document.getElementById("result").innerHTML = "please input first";
+            return;
     }
 
     var do_prefix_lookup = false;
@@ -63,38 +74,38 @@ function searchWord() {
 
     var results = null;
     if (word[0] == '~' || word[0] == '/') {
-	var words = null;
-	if (word[0] == '~') {
-        	word = word.slice(1)
-        	words = getTop10SimilarKeys(word, m_ipa);
-	} else {
-        	words = searchYinBiao(word);
-	}
-	var arr_w = [];
-	var m_w = {};
-	for (var i in words) {
-		arr_w.push(words[i][0]);
-		m_w[words[i][0]] = words[i][1];
-	}
-	results = searchInDict({'words': arr_w, 'weights': m_w}, word, false, true);
-	var results1 = [];
-	for (var i in words) {
-		var w = words[i][0].toLowerCase();
-		for (var r of results) {
-			if (r[0].toLowerCase() == w) {
-				results1.push(r);
-			}
-		}
-	}
-	results = results1;
+        var words = null;
+        if (word[0] == '~') {
+                word = word.slice(1)
+                words = getTop10SimilarKeys(word, m_ipa);
+        } else {
+                words = searchYinBiao(word);
+        }
+        var arr_w = [];
+        var m_w = {};
+        for (var i in words) {
+                arr_w.push(words[i][0]);
+                m_w[words[i][0]] = words[i][1];
+        }
+        results = searchInDict({'words': arr_w, 'weights': m_w}, word, false, true);
+        var results1 = [];
+        for (var i in words) {
+                var w = words[i][0].toLowerCase();
+                for (var r of results) {
+                        if (r[0].toLowerCase() == w) {
+                                results1.push(r);
+                        }
+                }
+        }
+        results = results1;
 
-	// console.log(results)
-	//console.log(words)
+        // console.log(results)
+        //console.log(words)
     } else if (word.includes("|")) {
-    	var ret = get_result_multi(word.split("|"), do_prefix_lookup, cases_no_sentive);
-	results = ret[0];
+        var ret = get_result_multi(word.split("|"), do_prefix_lookup, cases_no_sentive);
+        results = ret[0];
     } else {
-    	results = get_result(word, do_prefix_lookup, cases_no_sentive);
+        results = get_result(word, do_prefix_lookup, cases_no_sentive);
     }
     // console.log(results)
     displayResults(results);
@@ -113,7 +124,7 @@ function displayResults(results) {
     results.forEach(result => {
          var word = result[0];
          var definition = result[1];
-	 var phonetic = m_ipa[word.toLowerCase()];
+         var phonetic = m_ipa[word.toLowerCase()];
          if (phonetic == undefined) phonetic = '';
          table += `<tr><td>${word}</td><td>${phonetic}</td><td>${definition}</td></tr>`;
     });
