@@ -230,7 +230,7 @@
 
             try {
                 const jsonObj = JSON.parse(singleLineInput);
-                const formattedHTML = formatValue(jsonObj);
+                const formattedHTML = formatValue(jsonObj, "ROOT");
                 outputDiv.appendChild(formattedHTML);
             } catch (e) {
 		
@@ -251,7 +251,7 @@
 			return
 		}
 		var json_fixed = JSON.stringify(jsonObj);
-		var formattedHTML = formatValue(jsonObj);
+		var formattedHTML = formatValue(jsonObj, "ROOT");
                 outputDiv.appendChild(formattedHTML);
 		if ((typeof jsonObj) === 'string') {
 			newHtml +=  "不是 json 是个字符串吧？<pre style='background-color:lightgray'>" + json_fixed.replace("<", "&lt") +"</pre><br>";
@@ -263,34 +263,54 @@
             }
         }
 
-        function formatValue(value) {
+        function formatValue(value, path) {
             if (Array.isArray(value)) {
-                return formatArray(value);
+                return formatArray(value, path);
             } else if (typeof value === 'object' && value !== null) {
-                return formatDict(value);
+                return formatDict(value, path);
             } else if (typeof value === 'string') {
-                return formatString(value);
+                return formatString(value, path);
             } else {
                 return document.createTextNode(String(value));
             }
         }
+function show_path(td_id) {
+	// 获取指定id的元素
+	var element = document.getElementById(td_id);
 
-        function formatDict(dict) {
+	// 检查元素是否存在
+	if (element) {
+	// 切换元素的显示状态
+	if (element.style.display === 'none') {
+            // 如果元素被隐藏，则显示它
+            element.style.display = ''; // 或者你可以使用 'block'，取决于元素的类型
+        } else {
+            // 否则，隐藏它
+            element.style.display = 'none';
+        }
+	} else {
+	//console.log('Element with id ' + td_id + ' not found.');
+	}
+}
+	var td_idx = 0;
+        function formatDict(dict, path) {
             const table = document.createElement('table');
             for (const [key, val] of Object.entries(dict)) {
+	        cur_path = path + "[\"" + key + "\"]"
                 const row = table.insertRow();
                 const keyCell = row.insertCell();
-                keyCell.textContent = key;
+		keyCell.innerHTML = "<a href='javascript:show_path(\"td_"+td_idx+"\")'>" + key + "</a>" + "<span id='td_"+td_idx+"' style='color:red;font-size:14px;display:none'><br>"+cur_path+"</span>";
+		td_idx += 1;
                 keyCell.style.backgroundColor = 'lightgreen';
 
 		
-		if (key == '_base64前_' || key == '_原始_' || key == '_uriDecode前_') {
+		if (key == '_base64前_' || key == '_原始_') {
 			keyCell.style.color = 'gray';        // 设置字体颜色为灰色
 			keyCell.style.fontStyle = 'italic';  // 设置字体样式为斜体
 		}
 
                 const valueCell = row.insertCell();
-		if (key == '_base64前_' || key == '_原始_' || key == '_uriDecode前_') {
+		if (key == '_base64前_' || key == '_原始_') {
 		    var node = document.createTextNode(val)
 		    var span = document.createElement("span");
 		    span.appendChild(node);
@@ -298,7 +318,7 @@
 		    span.style.color = "gray"; // 使文本变灰色
                     valueCell.appendChild(span);
 		} else {
-                    valueCell.appendChild(formatValue(val));
+                    valueCell.appendChild(formatValue(val, cur_path));
 		}
             }
             return table;
@@ -312,31 +332,35 @@
                 return firstChar !== '{' && firstChar !== '[';
         }
 
-        function formatArray(arr) {
+        function formatArray(arr, path) {
             if (arr.every(item => typeof item === 'number' || typeof item === 'boolean')) {
                 return document.createTextNode(arr.join(' | '));
             } else if (arr.every(item => typeof item === 'string' && item.length < 50 && doesNotStartWithBraceOrBracket(item))) {
                 return document.createTextNode(arr.join(' | '));
             } else if (arr.every(item => typeof item === 'string' && item.length > 50 && doesNotStartWithBraceOrBracket(item))) {
                 const ul = document.createElement('ol');
+		var ii = 0;
                 arr.forEach(item => {
                     const li = document.createElement('li');
-                    li.appendChild(formatString(item));
+                    li.appendChild(formatString(item, cur_path+("["+ii+"]")));
                     ul.appendChild(li);
+		    ii += 1;
                 });
                 return ul;
             } else {
+	        var ii = 0;
                 const ul = document.createElement('ol');
                 arr.forEach(item => {
                     const li = document.createElement('li');
-                    li.appendChild(formatValue(item));
+                    li.appendChild(formatValue(item, cur_path+("["+ii+"]")));
                     ul.appendChild(li);
+		    ii += 1;
                 });
                 return ul;
             }
         }
 
-        function formatString(str) {
+        function formatString(str, path) {
 	    var ori_str = str;
 	    var de_base64 = "";
 	    var de_uri = "";
@@ -364,7 +388,7 @@
 			    const parsedStr = JSON.parse(str);
 			    parsedStr["_原始_"] = ori_str;
 			    parsedStr['_base64前_'] = de_base64;
-			    return formatValue(parsedStr);
+			    return formatValue(parsedStr, path + ".base64decode()");
 		    } catch {
 		    }
 	    }
@@ -374,7 +398,7 @@
 			    const parsedStr = JSON.parse(str);
 			    parsedStr["_原始_"] = ori_str;
 			    parsedStr['_uriDecode前_'] = de_uri;
-			    return formatValue(parsedStr);
+			    return formatValue(parsedStr, path + ".uriDecode()");
 		    } catch {
 		    }
 	    }
@@ -382,7 +406,7 @@
 		    // console.log("xxx222");
 		    const parsedStr = JSON.parse(ori_str);
 		    parsedStr["_原始_"] = ori_str;
-		    return formatValue(parsedStr);
+		    return formatValue(parsedStr + ".jsondecode()");
 	    } catch {
 	    }
 
@@ -391,18 +415,12 @@
                     // pre.textContent = str.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
                     pre.textContent = str;
 		    if (de_base64) {
-		        pre.textContent += "<hr>__原始内容__: " + de_base64.slice(0, 512);
-		    }
-		    if (de_uri) {
-		        pre.textContent += "<hr>__原始内容__: " + de_base64(0, 512);
+		        pre.textContent += "<hr>__原始内容__: " + de_base64;
 		    }
                     return pre;
            } else {
 		    if (de_base64) {
-                        return document.createTextNode(str + "<br>__原始内容__: " + de_base64.slice(0, 512));
-		    } else if (de_uri) {
-                        return document.createTextNode(str + "<br>__原始内容__: " + de_uri.slice(0, 512));
-
+                        return document.createTextNode(str + "<br>__原始内容__: " + de_base64);
 		    } else {
                         return document.createTextNode(str);
 		    }
@@ -411,4 +429,3 @@
     </script>
 </body>
 </html>
-
