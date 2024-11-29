@@ -342,7 +342,7 @@ function show_path(td_id) {
 		var ii = 0;
                 arr.forEach(item => {
                     const li = document.createElement('li');
-                    li.appendChild(formatString(item, cur_path+("["+ii+"]")));
+                    li.appendChild(formatString(item, path+("["+ii+"]")));
                     ul.appendChild(li);
 		    ii += 1;
                 });
@@ -352,7 +352,7 @@ function show_path(td_id) {
                 const ul = document.createElement('ol');
                 arr.forEach(item => {
                     const li = document.createElement('li');
-                    li.appendChild(formatValue(item, cur_path+("["+ii+"]")));
+                    li.appendChild(formatValue(item, path+("["+ii+"]")));
                     ul.appendChild(li);
 		    ii += 1;
                 });
