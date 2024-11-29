@@ -1,0 +1,57 @@
+<html>
+<head>
+    <title>QR Code scan</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        pre {
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            padding: 10px;
+            border-radius: 5px;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+    <div id="reader" style="width:auto;"></div>
+    <pre id="xxx">二维码扫描</pre>
+    <button id="scanButton">开始扫描</button>
+    <script>
+        const html5QrCode = new Html5Qrcode("reader", { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE] });
+        const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+            document.getElementById("xxx").textContent = decodedText;
+        };
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        
+        let scanning = false;
+
+        // 扫描按钮事件
+        document.getElementById("scanButton").addEventListener("click", function() {
+            if (!scanning) {
+                // 开始扫描
+                html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
+                    .then(() => {
+                        scanning = true;
+                        document.getElementById("scanButton").textContent = "停止扫描";
+                    })
+                    .catch(err => {
+                        console.error(`Unable to start scanning, error: ${err}`);
+                    });
+            } else {
+                // 停止扫描
+                html5QrCode.stop()
+                    .then(() => {
+                        scanning = false;
+                        document.getElementById("scanButton").textContent = "开始扫描";
+                    })
+                    .catch(err => {
+                        console.error(`Unable to stop scanning, error: ${err}`);
+                    });
+            }
+        });
+    </script>
+</body>
+</html>
