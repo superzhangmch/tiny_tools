@@ -388,7 +388,7 @@ function show_path(td_id) {
 			    const parsedStr = JSON.parse(str);
 			    parsedStr["_原始_"] = ori_str;
 			    parsedStr['_base64前_'] = de_base64;
-			    return formatValue(parsedStr, path + ".base64decode()");
+			    return formatValue(parsedStr, path + ".base64decode().jsondecode()");
 		    } catch {
 		    }
 	    }
@@ -398,7 +398,7 @@ function show_path(td_id) {
 			    const parsedStr = JSON.parse(str);
 			    parsedStr["_原始_"] = ori_str;
 			    parsedStr['_uriDecode前_'] = de_uri;
-			    return formatValue(parsedStr, path + ".uriDecode()");
+			    return formatValue(parsedStr, path + ".uriDecode().jsondecode()");
 		    } catch {
 		    }
 	    }
@@ -406,7 +406,7 @@ function show_path(td_id) {
 		    // console.log("xxx222");
 		    const parsedStr = JSON.parse(ori_str);
 		    parsedStr["_原始_"] = ori_str;
-		    return formatValue(parsedStr + ".jsondecode()");
+		    return formatValue(parsedStr, path  + ".jsondecode()");
 	    } catch {
 	    }
 
