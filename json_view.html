@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18,6 +19,7 @@
             border: 1px solid black;
             border-collapse: collapse;
             padding: 5px;
+	    vertical-align: top;
         }
     </style>
 </head>
@@ -222,8 +224,8 @@
             outputDiv.innerHTML = ''; // Clear previous output
             //console.log(singleLineInput)
             if (!singleLineInput) {
-            	outputDiv.innerHTML = 'please input a json data'; // Clear previous output
-	    	return;
+                outputDiv.innerHTML = 'please input a json data'; // Clear previous output
+	        return;
 	    }
 
             try {
@@ -231,12 +233,12 @@
                 const formattedHTML = formatValue(jsonObj);
                 outputDiv.appendChild(formattedHTML);
             } catch (e) {
-	    	
+		
 		var err_msg = e.message;
 		var pos = null;
 		var positionMatch = err_msg.match(/position (\d+)/);
 		if (positionMatch) {
-  			pos = parseInt(positionMatch[1], 10);
+			pos = parseInt(positionMatch[1], 10);
 		}
 		var newHtml = "解析报错：<pre style='background-color:lightgray; white-space: pre-wrap;'>"+err_msg+"</pre><br>"
 		if (pos) {
@@ -337,42 +339,76 @@
         function formatString(str) {
 	    var ori_str = str;
 	    var de_base64 = "";
+	    var de_uri = "";
 	    if (str.length > 20) {
-	    	const regex = /^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=|[A-Za-z0-9+\/]{4})$/;
+		const regex = /^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=|[A-Za-z0-9+\/]{4})$/;
 		if (regex.test(str)) {
 			try {
 				str = atob(str);
 				de_base64 = str;
-			} catch (e) {}	
+			} catch (e) { }
+		}
+		if (de_base64.length ==  0) {
+			const regex = /%/;
+			if (regex.test(str)) {
+				try {
+					str = decodeURIComponent(str);
+					de_uri = str;
+				} catch(e) { }
+			}
 		}
 	    }
-            try {
-                const parsedStr = JSON.parse(str);
-		parsedStr["_原始_"] = ori_str;
-		if (de_base64) parsedStr['_base64前_'] = de_base64;
-                return formatValue(parsedStr);
-            } catch {
-                // console.log('xxx', str,str.includes('\\n' ));
-                //if (str.includes('\\n') || str.includes('\\t')) {
-                //str = str.replace("<", "&lt;");
-                //str = str.replace(">", "&gt;");
-                if (str.includes('\n')) {
+	    if (de_base64.length > 0) {
+		    try {
+		    	    //console.log("xxx00");
+			    const parsedStr = JSON.parse(str);
+			    parsedStr["_原始_"] = ori_str;
+			    parsedStr['_base64前_'] = de_base64;
+			    return formatValue(parsedStr);
+		    } catch {
+		    }
+	    }
+	    if (de_uri.length > 0) {
+		    try {
+		    	    //console.log("xxx111");
+			    const parsedStr = JSON.parse(str);
+			    parsedStr["_原始_"] = ori_str;
+			    parsedStr['_uriDecode前_'] = de_uri;
+			    return formatValue(parsedStr);
+		    } catch {
+		    }
+	    }
+	    try {
+		    // console.log("xxx222");
+		    const parsedStr = JSON.parse(ori_str);
+		    parsedStr["_原始_"] = ori_str;
+		    return formatValue(parsedStr);
+	    } catch {
+	    }
+
+	    if (str.includes('\n')) {
                     const pre = document.createElement('pre');
                     // pre.textContent = str.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
                     pre.textContent = str;
 		    if (de_base64) {
-		    	pre.textContent += "<hr>__原始内容__: " + de_base64;
+		        pre.textContent += "<hr>__原始内容__: " + de_base64.slice(0, 512);
+		    }
+		    if (de_uri) {
+		        pre.textContent += "<hr>__原始内容__: " + de_base64(0, 512);
 		    }
                     return pre;
-                } else {
+           } else {
 		    if (de_base64) {
-                    	return document.createTextNode(str + "<br>__原始内容__: " + de_base64);
+                        return document.createTextNode(str + "<br>__原始内容__: " + de_base64.slice(0, 512);
+		    } else if (de_uri) {
+                        return document.createTextNode(str + "<br>__原始内容__: " + de_uri.slice(0, 512);
+
 		    } else {
-                    	return document.createTextNode(str);
+                        return document.createTextNode(str);
 		    }
-                }
-            }
+           }
         }
     </script>
 </body>
 </html>
+
