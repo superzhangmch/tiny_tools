@@ -149,8 +149,92 @@ function searchInDict(words_to_search, ori_word, do_prefix_lookup, cases_no_sent
     return out_arr;
 }
 
+function editDistance_yb(s1, s2) {
+        var vowel = "ɔɪiɛɝʊoæaɑəeuʌɐɒ"; 
+
+        const dp = Array.from({ length: s1.length + 1 }, () => Array(s2.length + 1).fill(0));
+
+        for (let i = 0; i <= s1.length; i++) {
+            dp[i][0] = i;
+        }
+        for (let j = 0; j <= s2.length; j++) {
+            dp[0][j] = j;
+        }
+
+        function hit_v(c1, c2, str, w, sc, len) {
+                // if (s2 == 'spəɡɛti') console.log(c1, c2, str, w, sc, w<sc)
+                if (!len) len = 1
+                if (c1.length == len && c1.length == c2.length && str.includes(c1) && str.includes(c2) && w < sc) {
+                        return w;
+                }
+                return sc;
+        }
+        function h(c1, c2, str) {
+                if (str.includes(c1) && str.includes(c2)) return true;
+                return false;
+        }
+        for (let i = 1; i <= s1.length; i++) {
+            for (let j = 1; j <= s2.length; j++) {
+                var c1 = s1[i-1];
+                var c2 = s2[j-1];
+                if (s1[i - 1] === s2[j - 1] || h(c1, c2, vowel) || h(c1, c2, "ɡg") || h(c1, c2, "ðŋ")) {
+                    dp[i][j] = dp[i - 1][j - 1];
+                    if (c1 == c2 || h(c1, c2, "ɡg")) {
+                            if (!vowel.includes(c1)) {
+                                    dp[i][j] -= .2;
+                            }
+                    } else if (h(c1, c2, "ðŋ")) {
+                        dp[i][j] += .5;
+                    } else if (h(c1, c2, vowel)) {
+                            var c11 = s1.slice(i-1, i+1)
+                            var c22 = s2.slice(j-1, j+1)
+                            var c111 = s1.slice(i-2, i)
+                            var c222 = s2.slice(j-2, j)
+                            var w = 0.3;
+                            w = hit_v(c1, c2, "ʊu", 0.1, w);
+                            w = hit_v(c1, c2, "ɪi", 0.1, w);
+                            w = hit_v(c1, c2, "əɝɐ", 0.1, w);
+                            w = hit_v(c1, c2, "ɪə", 0.2, w);
+                            w = hit_v(c1, c2, "ɐəʌ", 0.2, w);
+                            w = hit_v(c1, c2, "eɛ", 0.25, w);
+                            w = hit_v(c1, c2, "ɔɛæɑɒ", 0.25, w)
+
+                            w = hit_v(c11, c22, "ou|əʊ|əu|oʊ|aʊ|au", 0.15, w, 2);
+                            w = hit_v(c11, c22, "ai|aɪ|ei|eɪ", 0.15, w, 2);
+
+                            w = hit_v(c11, c22, "ou|əʊ|əu|oʊ|", 0.02, w, 2);
+                            w = hit_v(c11, c22, "aʊ|au", 0.02, w, 2);
+                            w = hit_v(c11, c22, "jʊ|ju", 0.02, w, 2);
+                            w = hit_v(c11, c22, "ai|aɪ", 0.02, w, 2);
+                            w = hit_v(c11, c22, "ei|eɪ", 0.02, w, 2);
+
+
+                            w = hit_v(c111, c222, "ou|əʊ|əu|oʊ|aʊ|au", 0.15, w, 2);
+                            w = hit_v(c111, c222, "ou|əʊ|əu|oʊ|", 0.02, w, 2);
+                            w = hit_v(c111, c222, "aʊ|au", 0.02, w, 2);
+                            w = hit_v(c111, c222, "jʊ|ju", 0.02, w, 2);
+                            w = hit_v(c111, c222, "ai|aɪ|ei|eɪ", 0.15, w, 2);
+                            w = hit_v(c111, c222, "ai|aɪ", 0.02, w, 2);
+                            w = hit_v(c111, c222, "ei|eɪ", 0.02, w, 2);
+                            // console.log(c1, c2, w)
+                            // if (s2 == 'spəɡɛti') console.log(c1, c2, w)
+                            dp[i][j] += w;
+                    }
+
+                } else {
+                    dp[i][j] = Math.min(dp[i - 1][j - 1] + 1,
+                                        dp[i - 1][j] + 1, 
+                                        dp[i][j - 1] + 1
+                                        );
+                }
+            }
+        }
+
+        return dp[s1.length][s2.length];
+}
+
 //----
-function getTop10SimilarKeys(inputString, dict) {
+function getTop10SimilarKeys(inputString, dict, for_yb) {
     // 计算编辑距离的函数
     function editDistance(s1, s2) {
         const dp = Array.from({ length: s1.length + 1 }, () => Array(s2.length + 1).fill(0));
@@ -196,18 +280,20 @@ function getTop10SimilarKeys(inputString, dict) {
     const distances = keys.map(key => {
         return {
             key,
-            distance: editDistance(inputString, key),
+            distance: (for_yb) ? (editDistance_yb(inputString, key)) :editDistance(inputString, key),
             headMatchScore: headMatchScore(inputString, key)
         };
     });
 
     // 按编辑距离升序排序；如果编辑距离相等，则按 head-match score 降序排序
     distances.sort((a, b) => {
+        if (for_yb) return a.distance - b.distance;
         if (a.distance === b.distance) {
             return b.headMatchScore - a.headMatchScore;
         }
         return a.distance - b.distance;
     });
+    // console.log(distances.slice(0, 10))
 
     // 返回前10个最相似的键
     return distances.slice(0, 10).map(item => [item.key, item.distance, item.headMatchScore]);
