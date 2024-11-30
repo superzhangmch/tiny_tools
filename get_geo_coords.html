@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>获取地理位置</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            margin-top: 20px;
+        }
+        #output {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>获取地理位置</h1>
+    <button onclick="getLocation()">获取位置</button>
+    <div id="output"></div>
+
+    <script>
+        function getLocation() {
+            const output = document.getElementById('output');
+            output.textContent = '正在获取位置...';
+
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        const latitude = position.coords.latitude;
+                        const longitude = position.coords.longitude;
+                        const altitude = position.coords.altitude;
+                        const altitudeText = altitude !== null ? altitude + " 米" : "不可用";
+
+                        output.innerHTML = `
+                            <p>纬度: ${latitude}</p>
+                            <p>经度: ${longitude}</p>
+                            <p>高度: ${altitudeText}</p>
+                        `;
+                    },
+                    function(error) {
+                        switch (error.code) {
+                            case error.PERMISSION_DENIED:
+                                output.textContent = "用户拒绝了地理定位请求。";
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                output.textContent = "位置信息不可用。";
+                                break;
+                            case error.TIMEOUT:
+                                output.textContent = "请求超时。";
+                                break;
+                            case error.UNKNOWN_ERROR:
+                                output.textContent = "发生未知错误。";
+                                break;
+                        }
+                    },
+                    { enableHighAccuracy: true }
+                );
+            } else {
+                output.textContent = "该浏览器不支持地理定位。";
+            }
+        }
+    </script>
+
+</body>
+</html>
