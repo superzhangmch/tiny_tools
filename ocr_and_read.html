@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Selective OCR</title>
+    <title>OCR and Read</title>
     <style>
 	#video, #canvas {
 	    width: 100%;
@@ -38,12 +38,25 @@
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
     <button id="toggleCamera">Open Camera</button>
+    <button id="toggleCamera" onclick='speak("zh-CN")'>朗读</button>
+    <button id="toggleCamera" onclick='stopSpeaking()'>停</button> (识别与朗读中文)
     <div id="ocr-output"></div>
     <div id="selection"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <script>
+function speak(lang)
+{
+	const ocrOutput = document.getElementById('ocr-output');
+	text = ocrOutput.textContent;
+	const utterance = new SpeechSynthesisUtterance(text);
+	utterance.lang = lang;//'zh-CN';
+	window.speechSynthesis.speak(utterance);
+}
+function stopSpeaking() {
+	window.speechSynthesis.cancel();
+}
 	const video = document.getElementById('video');
 	const canvas = document.getElementById('canvas');
 	const toggleCameraButton = document.getElementById('toggleCamera');
@@ -86,7 +99,6 @@
 	    canvas.height = video.videoHeight;
 	    context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-	    // 停止视频流
 	    stream.getTracks().forEach(track => track.stop());
 	    video.style.display = 'none';
 	    canvas.style.display = 'block';
@@ -94,7 +106,6 @@
 	    isCameraOn = false;
 	}
 
-	// 鼠标或触摸事件处理选择区域
 	canvas.addEventListener('mousedown', startSelection);
 	canvas.addEventListener('mousemove', updateSelection);
 	canvas.addEventListener('mouseup', finishSelection);
@@ -172,12 +183,12 @@
 	    const selectedImage = tempCanvas.toDataURL('image/png');
 
 	    performOCR(selectedImage);
-	    selection.style.display = 'none'; // 隐藏选择框
+	    selection.style.display = 'none';
 	}
 
 	function performOCR(imageData) {
-	    ocrOutput.textContent = 'Processing OCR...'; // 显示处理状态
-	    Tesseract.recognize(imageData, 'chi_sim', // 可以替换为其他语言，例如 'chi_sim' 用于简体中文
+	    ocrOutput.textContent = 'Processing OCR...';
+	    Tesseract.recognize(imageData, 'chi_sim',
 		                { logger: info => console.log(info) })
 	    .then(({ data: { words } }) => {
 			    if (words.length ==0) {
@@ -210,12 +221,12 @@
 				used_words_idx[max_area_idx] = 1;
 			    }
 
-			    ocrOutput.innerHTML = "<ul>";
+			    ocrOutput.innerHTML = "";
 			    var arr_w = [];
 			    var arr_sc = [];
 
 			    const ctx = canvas.getContext('2d');
-			    var debug = 1;
+			    var debug = 0;
 			    if (debug) {
 				var x0 = _selectionLeft;
 				var y0 = _selectionTop;
@@ -242,13 +253,8 @@
 				arr_text.push(word.text);
 				ocrOutput.innerHTML += `${word.text}`;
 			    } 
-				var text = arr_text.join("");
-				const utterance = new SpeechSynthesisUtterance(text);
-				utterance.lang = 'zh-CN'; // 设置语言为中文
-				window.speechSynthesis.speak(utterance);
 		}).catch(err => { console.error('OCR ERROR:', err); });
 	}
     </script>
 </body>
 </html>
-
