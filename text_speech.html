@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文本朗读器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            text-align: center;
+        }
+        textarea {
+            width: 80%;
+            height: 150px;
+            margin: 10px 0;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>文本朗读器</h1>
+    <textarea id="text-input" placeholder="在这里输入文本..."></textarea><br>
+    <button onclick="pasteText()">粘贴内容</button>
+    <button onclick="speakText('zh-CN')">中文朗读</button>
+    <button onclick="speakText('en-US')">英文朗读</button>
+    <button onclick="stopSpeaking()">停止朗读</button>
+
+    <script>
+        // 从剪贴板粘贴内容到 textarea
+        async function pasteText() {
+            try {
+                const text = await navigator.clipboard.readText();
+                document.getElementById('text-input').value = text;
+            } catch (err) {
+                alert('无法访问剪贴板内容');
+                console.error('Failed to read clipboard contents: ', err);
+            }
+        }
+
+        // 朗读 textarea 中的文本
+        function speakText(lang) {
+            const text = document.getElementById('text-input').value;
+            if (text.trim() === '') {
+                alert('请先输入或粘贴一些文本');
+                return;
+            }
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = lang;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // 停止朗读
+        function stopSpeaking() {
+            window.speechSynthesis.cancel();
+        }
+    </script>
+
+</body>
+</html>
