@@ -460,9 +460,10 @@ function hide_show(td_idx)
 	    } catch {
 	    }
 
-	    if (str.includes('\\n')) {
+	    if (str.includes('\n') || str.includes('\\n')) {
 	            const pre = document.createElement('pre');
-	            pre.textContent = str.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+	            pre.textContent = str.replace(/\\n/g, '\n').replace(/\n/g, '\n').replace(/\\t/g, '\t');
+
 	            // pre.textContent = str;
 		    if (de_base64) {
 		        pre.textContent += "<hr>__原始内容__: " + de_base64;
