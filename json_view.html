@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,6 +20,15 @@
 	    border-collapse: collapse;
 	    padding: 5px;
 	    vertical-align: top;
+	}
+	.ori_txt {
+		 color:gray;
+		 font-style:italic;
+		 font-size: 12px;
+	}
+	td.arr_idx {
+	  background-color: lightyellow;
+	  white-space: nowrap;
 	}
     </style>
 </head>
@@ -387,26 +395,37 @@ function hide_show(td_idx)
 	        return document.createTextNode(arr.join(' | '));
 	    } else if (arr.every(item => typeof item === 'string' && item.length < 50 && doesNotStartWithBraceOrBracket(item))) {
 	        return document.createTextNode(arr.join(' | '));
-	    } else if (arr.every(item => typeof item === 'string' && item.length > 50 && doesNotStartWithBraceOrBracket(item))) {
-	        const ul = document.createElement('ol');
-		var ii = 0;
-	        arr.forEach(item => {
-	            const li = document.createElement('li');
-	            li.appendChild(formatString(item, path+("["+ii+"]")));
-	            ul.appendChild(li);
-		    ii += 1;
-	        });
-	        return ul;
 	    } else {
-	        var ii = 0;
-	        const ul = document.createElement('ol');
-	        arr.forEach(item => {
-	            const li = document.createElement('li');
-	            li.appendChild(formatValue(item, path+("["+ii+"]")));
-	            ul.appendChild(li);
-		    ii += 1;
+		var is_string_arr = arr.every(item => typeof item === 'string' && item.length > 50 && doesNotStartWithBraceOrBracket(item));
+		const table = document.createElement('table');
+		var row = table.insertRow();
+		var keyCell = row.insertCell();
+		keyCell.innerHTML = '#';
+		keyCell.className = 'arr_idx';
+		var valueCell = row.insertCell();
+		valueCell.innerHTML = "total " + arr.length;
+
+		// const ul = document.createElement('ol');
+		var ii = 0;
+		arr.forEach(item => {
+			var cur_path =  path+("["+ii+"]");
+			const row = table.insertRow();
+			const keyCell = row.insertCell();
+			keyCell.innerHTML = "<a href='javascript:show_path(\"td_"+td_idx+"\")'>#" + ii + "</a> <a id='a_"+td_idx+"' href='javascript:hide_show(\""+td_idx+"\")'>-</a>" + "<span id='td_"+td_idx+"' style='color:red;font-size:14px;display:none'><br>"+cur_path+"</span>";
+			keyCell.className = 'arr_idx';
+			td_idx += 1;
+
+
+			var v = null;
+			if (is_string_arr) v = formatString(item, cur_path);
+			else v = formatValue(item, cur_path);
+			const valueCell = row.insertCell();
+			valueCell.appendChild(v);
+
+
+			ii += 1;
 	        });
-	        return ul;
+	        return table;
 	    }
 	}
 
@@ -462,13 +481,13 @@ function hide_show(td_idx)
 
 	    if (str.includes('\n') || str.includes('\\n')) {
 	            const pre = document.createElement('pre');
-	            pre.textContent = str.replace(/\\n/g, '\n').replace(/\n/g, '\n').replace(/\\t/g, '\t');
+	            pre.innerHTML = str.replace(/\\n/g, '\n').replace(/\n/g, '\n').replace(/\\t/g, '\t').replace("<", "&lt").replace(">", "&gt;");
 
 	            // pre.textContent = str;
 		    if (de_base64) {
-		        pre.textContent += "<hr>__原始内容__: " + de_base64;
+		        pre.innerHTML += "\n<br><span class=ori_txt>__原始内容__: " + de_base64.replace("<", "&lt").replace(">", "&gt;") + "</span>";
 		    } else if (de_uri) {
-		        pre.textContent += "<hr>__原始内容__: " + de_uri;
+		        pre.innerHTML += "\n<br><span class=ori_txt>__原始内容__: " + de_uri.replace("<", "&lt").replace(">", "&gt;") + "<span>";
 		    }
 	            return pre;
 	   } else {
