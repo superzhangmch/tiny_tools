@@ -546,7 +546,11 @@
 		    } else { // not match
 			var msg = `左括号 ${left_b.value} 和右括号 ${token.value} 不匹配`
 			//console.log('aaa', token, left_b, '|', token.pos, msg, left_b.pos)
-			show_err1(input, token.pos, token.value.length, msg, left_b.pos, left_b.value.length)
+			if (!left_b) { 
+			    show_err1(input, token.pos, token.value.length, msg)
+			} else {
+			    show_err1(input, token.pos, token.value.length, msg, left_b.pos, left_b.value.length)
+			}
 			if (do_throw) throw new Error(msg);
 		    }
 		} else {
