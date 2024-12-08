@@ -59,6 +59,8 @@
 	}
 
 	var basic_math_func = "sin|cos|log|ln|exp|sqrt|tan|asin|acos|atan|arctan|arcsin|arccos|frac|abs";
+	var tokens_debug = null;
+	var syn_tree_debug = null;
 	function p(...x) {console.log(x)}
 	function convertExpressionToLatex(input) {
 	    var input = input.trim();
@@ -200,7 +202,7 @@
 		{ type: 'DOUBLE_DIV', regex: /\/\// },      //  //
 		{ type: 'DIV', regex: /\// },	//  /
 		{ type: 'MULTIPLY', regex: /[\*]/ },	//  /
-		{ type: 'NUMBER', regex: /-\d+(\.\d+)?\b|\b\d+(\.\d+)?\b/ },  // -2.5
+		{ type: 'NUMBER', regex: /[\-]?\d+\.\d+\b|[\-]?\d+\.|[\-]?\d+\b/ },  // -2.5
 		{ type: 'STRING', regex: /[a-zA-Z0-9\u4e00-\u9fa5\u3400-\u4DBF]+/ },    // abc123
 		{ type: 'OTHER', regex: /[^"{}\[\]()\\\^_\/ \t\n\*]+/ }
 	    ];
@@ -263,7 +265,7 @@
 		    throw new Error(msg);
 		}
 	    }
-	
+	    tokens_debug = result;
 	    return result;
 	}
 	
@@ -584,7 +586,7 @@
 		show_err1(input, left_b.pos, left_b.value.length, msg)
 		if (do_throw) throw new Error(msg);
 	    }
-	
+	    syn_tree_debug = root;
 	    return root;
 	}
 
