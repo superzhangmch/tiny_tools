@@ -1,0 +1,140 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<!-- saved from url=(0031)http://127.0.0.1/tools/单词.htm -->
+<HTML><HEAD>
+<META http-equiv=Content-Type content="text/html; charset=utf8">
+<SCRIPT>
+
+
+</SCRIPT>
+
+<META content="MSHTML 6.00.2900.5512" name=GENERATOR></HEAD>
+<BODY><INPUT id=txt1 size=14> 
+<INPUT onclick=find_char1() type=button value=英文><BR><INPUT id=txt2 size=14> <INPUT onclick=find_char2() type=button value=中文><BR><INPUT onclick=find_char3() type=button value=中英混合> 
+<br>(只显示前200个结果；按中文意思检索时，可输入多个词语用空格间隔，但注意“A B”不同于“B A”,若想同时查两者，则输入“（A B|B A）”)
+<HR>
+<script src="data/big_eng_dict.js"></script>
+<script src="data/dict_english_word_ipa.js"></script>
+<A name=ttt><FONT color=blue>
+<DIV id=dd>&nbsp;</DIV>
+<SCRIPT>
+function find_char1()
+{
+	var str=dict_str;
+	var re = new RegExp("^[^`]*$");
+	
+	
+	if(!re.test(txt1.value) || txt1.value=="")
+	{
+		alert("Invalid Input!");
+		return;
+	}
+	ss=txt1.value;
+	ss=ss.replace(/\?/g,"[^@`]")
+	ss=ss.replace(/\*/g,"[^@`]*")
+	ss=ss+"`[^@]*";
+	
+	var re = new RegExp("@"+ss+"@","gi");
+	mm=str.match(re)
+
+	if(mm)
+	{
+		str="<table border=0>";
+		for(var i=0;i<mm.length && i<200;i++)
+		{
+			s="<tr><td colspan=2><font color=red>"+mm[i].substr(1,mm[i].length-2);
+			str+=s+"<br>";		
+		}
+		str=str+"</table>"
+		str=str.replace(/`/g,"<tr><td>&nbsp;&nbsp;<td>")
+		dd.innerHTML=str;
+	}
+	else
+	{
+	alert("No Find!")
+	}
+}
+function find_char2()
+{
+	var str=strr
+	var re = new RegExp("^[^@]*$");
+	
+	
+	if(!re.test(txt2.value) || txt2.value=="")
+	{
+		alert("Invalid Input!");
+		return;
+	}
+	ss=txt2.value;
+	ss=ss.replace(/\?/g,"[^@]")
+	ss=ss.replace(/\*/g,"[^@]*")
+	ss=ss.replace(/ /g,"[^@]*")
+	ss=ss.replace(/\./g,"[\.]")
+	ss="[^@]*`[^@]*"+ss+"[^@]*";
+		
+	var re = new RegExp("@"+ss+"@","gi");
+	mm=str.match(re)
+
+	if(mm)
+	{
+		str="<table border=0>";
+		for(var i=0;i<mm.length && i<100;i++)
+		{
+			s="<tr><td colspan=2><font color=red>"+mm[i].substr(1,mm[i].length-2);
+			str+=s+"<br>";		
+		}
+		str=str+"</table>"
+		str=str.replace(/`/g,"<tr><td>&nbsp;&nbsp;<td>")
+		dd.innerHTML=str;
+	}
+	else
+	{
+	alert("No Find!")
+	}	
+}
+function find_char3(type)
+{
+	var str=strr
+	var re = new RegExp("^[^`]*$");
+	var re1 = new RegExp("^[^@]*$");
+	if(!re.test(txt1.value) || !re1.test(txt2.value))
+	{
+		alert("Invalid Input!");
+		return;
+	}
+	
+	ss1=txt1.value;
+	ss1=ss1.replace(/\?/g,"[^@`]")
+	ss1=ss1.replace(/\*/g,"[^@`]*")
+	ss2=txt2.value;
+	
+	ss2=ss2.replace(/\?/g,"[^@]")
+	ss2=ss2.replace(/\*/g,"[^@]*")
+	ss2=ss2.replace(/ /g,"[^@]*")
+	
+	ss=ss1+"`[^@]*"+ss2+"[^@]*";
+	
+	
+	var re = new RegExp("@"+ss+"@","gi");
+	mm=str.match(re)
+
+	if(mm)
+	{
+		str="<table border=0>";
+		for(var i=0;i<mm.length && i<100;i++)
+		{
+			s="<tr><td colspan=2><font color=red>"+mm[i].substr(1,mm[i].length-2);
+			str+=s+"<br>";		
+		}
+		str=str+"</table>"
+		str=str.replace(/`/g,"<tr><td>&nbsp;&nbsp;<td>")
+		dd.innerHTML=str;
+	}
+	else
+	{
+	alert("No Find!")
+	}	
+}
+</SCRIPT>
+</FONT>
+<HR>
+<A href="http://127.0.0.1/tools/单词.htm#ttt">TOP</A> </BODY></HTML>
