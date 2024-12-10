@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English Article Reading Assistant</title>
+    <style>
+.highlight-circle {
+    position: absolute;
+    width: 20px;  /* 圆圈的直径 */
+    height: 20px; /* 圆圈的直径 */
+    border: 2px solid red; /* 红色边框 */
+    border-radius: 50%;    /* 使其成为圆形 */
+    pointer-events: none;  /* 让圆圈不干扰鼠标事件 */
+    z-index: 1000; /* 确保它在其他元素之上 */
+}
+#container {
+    //display: flex;
+    //flex-direction: column;
+    //margin: 20px;
+}
+
+textarea {
+    // width: 30%;
+    height: 50px;
+    margin-bottom: 10px;
+}
+
+//button { margin-bottom: 20px; }
+
+#output {
+    display: flex;
+    justify-content: space-between;
+    width: 80%;
+}
+
+#articleOutput {
+    width: 60%;
+    padding-right: 20px;
+}
+
+#lowFreqWordsTable {
+    width: 35%;
+    border-collapse: collapse;
+}
+
+#lowFreqWordsTable th, #lowFreqWordsTable td {
+    border: 1px solid #ddd;
+    padding: 1px;
+    text-align: left;
+}
+#tooltip {
+    display: none;
+    position: absolute;
+    background-color: lightyellow;
+    border: 1px solid black;
+    padding: 5px;
+    z-index: 1000;
+}
+    </style>
+</head>
+<body>
+	<textarea id="textInput" placeholder="Enter your article here..."></textarea>
+	<br>
+	<button id="processButton">Find Low Frequency Words</button>
+<div id="tooltip" style="display:none; position:absolute; background-color:lightyellow; border:1px solid black; padding:5px;">
+    <!-- 动态内容将在这里插入 -->
+</div>
+    <div id="container">
+	<div id="output">
+	    <div id="articleOutput"></div>
+	    <table id="lowFreqWordsTable">
+		<thead>
+		    <tr>
+			<th>#</th>
+			<th>word</th>
+			<th></th>
+			<th>word rank</th>
+			<th>stars</th>
+			<th>meaning</th>
+		    </tr>
+		</thead>
+		<tbody id="lowFreqWordsList"></tbody>
+	    </table>
+	</div>
+    </div>
+    <script src="data/big_eng_dict.js"></script>
+    <script src="data/dict_english_word_ipa.js"></script>
+    <script src="data/word_freq.js"></script>
+    <script src="data/word_source.js"></script>
+    <script src="js/dict_lookup.js"></script>
+    <script>
+
+document.getElementById('processButton').addEventListener('click', function () {
+	process_article(1);
+});
+
+function process_article(filter_by_word_source) {
+    const text = document.getElementById('textInput').value;
+    const wordRegex = /[a-zA-Z][a-zA-Z0-9]*[a-zA-Z]/g;
+    const words = text.match(wordRegex);
+    var m_word_freq = word_freq;
+    var m_word_source = word_source;
+
+    var m_filt = m_word_freq;
+    if (filter_by_word_source) m_filt = m_word_source;
+
+    var m_word_ori = {};
+    while ((match = wordRegex.exec(text)) !== null) {
+	var w = match[0];
+	var idx = match.index;
+	if (!m_word_ori[w]) {
+		m_word_ori[w] = [];
+	}
+	m_word_ori[w].push(idx);
+    }
+    //debug_1 = m_word_ori;
+
+    var m_rev = {};
+    var arr_wf = [];
+    for (var w in m_word_ori) {
+	var wc = "";
+	var w1 = w.toLowerCase();
+
+	if (wc.length == 0 && m_filt[w]) { wc = w;}
+
+	if (wc.length == 0 && m_filt[w1]) { wc = w1;}
+	if (wc.length == 0) {
+		const arr_w = getWordForms(w).words;
+		for (var i in arr_w) {
+			if (m_filt[arr_w[i]]) {
+				wc = arr_w[i];
+				break;
+			}
+		}
+	}
+	if (wc.length == 0) {
+		const arr_w = getWordForms(w1).words;
+		for (var i in arr_w) {
+			if (m_filt[arr_w[i]]) {
+				wc = arr_w[i];
+				break;
+			}
+		}
+	}
+	if (wc.length == 0) continue;
+	if (!m_word_freq[wc]) continue;
+	if (!m_rev[wc]) arr_wf.push([wc, m_word_freq[wc]]);
+	if (!m_rev[wc]) m_rev[wc] = [];
+	m_rev[wc].push(w);
+    }
+    arr_wf.sort(function(a, b) { return b[1] - a[1]; });
+
+    var displayed_word = displayLowFrequencyWords(arr_wf, m_rev);
+    displayArticleWithHighlights(text, displayed_word, m_rev, m_word_ori);
+}
+
+var debug = null;
+var debug_1 = null;
+function displayArticleWithHighlights(text, displayed_word, m_rev, m_word_ori) {
+    //console.log('aaa', displayed_word.length);
+    var sup_pos = [];
+    for (var i in displayed_word) {
+	var w = displayed_word[i];
+	for (var j in m_rev[w]) {
+		var ori_w = m_rev[w][j];
+		for (var k in m_word_ori[ori_w]) {
+			sup_pos.push([ori_w, m_word_ori[ori_w][k],  m_word_ori[ori_w][k] + ori_w.length, i]);
+		}
+	}
+    }
+    sup_pos.sort(function(a, b) { return b[1] - a[1];});
+    // debug = sup_pos;
+    var text_out = text;
+    for (var i in sup_pos) {
+	var w = sup_pos[i][0];
+	var st = sup_pos[i][1];
+	var ed = sup_pos[i][2];
+	var idx = parseInt(sup_pos[i][3])+1;
+	var sup = ` <sup style='color:gray' class='sup_${idx}' onmouseover='showTooltip(event, "${idx}")'>${idx}</sup>`;
+	text_out = text_out.slice(0, ed) + sup + text_out.slice(ed);
+    }
+    text_out = text_out.replace(/\n/g, "<br>");
+    document.getElementById('articleOutput').innerHTML = text_out;
+}
+
+function scrollToAndSelectFirstElementByClass(className) {
+    // 查找第一个具有指定类名的元素
+    const element = document.querySelector(`.${className}`);
+    
+    if (element) {
+	// 滚动到该元素的位置
+	element.scrollIntoView({
+	    behavior: 'smooth', // 平滑滚动
+	    block: 'center'     // 滚动到元素的中心
+	});
+
+	// 在滚动完成后绘制红色圆圈
+	setTimeout(() => {
+	    // 获取元素的位置和大小
+	    const rect = element.getBoundingClientRect();
+
+	    // 创建一个红色圆圈
+	    const circle = document.createElement('div');
+	    circle.className = 'highlight-circle';
+	    document.body.appendChild(circle);
+
+	    // 设置圆圈的位置
+	    circle.style.left = `${rect.left + window.pageXOffset + rect.width / 2 - 10}px`;
+	    circle.style.top = `${rect.top + window.pageYOffset + rect.height / 2 - 10}px`;
+
+	    // 添加鼠标移动事件监听器，当鼠标移动时移除圆圈
+	    const removeCircle = () => {
+		circle.remove();
+		document.removeEventListener('mousemove', removeCircle);
+	    };
+	    document.addEventListener('mousemove', removeCircle);
+	}, 500); // 延迟以确保滚动完成
+    } else {
+	console.warn(`No element found with the class name: ${className}`);
+    }
+}
+function displayLowFrequencyWords(arr_wf, m_rev) {
+    const lowFreqWordsList = document.getElementById('lowFreqWordsList');
+    var m_word_source = word_source;
+    var m_yinbiao = m_ipa;
+    var s = "";
+    var c = 0;
+    var to_search = [];
+    var to_search_w = [];
+
+    for (var i in arr_wf) {
+	var w = arr_wf[i][0];
+	to_search.push(w);
+	to_search_w.push(1);
+	c += 1;
+	if (c > 40) break;
+    }
+    var res = searchInDict({"words": to_search, "weights": to_search_w}, "", false, true);
+    var m_meaning = {};
+    for (var i in res) {
+	m_meaning[res[i][0]] = res[i][1];
+    }
+
+    c = 0;
+    var show_words = [];
+    for (var i in arr_wf) {
+	c += 1;
+	if (c > 20) break;
+	var w = arr_wf[i][0];
+	var w1 = w.slice(0, 1).toUpperCase() + w.slice(1);
+	var freq = arr_wf[i][1];
+	var ref_c = "";
+	if (m_word_source[w]) {
+		ref_c = m_word_source[w][0];
+	}
+	if (m_word_source[w1]) {
+		ref_c = m_word_source[w1][0];
+	}
+	var meaning = "";
+	var meaning_word_ori = "";
+	if (m_meaning[w]) {
+		meaning = m_meaning[w];
+		meaning_word_ori = w;
+	} else if (m_meaning[w1]) {
+		meaning = m_meaning[w1];
+		meaning_word_ori = w1;
+	} else {
+		continue;
+	}
+
+	var yb = "";
+	if (m_yinbiao[w]) yb = m_yinbiao[w];
+	else if (m_yinbiao[w1]) yb = m_yinbiao[w1];
+	yb = yb.replace(/ɹ/g, "r").replace(/ɫ/g, "l");
+
+	var word_ori = "";
+	for (var j in m_rev[w]) {
+		word_ori = m_rev[w][j];
+		break;
+	}
+	if (word_ori == meaning_word_ori) word_ori = "";
+	if (word_ori) {
+		word_ori = "(" + word_ori + ")";
+	}
+
+	s += `<tr>
+		<td onclick='scrollToAndSelectFirstElementByClass("sup_${c}")'>${c}</td>
+		<td>${meaning_word_ori}<br>${word_ori}</td>
+		<td id='yb_${c}'>${yb}</td>
+		<td>${freq}</td>
+		<td id='star_${c}'>${ref_c}</td>
+		<td id='meaning_${c}'>${meaning}</td>
+	    </tr>`;
+	show_words.push(w);
+    }
+    lowFreqWordsList.innerHTML = s;
+    return show_words;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltip = document.getElementById('tooltip');
+
+    function showTooltip(event, id) {
+	const yb = document.getElementById('yb_' + id).textContent;
+	var stars = document.getElementById('star_' + id).textContent;
+	const meaning = document.getElementById('meaning_' + id).textContent;
+
+	if (1) {
+	    //const cells = Array.from(row.getElementsByTagName('td'));
+	    //const content = cells.map(cell => cell.textContent).join(', ');
+	    if (stars) stars += "*";
+	    var content = [yb, stars, meaning].join(" ");
+
+	    // 显示浮动框并设置其位置
+	    tooltip.style.display = 'block';
+	    tooltip.style.left = (event.pageX - 5) + 'px';
+	    tooltip.style.top = (event.pageY - 5) + 'px';
+	    tooltip.textContent = content;
+	    // tooltip.style.display = 'none';
+	}
+    }
+
+    // 鼠标移出浮动框时隐藏
+    tooltip.addEventListener('mouseleave', function() {
+	tooltip.style.display = 'none';
+    });
+
+    // 将函数暴露到全局作用域以便调用
+    window.showTooltip = showTooltip;
+});
+    </script>
+</body>
+</html>
