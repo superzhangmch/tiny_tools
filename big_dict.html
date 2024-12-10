@@ -9,23 +9,25 @@
 
 <META content="MSHTML 6.00.2900.5512" name=GENERATOR></HEAD>
 <BODY><INPUT id=txt1 size=14> 
-<INPUT onclick=find_char1() type=button value=英文><BR><INPUT id=txt2 size=14> <INPUT onclick=find_char2() type=button value=中文><BR><INPUT onclick=find_char3() type=button value=中英混合> 
-<br>(只显示前200个结果；按中文意思检索时，可输入多个词语用空格间隔，但注意“A B”不同于“B A”,若想同时查两者，则输入“（A B|B A）”)
+<INPUT onclick=find_char_en() type=button value=英文><BR><INPUT id=txt2 size=14> <INPUT onclick=find_char_zh() type=button value=中文><BR><INPUT onclick=find_char_en_zh() type=button value=中英混合> 
+<br>(只显示前200个结果；按中文意思检索时，可输入多个词语用空格间隔)
 <HR>
 <script src="data/big_eng_dict.js"></script>
 <script src="data/dict_english_word_ipa.js"></script>
+<script src="data/word_source.js"></script>
+<script src="data/word_freq.js"></script>
 <A name=ttt><FONT color=blue>
 <DIV id=dd>&nbsp;</DIV>
 <SCRIPT>
-function find_char1()
+function find_char_en()
 {
 	var str=dict_str;
 	var re = new RegExp("^[^`]*$");
-	
-	
+	txt1.value = txt1.value.trim();
+
 	if(!re.test(txt1.value) || txt1.value=="")
 	{
-		alert("Invalid Input!");
+		dd.innerHTML= "input first!";
 		return;
 	}
 	ss=txt1.value;
@@ -35,70 +37,105 @@ function find_char1()
 	
 	var re = new RegExp("@"+ss+"@","gi");
 	mm=str.match(re)
-
-	if(mm)
-	{
-		str="<table border=0>";
-		for(var i=0;i<mm.length && i<200;i++)
-		{
-			s="<tr><td colspan=2><font color=red>"+mm[i].substr(1,mm[i].length-2);
-			str+=s+"<br>";		
-		}
-		str=str+"</table>"
-		str=str.replace(/`/g,"<tr><td>&nbsp;&nbsp;<td>")
-		dd.innerHTML=str;
-	}
-	else
-	{
-	alert("No Find!")
-	}
+	show_result(mm, "");
 }
-function find_char2()
+function find_char_zh()
 {
 	var str=dict_str;
 	var re = new RegExp("^[^@]*$");
-	
-	
+	txt2.value = txt2.value.trim();
+
 	if(!re.test(txt2.value) || txt2.value=="")
 	{
-		alert("Invalid Input!");
+		dd.innerHTML= "input first!";
 		return;
 	}
 	ss=txt2.value;
 	ss=ss.replace(/\?/g,"[^@]")
 	ss=ss.replace(/\*/g,"[^@]*")
-	ss=ss.replace(/ /g,"[^@]*")
 	ss=ss.replace(/\./g,"[\.]")
+	if (ss.includes(" ")) {
+		ss = ss.replace(/[ ]+/g, "|")
+		ss = "(" + ss + ")"
+	}
 	ss="[^@]*`[^@]*"+ss+"[^@]*";
 		
 	var re = new RegExp("@"+ss+"@","gi");
 	mm=str.match(re)
-
+	show_result(mm, txt2.value);
+}
+function show_result(mm, zh_str)
+{
+	var m_word_source = word_source;
+	var m_word_freq = word_freq;
+	var m_yinbiao = m_ipa;
+	var pat_re = "";
+	if (zh_str) {
+		zh_str = zh_str.replace(/\(\)\[\]\.\*\?\+\| /g, " ").replace(/ +/g, " ");
+		var arr = zh_str.split(" ");
+		pat_re = new RegExp("(" + arr.join("|") + ")", "g");
+	}
 	if(mm)
 	{
-		str="<table border=0>";
-		for(var i=0;i<mm.length && i<100;i++)
+		var found_arr = [];
+		for(var i=0; i < mm.length; i++) {
+			var arr =  mm[i].substr(1,mm[i].length-2).split("`");
+			if (arr.length != 2) continue;
+			var w = arr[0];
+			var w1 = w.toLowerCase();
+			var meaning = arr[1];
+			var yb = "";
+			var freq = 1000000000;
+			var from_cnt = 0;
+			if (m_word_source[w]) from_cnt = m_word_source[w][0];
+			else if (m_word_source[w1]) from_cnt = m_word_source[w1][0];
+
+
+			if (m_word_freq[w]) freq = m_word_freq[w];
+			else if (m_word_freq[w1]) freq = m_word_freq[w1];
+
+			if (m_yinbiao[w]) yb = m_yinbiao[w];
+			else if (m_yinbiao[w1]) yb = m_yinbiao[w1];
+
+			found_arr.push([w, yb, from_cnt, freq, meaning]);
+		}
+		found_arr.sort(function(a, b) { return b[2] - a[2]; });
+
+		str="<table border=1>";
+		str += "<tr><th>word<th>读音<th>星级<th>词频rank<th>meaning";
+		for(var i=0;i<found_arr.length && i<100;i++)
 		{
-			s="<tr><td colspan=2><font color=red>"+mm[i].substr(1,mm[i].length-2);
-			str+=s+"<br>";		
+			let [w, yb, from_cnt, freq, meaning] = found_arr[i];
+			str += "<tr><td><font color=red>"+ w + "</font>";
+			if (from_cnt == 0) from_cnt = ""; else from_cnt = from_cnt + "*";
+			if (freq == 1000000000) freq = "";
+			else if (freq > 1000) freq = (freq / 1000).toFixed(1) + "k";
+			str += "<td>" + yb;
+			str += "<td>" + from_cnt;
+			str += "<td>" + freq;
+			if (pat_re) {
+				meaning = meaning.replace(pat_re, "<font color=blue>$1</font>")
+			}
+			str += "<td>" + meaning;
 		}
 		str=str+"</table>"
-		str=str.replace(/`/g,"<tr><td>&nbsp;&nbsp;<td>")
 		dd.innerHTML=str;
 	}
 	else
 	{
-	alert("No Find!")
+		dd.innerHTML= "no find!";
 	}	
 }
-function find_char3(type)
+function find_char_en_zh(type)
 {
 	var str=dict_str;
 	var re = new RegExp("^[^`]*$");
 	var re1 = new RegExp("^[^@]*$");
+	txt1.value = txt1.value.trim();
+	txt2.value = txt2.value.trim();
 	if(!re.test(txt1.value) || !re1.test(txt2.value))
 	{
-		alert("Invalid Input!");
+		dd.innerHTML= "input first!";
 		return;
 	}
 	
@@ -116,25 +153,9 @@ function find_char3(type)
 	
 	var re = new RegExp("@"+ss+"@","gi");
 	mm=str.match(re)
-
-	if(mm)
-	{
-		str="<table border=0>";
-		for(var i=0;i<mm.length && i<100;i++)
-		{
-			s="<tr><td colspan=2><font color=red>"+mm[i].substr(1,mm[i].length-2);
-			str+=s+"<br>";		
-		}
-		str=str+"</table>"
-		str=str.replace(/`/g,"<tr><td>&nbsp;&nbsp;<td>")
-		dd.innerHTML=str;
-	}
-	else
-	{
-	alert("No Find!")
-	}	
+	show_result(mm, txt2.value);
 }
 </SCRIPT>
 </FONT>
 <HR>
-<A href="http://127.0.0.1/tools/单词.htm#ttt">TOP</A> </BODY></HTML>
+<A href="#ttt">TOP</A> </BODY></HTML>
