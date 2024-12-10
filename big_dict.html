@@ -110,7 +110,7 @@ function show_result(mm, zh_str)
 			if (from_cnt == 0) from_cnt = ""; else from_cnt = from_cnt + "*";
 			if (freq == 1000000000) freq = "";
 			else if (freq > 1000) freq = (freq / 1000).toFixed(1) + "k";
-			str += "<td>" + yb;
+			str += "<td><a href='javascript:word_speak(\""+w+"\")'>听</a>&nbsp;" + yb;
 			str += "<td>" + from_cnt;
 			str += "<td>" + freq;
 			if (pat_re) {
