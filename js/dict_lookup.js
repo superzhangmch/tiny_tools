@@ -313,3 +313,9 @@ function build_yb_to_word(m_w2yb)
         }
         return m;
 }
+
+function word_speak(text) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US'; // 'zh-CN'; 
+    window.speechSynthesis.speak(utterance);
+}
