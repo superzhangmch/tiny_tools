@@ -202,7 +202,8 @@ function displayResults(results) {
 	 if (freq == 1000000000) freq = "";
 	 else if (freq > 1000) freq = (freq / 1000).toFixed(1) + "k";
 
-         if (phonetic) phonetic = "<a href='javascript:word_speak(\""+word+"\")'>听</a>&nbsp;" + phonetic
+         if (phonetic) phonetic = "<a href='javascript:word_speak(\""+word+"\")'>听</a>&nbsp;" + phonetic;
+	 else phonetic = "<a href='javascript:word_speak(\""+word+"\")'>听</a>&nbsp;";
          table += `<tr><td>${word}</td><td>${phonetic}</td><td>${from_cnt}</td><td>${freq}</td><td>${definition}</td></tr>`;
     });
     table += '</table>';
