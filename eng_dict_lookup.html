@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -92,14 +93,11 @@ input[type="password"] {
 <script src="data/big_eng_dict.js"></script>
 <script src="js/dict_lookup.js"></script>
 <script src="data/dict_english_word_ipa.js"></script>
+<script src="data/word_source.js"></script>
+<script src="data/word_freq.js"></script>
 </body>
 </html>
 <script>
-        function speak(text) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'en-US'; // 'zh-CN'; 
-            window.speechSynthesis.speak(utterance);
-        }
 var m_yb2w = null;
 function searchYinBiao(input)
 {
@@ -181,15 +179,31 @@ function displayResults(results) {
         resultDiv.innerHTML = '<p>No results found.</p>';
         return;
     }
+    var m_word_source = word_source;
+    var m_word_freq = word_freq;
 
-    var table = '<table><tr><th>Word</th><th>phonetic</th><th>Definition</th></tr>';
+    var table = '<table><tr><th>Word</th><th>phonetic</th><th>stars</th><th>#freq</th><th>Definition</th></tr>';
     results.forEach(result => {
          var word = result[0];
+         var w = word;
+         var w1 = w.toLowerCase();
+
          var definition = result[1];
-         var phonetic = m_ipa[word.toLowerCase()];
+         var phonetic = m_ipa[w1];
          if (phonetic == undefined) phonetic = '';
-         if (phonetic) phonetic = "<a href='javascript:speak(\""+word+"\")'>听</a>&nbsp;" + phonetic
-         table += `<tr><td>${word}</td><td>${phonetic}</td><td>${definition}</td></tr>`;
+
+	 var freq = 1000000000;
+	 var from_cnt = 0;
+	 if (m_word_source[w]) from_cnt = m_word_source[w][0];
+	 else if (m_word_source[w1]) from_cnt = m_word_source[w1][0];
+	 if (m_word_freq[w]) freq = m_word_freq[w];
+	 else if (m_word_freq[w1]) freq = m_word_freq[w1];
+	 if (from_cnt == 0) from_cnt = ""; else from_cnt = from_cnt + "*";
+	 if (freq == 1000000000) freq = "";
+	 else if (freq > 1000) freq = (freq / 1000).toFixed(1) + "k";
+
+         if (phonetic) phonetic = "<a href='javascript:word_speak(\""+word+"\")'>听</a>&nbsp;" + phonetic
+         table += `<tr><td>${word}</td><td>${phonetic}</td><td>${from_cnt}</td><td>${freq}</td><td>${definition}</td></tr>`;
     });
     table += '</table>';
     resultDiv.innerHTML = table;
