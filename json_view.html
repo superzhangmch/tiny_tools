@@ -368,7 +368,7 @@ function hide_show(td_idx)
 		}
 
 	        const valueCell = row.insertCell();
-		if (key == '_base64前_' || key == '_原始_') {
+		if (key == '_base64前_' || key == '_原始_' || key == '_uriDecode前_') {
 		    var node = document.createTextNode(val)
 		    var span = document.createElement("span");
 		    span.appendChild(node);
