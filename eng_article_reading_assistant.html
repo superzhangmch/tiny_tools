@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>English Article Reading Assistant</title>
+    <title>Low Frequency Word Finder</title>
     <style>
 .highlight-circle {
     position: absolute;
@@ -34,16 +34,6 @@ textarea {
     width: 80%;
 }
 
-#articleOutput {
-    width: 60%;
-    padding-right: 20px;
-}
-
-#lowFreqWordsTable {
-    width: 35%;
-    border-collapse: collapse;
-}
-
 #lowFreqWordsTable th, #lowFreqWordsTable td {
     border: 1px solid #ddd;
     padding: 1px;
@@ -63,12 +53,15 @@ textarea {
 	<textarea id="textInput" placeholder="Enter your article here..."></textarea>
 	<br>
 	<button id="processButton">Find Low Frequency Words</button>
+	<button id="pasteButton">paste</button>
+        <button id="clearButton">clear</button>
 <div id="tooltip" style="display:none; position:absolute; background-color:lightyellow; border:1px solid black; padding:5px;">
     <!-- 动态内容将在这里插入 -->
 </div>
     <div id="container">
-	<div id="output">
-	    <div id="articleOutput"></div>
+	<table><tr>
+	    <td style='width:60%'><div id="articleOutput"></div>
+	    <td valign=top>
 	    <table id="lowFreqWordsTable">
 		<thead>
 		    <tr>
@@ -82,7 +75,7 @@ textarea {
 		</thead>
 		<tbody id="lowFreqWordsList"></tbody>
 	    </table>
-	</div>
+	</table>
     </div>
     <script src="data/big_eng_dict.js"></script>
     <script src="data/dict_english_word_ipa.js"></script>
@@ -90,6 +83,23 @@ textarea {
     <script src="data/word_source.js"></script>
     <script src="js/dict_lookup.js"></script>
     <script>
+
+        const textarea = document.getElementById('textInput');
+        const pasteButton = document.getElementById('pasteButton');
+        const clearButton = document.getElementById('clearButton');
+
+        pasteButton.addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                textarea.value = text;
+            } catch (err) {
+                alert('Failed to read clipboard contents: ' + err);
+            }
+        });
+
+        clearButton.addEventListener('click', () => {
+            textarea.value = '';
+        });
 
 document.getElementById('processButton').addEventListener('click', function () {
 	process_article(1);
