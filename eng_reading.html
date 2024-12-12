@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English Reading</title>
+    <style>
+	#inputArea, #outputArea {
+	    width: 95%;
+	    //margin: 20px auto;
+	    padding: 10px;
+	    border: 1px solid #ccc;
+	    min-height: 200px;
+	}
+	#outputArea {
+	    background-color: #f9f9f9;
+	    font-size: 1.2em;
+	    line-height: 1.6em;
+	    display: none; /* Initially hidden */
+	}
+	button {
+	    margin: 10px auto;
+	    padding: 10px 20px;
+	    font-size: 1em;
+	}
+#lowFreqWordsTable th, #lowFreqWordsTable td {
+    border: 1px solid #ddd;
+    padding: 1px;
+    text-align: left;
+}
+.highlight-circle {
+    position: absolute;
+    width: 20px;  /* 圆圈的直径 */
+    height: 20px; /* 圆圈的直径 */
+    border: 2px solid red; /* 红色边框 */
+    border-radius: 50%;    /* 使其成为圆形 */
+    pointer-events: none;  /* 让圆圈不干扰鼠标事件 */
+    z-index: 1000; /* 确保它在其他元素之上 */
+}
+#tooltip {
+    display: none;
+    position: absolute;
+    background-color: lightyellow;
+    border: 1px solid black;
+    padding: 5px;
+    z-index: 1000;
+}
+    </style>
+    <script src="data/big_eng_dict.js"></script>
+    <script src="data/dict_english_word_ipa.js"></script>
+    <script src="data/word_freq.js"></script>
+    <script src="data/word_source.js"></script>
+    <script src="js/dict_lookup.js"></script>
+</head>
+<body>
+
+<button id="processButton" onclick="processContent()">处理文本</button>
+<button id="clearButton" onclick="clearContent()">清空</button>
+<div id="tooltip" style="display:none; position:absolute; background-color:lightyellow; border:1px solid black; padding:5px;">
+    <!-- 动态内容将在这里插入 -->
+</div>
+<div id="inputArea" contenteditable="true" oninput="handlePaste()">
+</div>
+
+<table><tr><td valign=top>
+<div id="outputArea">
+    <h2 id="outputTitle"></h2>
+    <div id="outputContent"></div>
+</div>
+<td valign=top>
+	    <table id="lowFreqWordsTable">
+		<thead>
+		    <tr>
+			<th>#</th>
+			<th>word</th>
+			<th></th>
+			<th>word rank</th>
+			<th>stars</th>
+			<th>meaning</th>
+		    </tr>
+		</thead>
+		<tbody id="lowFreqWordsList"></tbody>
+	    </table>
+	</table>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/readability/0.4.4/Readability.js"></script>
+<script>
+function process_article(text) {
+    const wordRegex = /[a-zA-Z][a-zA-Z0-9]*[a-zA-Z]/g;
+    const words = text.match(wordRegex);
+    var m_word_freq = word_freq;
+    var m_word_source = word_source;
+
+    var m_word_ori = {};
+    while ((match = wordRegex.exec(text)) !== null) {
+	var w = match[0];
+	var idx = match.index;
+	if (!m_word_ori[w]) {
+		m_word_ori[w] = [];
+	}
+	m_word_ori[w].push(idx);
+    }
+    //debug_1 = m_word_ori;
+
+    var m_rev = {};
+    var arr_wf = [];
+    for (var w in m_word_ori) {
+	var w1 = w.toLowerCase();
+
+	var wc = "";
+	var wc1 = "";
+
+	if (wc.length == 0 && m_word_freq[w1]) { wc = w1;}
+
+	const arr_w = getWordForms(w1).words;
+	var wc1_freq = 100000000;
+	if (m_word_freq[w1]) wc1_freq = m_word_freq[w1];
+	for (var i in arr_w) {
+		var cur_w = arr_w[i];
+		if (cur_w == w1) continue;
+		if (m_word_freq[cur_w]) {
+			if (m_word_freq[cur_w] < wc1_freq) {
+				wc1 = arr_w[i];
+				wc1_freq = m_word_freq[wc1];
+			}
+		}
+	}
+
+	if (wc.length == 0 && wc1.length == 0) continue;
+
+	if (wc.length > 0) {
+		if (!m_rev[wc]) arr_wf.push([wc, m_word_freq[wc]]);
+		if (!m_rev[wc]) m_rev[wc] = [];
+		m_rev[wc].push(w);
+	}
+	if (wc1.length > 0) {
+		if (!m_rev[wc1]) arr_wf.push([wc1, m_word_freq[wc1]]);
+		if (!m_rev[wc1]) m_rev[wc1] = [];
+		m_rev[wc1].push(w);
+	}
+    }
+    // console.log(arr_wf, m_rev);
+    arr_wf.sort(function(a, b) { return b[1] - a[1]; });
+
+    var displayed_word = displayLowFrequencyWords(arr_wf, m_rev);
+
+    var m = {};
+    for (var i in displayed_word) m[displayed_word[i]] = parseInt(i)+1;
+    // console.log(displayed_word.length);
+
+    var m_word_show_sup = {};
+    for (var w in m_rev) {
+	if (!m[w]) continue;
+	for (var w1 of m_rev[w]) {
+		if (!m_word_show_sup[w1]) m_word_show_sup[w1] = [];
+		m_word_show_sup[w1].push(m[w]);
+	}
+    }
+    displayArticleWithHighlights(m_word_show_sup);
+    debug = m_word_show_sup;
+}
+
+function add_superscript(text, m_word_show_sup) {
+  const regex = /[a-zA-Z][a-zA-Z0-9]*[a-zA-Z]/g;
+
+  return text.replace(regex, (match) => {
+    if (m_word_show_sup[match]) {
+      var arr = [];
+      for (var idx of m_word_show_sup[match]) {
+      	arr.push('sup_'+idx);
+      }
+      var cls_name = arr.join(" ");
+      return match + ` <sup onmouseover='showTooltip(event, "${m_word_show_sup[match]}")' style='color:gray' class="${cls_name}">${m_word_show_sup[match]}</sup>`;
+    }
+    return match;
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const tooltip = document.getElementById('tooltip');
+
+    function showTooltip(event, id_arr) {
+        var content_arr = [];
+        for (var id of id_arr.split(",")) {
+		const yb = document.getElementById('yb_' + id).textContent;
+		var stars = document.getElementById('star_' + id).textContent;
+		const meaning = document.getElementById('meaning_' + id).textContent;
+
+		if (stars) stars += "*";
+		content_arr.push([yb, stars, meaning].join(" "));
+	}
+
+	// 显示浮动框并设置其位置
+	tooltip.style.display = 'block';
+	tooltip.style.left = (event.pageX - 5) + 'px';
+	tooltip.style.top = (event.pageY - 5) + 'px';
+	tooltip.innerHTML = content_arr.join("\n<br>");
+	// tooltip.style.display = 'none';
+    }
+
+    tooltip.addEventListener('mouseleave', function() {
+	tooltip.style.display = 'none';
+    });
+    window.showTooltip = showTooltip;
+});
+	function wrapWordsWithParenthesesRecursively(element, m_word_show_sup) {
+	    // Get the child nodes of the element
+	    const childNodes = element.childNodes;
+
+	    // Use a for loop to iterate over each child node
+	    for (let i = 0; i < childNodes.length; i++) {
+		const child = childNodes[i];
+		
+		if (child.nodeType === Node.TEXT_NODE) {
+		    // If the child node is a text node, process the text
+		    var text = child.textContent;
+		    if (text.length == 0) return;
+		    var newText = add_superscript(text, m_word_show_sup);
+		    if (newText != text) {
+		        var container = document.createElement('span');
+            		container.innerHTML = newText;
+            		element.replaceChild(container, child);
+		    }
+
+		} else if (child.nodeType === Node.ELEMENT_NODE) {
+		    // If the child node is an element, recurse into it
+		    wrapWordsWithParenthesesRecursively(child, m_word_show_sup);
+		}
+	    }
+	}
+
+function scrollToAndSelectFirstElementByClass(className) {
+    // 查找第一个具有指定类名的元素
+    const element = document.querySelector(`.${className}`);
+    
+    if (element) {
+	// 滚动到该元素的位置
+	element.scrollIntoView({
+	    behavior: 'smooth', // 平滑滚动
+	    block: 'center'     // 滚动到元素的中心
+	});
+
+	// 在滚动完成后绘制红色圆圈
+	setTimeout(() => {
+	    // 获取元素的位置和大小
+	    const rect = element.getBoundingClientRect();
+
+	    // 创建一个红色圆圈
+	    const circle = document.createElement('div');
+	    circle.className = 'highlight-circle';
+	    document.body.appendChild(circle);
+
+	    // 设置圆圈的位置
+	    circle.style.left = `${rect.left + window.pageXOffset + rect.width / 2 - 10}px`;
+	    circle.style.top = `${rect.top + window.pageYOffset + rect.height / 2 - 10}px`;
+
+	    // 添加鼠标移动事件监听器，当鼠标移动时移除圆圈
+	    const removeCircle = () => {
+		circle.remove();
+		document.removeEventListener('mousemove', removeCircle);
+	    };
+	    document.addEventListener('mousemove', removeCircle);
+	}, 500); // 延迟以确保滚动完成
+    } else {
+	console.warn(`No element found with the class name: ${className}`);
+    }
+}
+function displayArticleWithHighlights(m_word_show_sup) {
+  var node = document.getElementById('outputArea');
+  wrapWordsWithParenthesesRecursively(node, m_word_show_sup);
+}
+function displayLowFrequencyWords(arr_wf, m_rev) {
+    const lowFreqWordsList = document.getElementById('lowFreqWordsList');
+    var m_word_source = word_source;
+    var m_yinbiao = m_ipa;
+    var s = "";
+    var c = 0;
+    var to_search = [];
+    var to_search_w = [];
+
+    for (var i in arr_wf) {
+	var w = arr_wf[i][0];
+	to_search.push(w);
+	to_search_w.push(1);
+	c += 1;
+	if (c > 50) break;
+    }
+    var res = searchInDict({"words": to_search, "weights": to_search_w}, "", false, true);
+    var m_meaning = {};
+    for (var i in res) {
+	m_meaning[res[i][0]] = res[i][1];
+    }
+
+    c = 0;
+    var show_words = [];
+    for (var i in arr_wf) {
+	if (c > 20) break;
+	var w = arr_wf[i][0];
+	var w1 = w.slice(0, 1).toUpperCase() + w.slice(1);
+	var freq = arr_wf[i][1];
+	var ref_c = "";
+	if (m_word_source[w]) {
+		ref_c = m_word_source[w][0];
+	}
+	if (m_word_source[w1]) {
+		ref_c = m_word_source[w1][0];
+	}
+	var meaning = "";
+	var meaning_word_ori = "";
+	if (m_meaning[w]) {
+		meaning = m_meaning[w];
+		meaning_word_ori = w;
+	} else if (m_meaning[w1]) {
+		meaning = m_meaning[w1];
+		meaning_word_ori = w1;
+	} else {
+		continue;
+	}
+
+	var yb = "";
+	if (m_yinbiao[w]) yb = m_yinbiao[w];
+	else if (m_yinbiao[w1]) yb = m_yinbiao[w1];
+	yb = yb.replace(/ɹ/g, "r").replace(/ɫ/g, "l");
+
+	var word_ori = "";
+	for (var j in m_rev[w]) {
+		word_ori = m_rev[w][j];
+		break;
+	}
+	if (word_ori == meaning_word_ori) word_ori = "";
+	if (word_ori) {
+		word_ori = "(" + word_ori + ")";
+	}
+	if (freq > 1000) freq = (freq/1000).toFixed(2) + "k";
+
+	c += 1;
+	s += `<tr>
+		<td onclick='scrollToAndSelectFirstElementByClass("sup_${c}")'>${c}</td>
+		<td>${meaning_word_ori}<br>${word_ori}</td>
+		<td id='yb_${c}'>${yb}</td>
+		<td>${freq}</td>
+		<td id='star_${c}'>${ref_c}</td>
+		<td id='meaning_${c}'>${meaning}</td>
+	    </tr>`;
+	show_words.push(w);
+    }
+    lowFreqWordsList.innerHTML = s;
+    return show_words;
+}
+
+    var debug = null;
+    function processContent() {
+	const inputArea = document.getElementById('inputArea');
+	const outputArea = document.getElementById('outputArea');
+	const outputTitle = document.getElementById('outputTitle');
+	const outputContent = document.getElementById('outputContent');
+
+	// 获取用户粘贴的HTML内容
+	const userHTML = inputArea.innerHTML;
+
+	// 创建一个文档对象
+	const doc = document.implementation.createHTMLDocument();
+	doc.documentElement.innerHTML = userHTML;
+
+	// 使用 Readability 库
+	const reader = new Readability(doc);
+	const article = reader.parse();
+
+	// 将处理后的内容展示在 outputArea
+	outputTitle.textContent = article.title || '无标题';
+	outputContent.innerHTML = article.content;
+	debug = article;
+
+	// 隐藏输入区域，显示处理后的内容
+	inputArea.style.display = 'none';
+	outputArea.style.display = 'block';
+
+	process_article(article.textContent);
+    }
+
+    function clearContent() {
+	const inputArea = document.getElementById('inputArea');
+	const outputArea = document.getElementById('outputArea');
+	const low_w = document.getElementById('lowFreqWordsList');
+	low_w.innerHTML = '';
+
+	inputArea.innerHTML = '';
+	inputArea.style.display = 'block';
+	outputArea.style.display = 'none';
+    }
+
+    function handlePaste() {
+	setTimeout(processContent, 100); // 使用setTimeout来确保粘贴内容完成后再处理
+    }
+</script>
+
+</body>
+</html>
