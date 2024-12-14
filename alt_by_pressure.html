@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高度计算器</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+            color: #333;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #34495e;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52,152,219,0.2);
+        }
+
+        .button {
+            background-color: #3498db;
+            color: white;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            width: 100%;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .button:hover {
+            background-color: #2980b9;
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .result-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #856404;
+        }
+
+        .error {
+            color: #dc3545;
+            margin-top: 5px;
+            font-size: 14px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>高度计算器</h1>
+        
+        <div class="input-group">
+            <label for="temperature">当前温度 (°C)</label>
+            <input type="number" id="temperature" placeholder="例如：15" step="0.1" value="15">
+            <div class="error" id="temperatureError">请输入有效的温度值</div>
+        </div>
+
+        <div class="input-group">
+            <label for="pressure">当前气压 (hPa)</label>
+            <input type="number" id="pressure" placeholder="例如：1020" step="0.1">
+            <div class="error" id="pressureError">请输入有效的气压值</div>
+        </div>
+
+        <div class="input-group">
+            <label for="seaLevelPressure">海平面气压 (hPa)</label>
+            <input type="number" id="seaLevelPressure" placeholder="例如：1013.25" step="0.1" value="1013.25">
+            <div class="error" id="seaLevelError">请输入有效的海平面气压值</div>
+        </div>
+
+        <button class="button" onclick="calculateHeight()">计算高度</button>
+
+        <div class="result">
+            <div>计算结果：</div>
+            <div class="result-value" id="result">-- 米</div>
+        </div>
+
+        <div class="info">
+            注意：
+            <ul>
+                <li>标准海平面气压为 1013.25 hPa</li>
+                <li>计算结果为估算值，实际高度可能有所偏差</li>
+                <li>气压会随天气变化而变化</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function calculateHeight() {
+            // 获取输入值
+            const temperature = parseFloat(document.getElementById('temperature').value);
+            const pressure = parseFloat(document.getElementById('pressure').value);
+            const seaLevelPressure = parseFloat(document.getElementById('seaLevelPressure').value);
+
+            // 重置错误提示
+            document.getElementById('temperatureError').style.display = 'none';
+            document.getElementById('pressureError').style.display = 'none';
+            document.getElementById('seaLevelError').style.display = 'none';
+
+            // 验证输入
+            let hasError = false;
+            if (isNaN(temperature) || temperature < -100 || temperature > 100) {
+                document.getElementById('temperatureError').style.display = 'block';
+                hasError = true;
+            }
+            if (isNaN(pressure) || pressure < 0 || pressure > 1100) {
+                document.getElementById('pressureError').style.display = 'block';
+                hasError = true;
+            }
+            if (isNaN(seaLevelPressure) || seaLevelPressure < 900 || seaLevelPressure > 1100) {
+                document.getElementById('seaLevelError').style.display = 'block';
+                hasError = true;
+            }
+
+            if (hasError) return;
+
+            // 计算高度
+            const T = temperature + 273.15; // 转换为开尔文温度
+            const altitude = (T/0.0065) * (1 - Math.pow(pressure/seaLevelPressure, 0.190284));
+            
+            // 显示结果
+            document.getElementById('result').textContent = 
+                `${Math.round(altitude * 10) / 10} 米`;
+        }
+
+        // 为输入框添加回车键监听
+        document.querySelectorAll('input').forEach(input => {
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    calculateHeight();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
