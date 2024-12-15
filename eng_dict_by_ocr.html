@@ -185,7 +185,7 @@
 	    const sy = (rect.top - canvasRect.top) * scaleY;
 	    const sw = rect.width * scaleX;
 	    const sh = rect.height * scaleY;
-	    console.log(rect.left, rect.top, canvasRect.left, canvasRect.top, 'vv')
+	    // console.log(rect.left, rect.top, canvasRect.left, canvasRect.top, 'vv')
 
 	    _selectionLeft = sx;
 	    _selectionTop = sy;
@@ -286,7 +286,26 @@
 			    search_words_and_show(arr_w);
 		}).catch(err => { console.error('OCR ERROR:', err); });
 	}
+
+function build_stop_words() {
+	var stop_words = "i me my we our ours you your yours he him his she her hers it its they them their theirs what which who whom this that these those am is are was were be been being have has had having do does did doing a an the and but if or as of at by for with into to from up down in out on why how all few some such no nor not only own same so than too very s t can will just don now".split(" ");
+	var m_stop = {};
+	for (var w of stop_words) {
+    		m_stop[w] = 1;
+    		m_stop[w[0].toUpperCase() + w.slice(1)] = 1;
+	}
+	return m_stop;
+}
+
+var m_stop = null;
 function search_words_and_show(arr_w) {
+    if (!m_stop) m_stop = build_stop_words();
+    var arr_w1 = [];
+    for (var w of arr_w) {
+    	if (!m_stop[w]) arr_w1.push(w);
+    }
+    if (arr_w1.length > 0) arr_w = arr_w1;
+
     ocrOutput.innerHTML = "";
     var ret = get_result_multi(arr_w, false, true);
     var m_res = ret[1];
@@ -300,7 +319,7 @@ function search_words_and_show(arr_w) {
 			    if (!r) continue;
 			    w_all[r[0]] = 1;
 		    }
-		    console.log(w_all);
+		    // console.log(w_all);
 		    var arr = [];
 		    for (var r of results) {
 			    if (!r) continue;
