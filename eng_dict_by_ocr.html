@@ -39,6 +39,8 @@
     <canvas id="canvas"></canvas>
     <button id="toggleCamera">Open Camera</button>
     <input type="file" accept="image/*" onchange="handleImageUpload(event)">
+    自动读<input type="checkbox" id="auto_read" name="multiCheck" value="1">
+
     <div id="ocr-output"></div>
     <div id="selection"></div>
 
@@ -291,7 +293,10 @@
 				ocrOutput.innerHTML = "no found";
 				return;
 			    }
-			    search_words_and_show(arr_w);
+			    var arr_w = search_words_and_show(arr_w);
+			    if (arr_w.length < 4 && document.querySelectorAll('input[name="multiCheck"]:checked').length == 1) {
+				word_speak(arr_w.join(" "));
+			    }
 		}).catch(err => { console.error('OCR ERROR:', err); });
 	}
 
@@ -299,8 +304,8 @@ function build_stop_words() {
 	var stop_words = "i me my we our ours you your yours he him his she her hers it its they them their theirs what which who whom this that these those am is are was were be been being have has had having do does did doing a an the and but if or as of at by for with into to from up down in out on why how all few some such no nor not only own same so than too very s t can will just don now".split(" ");
 	var m_stop = {};
 	for (var w of stop_words) {
-    		m_stop[w] = 1;
-    		m_stop[w[0].toUpperCase() + w.slice(1)] = 1;
+		m_stop[w] = 1;
+		m_stop[w[0].toUpperCase() + w.slice(1)] = 1;
 	}
 	return m_stop;
 }
@@ -310,7 +315,7 @@ function search_words_and_show(arr_w) {
     if (!m_stop) m_stop = build_stop_words();
     var arr_w1 = [];
     for (var w of arr_w) {
-    	if (!m_stop[w]) arr_w1.push(w);
+	if (!m_stop[w]) arr_w1.push(w);
     }
     if (arr_w1.length > 0) arr_w = arr_w1;
 
@@ -369,7 +374,8 @@ function search_words_and_show(arr_w) {
 	    } else {
 		    ocrOutput.innerHTML += `<li><span class=word>${w_ori}</span><span class=ipa>&nbsp;</span><span class=meaning>no found</span></li>`;
 	    }
-    } 
+    }
+    return arr_w1;
 }
     </script>
 </body>
