@@ -3,280 +3,314 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>拍照画滑指查词</title>
+    <title>拍照选词查词</title>
     <style>
-        #video, #canvas {
-            width: 100%;
-            max-width: 600px;
-            margin-bottom: 20px;
-            display: none; /* Initially hidden */
-        }
-        #canvas {
-            border: 1px solid #ddd;
-        }
-        #selection {
-            position: absolute;
-            border: 2px dashed #333;
-            display: none;
-            pointer-events: none;
-        }
-        #ocr-output {
-            margin-top: 20px;
-            color: #333;
-        }
-        button {
-            margin-right: 10px;
-            padding: 10px;
-            cursor: pointer;
-        }
-        span.word {font-weight: bold; color:red}
-        span.ipa {}
-        span.meaning {font-size:14px;color:blue}
+	#video, #canvas {
+	    width: 100%;
+	    max-width: 600px;
+	    margin-bottom: 20px;
+	    display: none; /* Initially hidden */
+	}
+	#canvas {
+	    border: 1px solid #ddd;
+	}
+	#selection {
+	    position: absolute;
+	    border: 2px dashed #333;
+	    display: none;
+	    pointer-events: none;
+	}
+	#ocr-output {
+	    margin-top: 20px;
+	    color: #333;
+	}
+	button {
+	    margin-right: 10px;
+	    padding: 10px;
+	    cursor: pointer;
+	}
+	span.word {font-weight: bold; color:red}
+	span.ipa {}
+	span.meaning {font-size:14px;color:blue}
     </style>
 </head>
 <body>
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
     <button id="toggleCamera">Open Camera</button>
+    <input type="file" accept="image/*" onchange="handleImageUpload(event)">
     <div id="ocr-output"></div>
     <div id="selection"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="data/big_eng_dict.js"></script>
-    <script src="js/dict_lookup.js"></script>
+    <script src="js/dict_lookup.js?a=2"></script>
     <script src="data/dict_english_word_ipa.js"></script>
+    <script src="data/word_source.js"></script>
+    <script src="data/word_freq.js"></script>
 
     <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const toggleCameraButton = document.getElementById('toggleCamera');
-        const ocrOutput = document.getElementById('ocr-output');
-        const selection = document.getElementById('selection');
+	const video = document.getElementById('video');
+	const canvas = document.getElementById('canvas');
+	const toggleCameraButton = document.getElementById('toggleCamera');
+	const ocrOutput = document.getElementById('ocr-output');
+	const selection = document.getElementById('selection');
 
-        let stream = null;
-        let isCameraOn = false;
-        let isSelecting = false;
-        let startX, startY;
+	let stream = null;
+	let isCameraOn = false;
+	let isSelecting = false;
+	let startX, startY;
 
-        toggleCameraButton.addEventListener('click', toggleCamera);
+	toggleCameraButton.addEventListener('click', toggleCamera);
 
-        function toggleCamera() {
-            if (isCameraOn) {
-                capturePhoto();
-            } else {
-                openCamera();
-            }
-        }
+	function toggleCamera() {
+	    if (isCameraOn) {
+		capturePhoto();
+	    } else {
+		openCamera();
+	    }
+	}
 
-        function openCamera() {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-                .then(s => {
-                    stream = s;
-                    video.srcObject = stream;
-                    video.style.display = 'block';
-                    canvas.style.display = 'none';
-                    toggleCameraButton.textContent = 'Capture Photo';
-                    isCameraOn = true;
-                })
-                .catch(err => {
-                    console.error("Error accessing the camera: ", err);
-                });
-        }
+	function openCamera() {
+	    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+		.then(s => {
+		    stream = s;
+		    video.srcObject = stream;
+		    video.style.display = 'block';
+		    canvas.style.display = 'none';
+		    toggleCameraButton.textContent = 'Capture Photo';
+		    isCameraOn = true;
+		})
+		.catch(err => {
+		    console.error("Error accessing the camera: ", err);
+		});
+	}
 
-        function capturePhoto() {
-            const context = canvas.getContext('2d');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+	function capturePhoto() {
+	    const context = canvas.getContext('2d');
+	    canvas.width = video.videoWidth;
+	    canvas.height = video.videoHeight;
+	    context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // 停止视频流
-            stream.getTracks().forEach(track => track.stop());
-            video.style.display = 'none';
-            canvas.style.display = 'block';
-            toggleCameraButton.textContent = 'Open Camera';
-            isCameraOn = false;
-        }
+	    // 停止视频流
+	    stream.getTracks().forEach(track => track.stop());
+	    video.style.display = 'none';
+	    canvas.style.display = 'block';
+	    toggleCameraButton.textContent = 'Open Camera';
+	    isCameraOn = false;
+	}
+ 	function handleImageUpload(event) {
+	    const file = event.target.files[0];
+	    
+	    if (file && file.type.startsWith('image/')) {
+		const reader = new FileReader();
+		
+		reader.onload = function(e) {
+		    const img = new Image();
+		    
+		    img.onload = function() {
+			const context = canvas.getContext('2d');
+			canvas.width = img.width;
+			canvas.height = img.height;
+			context.drawImage(img, 0, 0, canvas.width, canvas.height);
+			canvas.style.display = 'block';
+		    };
+		    
+		    img.src = e.target.result;
+		};
+		
+		reader.readAsDataURL(file);
+	    } else {
+		alert('Please upload an image file');
+	    }
+	}
 
-        // 鼠标或触摸事件处理选择区域
-        canvas.addEventListener('mousedown', startSelection);
-        canvas.addEventListener('mousemove', updateSelection);
-        canvas.addEventListener('mouseup', finishSelection);
+	// 鼠标或触摸事件处理选择区域
+	canvas.addEventListener('mousedown', startSelection);
+	canvas.addEventListener('mousemove', updateSelection);
+	canvas.addEventListener('mouseup', finishSelection);
 
-        canvas.addEventListener('touchstart', startSelection, { passive: false });
-        canvas.addEventListener('touchmove', updateSelection, { passive: false });
-        canvas.addEventListener('touchend', finishSelection, { passive: false });
+	canvas.addEventListener('touchstart', startSelection, { passive: false });
+	canvas.addEventListener('touchmove', updateSelection, { passive: false });
+	canvas.addEventListener('touchend', finishSelection, { passive: false });
 
-        function startSelection(event) {
-            event.preventDefault();
-            isSelecting = true;
-            const rect = canvas.getBoundingClientRect();
-            startX = (event.clientX || event.touches[0].clientX) - rect.left;
-            startY = (event.clientY || event.touches[0].clientY) - rect.top;
-            selection.style.left = startX + rect.left + 'px';
-            selection.style.top = startY + rect.top + 'px';
-            selection.style.width = 0;
-            selection.style.height = 0;
-            selection.style.display = 'block';
-        }
+	function startSelection(event) {
+	    event.preventDefault();
+	    isSelecting = true;
+	    const rect = canvas.getBoundingClientRect();
+	    startX = (event.clientX || event.touches[0].clientX) - rect.left;
+	    startY = (event.clientY || event.touches[0].clientY) - rect.top;
+	    selection.style.left = startX + rect.left + 'px';
+	    selection.style.top = startY + rect.top + 'px';
+	    selection.style.width = 0;
+	    selection.style.height = 0;
+	    selection.style.display = 'block';
+	}
 
-        function updateSelection(event) {
-            if (!isSelecting) return;
-            event.preventDefault();
+	function updateSelection(event) {
+	    if (!isSelecting) return;
+	    event.preventDefault();
 
-            const rect = canvas.getBoundingClientRect();
-            const currentX = (event.clientX || event.touches[0].clientX) - rect.left;
-            const currentY = (event.clientY || event.touches[0].clientY) - rect.top;
+	    const rect = canvas.getBoundingClientRect();
+	    const currentX = (event.clientX || event.touches[0].clientX) - rect.left;
+	    const currentY = (event.clientY || event.touches[0].clientY) - rect.top;
 
-            const width = Math.abs(currentX - startX);
-            const height = Math.abs(currentY - startY);
+	    const width = Math.abs(currentX - startX);
+	    const height = Math.abs(currentY - startY);
 
-            selection.style.width = width + 'px';
-            selection.style.height = height + 'px';
+	    selection.style.width = width + 'px';
+	    selection.style.height = height + 'px';
 
-            if (currentX < startX) {
-                selection.style.left = currentX + rect.left + 'px';
-            }
-            if (currentY < startY) {
-                selection.style.top = currentY + rect.top + 'px';
-            }
-        }
+	    if (currentX < startX) {
+		selection.style.left = currentX + rect.left + 'px';
+	    }
+	    if (currentY < startY) {
+		selection.style.top = currentY + rect.top + 'px';
+	    }
+	}
 
-        var _selectionLeft = null;
-        var _selectionTop = null;
-        var _selectionW = null;
-        var _selectionH = null;
-        function finishSelection() {
-            isSelecting = false;
-            const rect = selection.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
+	var _selectionLeft = null;
+	var _selectionTop = null;
+	var _selectionW = null;
+	var _selectionH = null;
+	function finishSelection() {
+	    isSelecting = false;
+	    const rect = selection.getBoundingClientRect();
+	    const canvasRect = canvas.getBoundingClientRect();
 
-            const scaleX = canvas.width / canvasRect.width;
-            const scaleY = canvas.height / canvasRect.height;
+	    const scaleX = canvas.width / canvasRect.width;
+	    const scaleY = canvas.height / canvasRect.height;
 
-            const sx = (rect.left - canvasRect.left) * scaleX;
-            const sy = (rect.top - canvasRect.top) * scaleY;
-            const sw = rect.width * scaleX;
-            const sh = rect.height * scaleY;
-            console.log(rect.left, rect.top, canvasRect.left, canvasRect.top, 'vv')
+	    const sx = (rect.left - canvasRect.left) * scaleX;
+	    const sy = (rect.top - canvasRect.top) * scaleY;
+	    const sw = rect.width * scaleX;
+	    const sh = rect.height * scaleY;
+	    console.log(rect.left, rect.top, canvasRect.left, canvasRect.top, 'vv')
 
-            _selectionLeft = sx;
-            _selectionTop = sy;
-            _selectionW = sw;
-            _selectionH = sh;
+	    _selectionLeft = sx;
+	    _selectionTop = sy;
+	    _selectionW = sw;
+	    _selectionH = sh;
 
-            const context = canvas.getContext('2d');
-            const selectedImageData = context.getImageData(sx, sy, sw, sh);
+	    const context = canvas.getContext('2d');
+	    const selectedImageData = context.getImageData(sx, sy, sw, sh);
 
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = sw;
-            tempCanvas.height = sh;
-            tempCanvas.getContext('2d').putImageData(selectedImageData, 0, 0);
+	    const tempCanvas = document.createElement('canvas');
+	    tempCanvas.width = sw;
+	    tempCanvas.height = sh;
+	    tempCanvas.getContext('2d').putImageData(selectedImageData, 0, 0);
 
-            const selectedImage = tempCanvas.toDataURL('image/png');
+	    const selectedImage = tempCanvas.toDataURL('image/png');
 
-            performOCR(selectedImage);
-            selection.style.display = 'none'; // 隐藏选择框
-        }
+	    performOCR(selectedImage);
+	    selection.style.display = 'none'; // 隐藏选择框
+	}
 
-        function performOCR(imageData) {
-            ocrOutput.textContent = 'Processing OCR...'; // 显示处理状态
-            Tesseract.recognize(imageData, 'eng', // 可以替换为其他语言，例如 'chi_sim' 用于简体中文
-                                { logger: info => console.log(info) })
-            .then(({ data: { words } }) => {
-                            if (words.length ==0) {
-                                ocrOutput.innerHTML = "no word found by OCR";
-                                return;
-                            } 
-                            // words.sort((a, b) => b.confidence - a.confidence);
-                            var used_words_c = 0;
-                            var used_words_idx = {};
-                            var min_H = Math.min(_selectionH / 20, 5);
-                            var min_W = Math.min(_selectionW / 20, 5);
-                            var max_area = 0;
-                            var max_area_idx = 0;
-                            for (var i in words) {
-                                var word = words[i];
-                                var { x0, y0, x1, y1 } = word.bbox;
-                                if (x0 < min_W || (_selectionW -x1) < min_W) {
-                                } else if (y0 < min_H || (_selectionH -y1) < min_H) {
-                                } else {
-                                        used_words_idx[i] = 1;
-                                        used_words_c += 1;
-                                }
-                                var area = (y1-y0)*(x1-x0);
-                                if (area > max_area) {
-                                        max_area = area;
-                                        max_area_idx = i;
-                                }
-                            }
-                            if (used_words_c == 0) {
-                                used_words_idx[max_area_idx] = 1;
-                            }
+	function performOCR(imageData) {
+	    ocrOutput.textContent = 'Processing OCR...'; // 显示处理状态
+	    Tesseract.recognize(imageData, 'eng', // 可以替换为其他语言，例如 'chi_sim' 用于简体中文
+				{ // logger: info => console.log(info) 
+			         })
+	    .then(({ data: { words } }) => {
+			    if (words.length ==0) {
+				ocrOutput.innerHTML = "no word found by OCR";
+				return;
+			    } 
+			    // words.sort((a, b) => b.confidence - a.confidence);
+			    var used_words_c = 0;
+			    var used_words_idx = {};
+			    var min_H = Math.min(_selectionH / 20, 5);
+			    var min_W = Math.min(_selectionW / 20, 5);
+			    var max_area = 0;
+			    var max_area_idx = 0;
+			    for (var i in words) {
+				var word = words[i];
+				var { x0, y0, x1, y1 } = word.bbox;
+				if (x0 < min_W || (_selectionW -x1) < min_W) {
+				} else if (y0 < min_H || (_selectionH -y1) < min_H) {
+				} else {
+					used_words_idx[i] = 1;
+					used_words_c += 1;
+				}
+				var area = (y1-y0)*(x1-x0);
+				if (area > max_area) {
+					max_area = area;
+					max_area_idx = i;
+				}
+			    }
+			    if (used_words_c == 0) {
+				used_words_idx[max_area_idx] = 1;
+			    }
 
-                            ocrOutput.innerHTML = "<ul>";
-                            var arr_w = [];
-                            var arr_sc = [];
+			    ocrOutput.innerHTML = "<ul>";
+			    var arr_w = [];
+			    var arr_sc = [];
 
-                            const ctx = canvas.getContext('2d');
-                            var debug = 0;
-                            if (debug) {
-                                var x0 = _selectionLeft;
-                                var y0 = _selectionTop;
-                                ctx.strokeStyle = 'blue'; ctx.lineWidth = 2;
-                                ctx.strokeRect(x0, y0, _selectionW, _selectionH);
-                            }
+			    const ctx = canvas.getContext('2d');
+			    var debug = 0;
+			    if (debug) {
+				var x0 = _selectionLeft;
+				var y0 = _selectionTop;
+				ctx.strokeStyle = 'blue'; ctx.lineWidth = 2;
+				ctx.strokeRect(x0, y0, _selectionW, _selectionH);
+			    }
 
-                            for (var i in words) {
-                                if (!used_words_idx[i]) continue;
-                                var word = words[i];
-                                if (debug) {
-                                        var { x0, y0, x1, y1 } = word.bbox;
-                                        x0 = x0 + _selectionLeft;
-                                        y0 = y0 + _selectionTop;
-                                        x1 = x1 + _selectionLeft;
-                                        y1 = y1 + _selectionTop;
-                                        ctx.strokeStyle = 'red'; ctx.lineWidth = 2;
-                                        ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
-                                }
+			    for (var i in words) {
+				if (!used_words_idx[i]) continue;
+				var word = words[i];
+				if (debug) {
+					var { x0, y0, x1, y1 } = word.bbox;
+					x0 = x0 + _selectionLeft;
+					y0 = y0 + _selectionTop;
+					x1 = x1 + _selectionLeft;
+					y1 = y1 + _selectionTop;
+					ctx.strokeStyle = 'red'; ctx.lineWidth = 2;
+					ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+				}
 
-                                var score = word.confidence
-                                if (score < 0) continue;
-                                var arr = word.text.split("-");
-                                for (var a of arr) {
-                                        const match = a.match(/[a-zA-Z]+/);
-                                        if (match && match[0].trim().length >= 2) {
-                                                arr_w.push(match[0].trim());
-                                                arr_sc.push(score);
-                                        }
-                                }
-                            }
-                            // ocrOutput.innerHTML += "<li>" + arr_w.join("|");
-                            if (arr_w.length ==0) {
-                                ocrOutput.innerHTML = "no found";
-                                return;
-                            }
-                            var ret = get_result_multi(arr_w, false, true);
-                            var m_res = ret[1];
-                            for (var i in arr_w) {
-                                    var score = arr_sc[i].toFixed(2);
-                                    var w = arr_w[i];
-                                    var results = m_res[w];
-                                    if (results.length > 0) {
-                                            var ii = 0;
-                                            for (var r of results) {
-                                                    if (!r) continue;
-                                                    var ipa = m_ipa[r[0]];
-                                                    ipa = (ipa === undefined) ? "" : ipa;
-                                                    var meaning = r[1].replace(/^_/, "");
-                                                    ocrOutput.innerHTML += `<li><span class=word>${r[0]}</span>&nbsp;<span class=ipa>${ipa}</span>&nbsp;<span class=meaning>${meaning}</span></li>`;
-                                                    ii += 1;
-                                            }
-                                    } else {
-                                            ocrOutput.innerHTML += `<li><span class=word>${w}</span><span class=ipa>&nbsp;</span><span class=meaning>no found</span></li>`;
-                                    }
-                            } 
-                }).catch(err => { console.error('OCR ERROR:', err); });
-        }
+				var score = word.confidence
+				if (score < 0) continue;
+				var arr = word.text.split("-");
+				for (var a of arr) {
+					const match = a.match(/[a-zA-Z]+/);
+					if (match && match[0].trim().length >= 2) {
+						arr_w.push(match[0].trim());
+						arr_sc.push(score);
+					}
+				}
+			    }
+			    // ocrOutput.innerHTML += "<li>" + arr_w.join("|");
+			    if (arr_w.length ==0) {
+				ocrOutput.innerHTML = "no found";
+				return;
+			    }
+			    var ret = get_result_multi(arr_w, false, true);
+			    var m_res = ret[1];
+			    for (var i in arr_w) {
+				    var score = arr_sc[i].toFixed(2);
+				    var w = arr_w[i];
+				    var results = m_res[w];
+				    if (results.length > 0) {
+					    var ii = 0;
+					    for (var r of results) {
+						    if (!r) continue;
+						    var w = r[0];
+						    var ipa = m_ipa[w];
+						    ipa = (ipa === undefined) ? "" : ipa;
+						    var meaning = r[1].replace(/^_/, "");
+						    var [freq, from_cnt] = get_word_freq_rank_and_from_cnt(w, word_source, word_freq);
+						    var ff = [freq, from_cnt].join(" "); if (ff.length > 0) ff = "[" + ff+"]";
+						    if (!ipa) ipa = "读";
+						    ipa = ipa.replace(/ɹ/g, "r").replace(/ɫ/g, "l");
+						    ocrOutput.innerHTML += `<li><span class=word>${w}</span>&nbsp;<span class=ipa style='color:orange;' onclick='word_speak(\"${w}\")'>${ipa}</span>&nbsp;<span style='color:green'>${ff}</span>&nbsp;<span class=meaning>${meaning}</span></li>`;
+						    ii += 1;
+					    }
+				    } else {
+					    ocrOutput.innerHTML += `<li><span class=word>${w}</span><span class=ipa>&nbsp;</span><span class=meaning>no found</span></li>`;
+				    }
+			    } 
+		}).catch(err => { console.error('OCR ERROR:', err); });
+	}
     </script>
 </body>
 </html>
