@@ -141,8 +141,11 @@
 	    const rect = canvas.getBoundingClientRect();
 	    startX = (event.clientX || event.touches[0].clientX) - rect.left;
 	    startY = (event.clientY || event.touches[0].clientY) - rect.top;
+
+	    const currentScroll = window.pageYOffset || document.documentElement.scrollTop;
+
 	    selection.style.left = startX + rect.left + 'px';
-	    selection.style.top = startY + rect.top + 'px';
+	    selection.style.top = startY + rect.top + currentScroll + 'px';
 	    selection.style.width = 0;
 	    selection.style.height = 0;
 	    selection.style.display = 'block';
@@ -156,6 +159,8 @@
 	    const currentX = (event.clientX || event.touches[0].clientX) - rect.left;
 	    const currentY = (event.clientY || event.touches[0].clientY) - rect.top;
 
+	    const currentScroll = window.pageYOffset || document.documentElement.scrollTop;
+
 	    const width = Math.abs(currentX - startX);
 	    const height = Math.abs(currentY - startY);
 
@@ -166,7 +171,7 @@
 		selection.style.left = currentX + rect.left + 'px';
 	    }
 	    if (currentY < startY) {
-		selection.style.top = currentY + rect.top + 'px';
+		selection.style.top = currentY + rect.top + currentScroll + 'px';
 	    }
 	}
 
@@ -181,6 +186,8 @@
 
 	    const scaleX = canvas.width / canvasRect.width;
 	    const scaleY = canvas.height / canvasRect.height;
+
+	    const currentScroll = window.pageYOffset || document.documentElement.scrollTop;
 
 	    const sx = (rect.left - canvasRect.left) * scaleX;
 	    const sy = (rect.top - canvasRect.top) * scaleY;
