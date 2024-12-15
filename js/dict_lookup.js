@@ -56,7 +56,10 @@ function getWordForms(word) {
     // 处理复数和不规则变化
     if (word.endsWith('s'))   forms_push(1, word.slice(0, -1));
     if (word.endsWith('ies')) forms_push(3, word.slice(0, -3) + 'y');
-    if (word.endsWith('ves')) forms_push(3, word.slice(0, -3) + 'f');
+    if (word.endsWith('ves')) {
+        forms_push(3, word.slice(0, -3) + 'f');
+        forms_push(3, word.slice(0, -3) + 'fe');
+    }
     if (word.endsWith('es'))  forms_push(2, word.slice(0, -2));
 
     // 形容词变形
@@ -103,7 +106,13 @@ function getWordForms(word) {
     }
     //console.log('a', new_forms)
     //console.log('b', m)
-
+    if (typeof m_irregular_to_ori !== 'undefined') {
+        var w1 = word.toLowerCase();
+        if (m_irregular_to_ori[w1]) {
+            new_forms.push(m_irregular_to_ori[w1]);
+            m[w1] = Math.abs(w1.length - m_irregular_to_ori[w1].length);
+        }
+    }
     return {'words': [...new Set(new_forms)], 'weights': m};  // 返回去重后的数组
 }
 
