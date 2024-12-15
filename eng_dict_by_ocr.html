@@ -48,6 +48,7 @@
     <script src="data/dict_english_word_ipa.js"></script>
     <script src="data/word_source.js"></script>
     <script src="data/word_freq.js"></script>
+    <script src="data/irregular_verb_noun.js"></script>
 
     <script>
 	const video = document.getElementById('video');
@@ -309,6 +310,7 @@ function search_words_and_show(arr_w) {
     ocrOutput.innerHTML = "";
     var ret = get_result_multi(arr_w, false, true);
     var m_res = ret[1];
+    // console.log(ret)
     for (var i in arr_w) {
 	    // var score = arr_sc[i].toFixed(2);
 	    var w_ori = arr_w[i];
@@ -332,14 +334,20 @@ function search_words_and_show(arr_w) {
 			    arr.push([r, r[0].length]);
 		    }
 		    arr.sort((a, b) => b[1] - a[1]);
+		    // console.log(arr);
 		    var ii = 0;
 		    var extend_len = 0;
 		    for (var j in arr) {
-		            var len = arr[j][1];
-			    if (len < extend_len) continue;
-			    if (len != w_ori.length && 0 == extend_len) extend_len = len;
-
 		            var r = arr[j][0];
+		            var len = arr[j][1];
+			    if (r[0].toLowerCase() != w_ori.toLowerCase()) {
+			        if (len < extend_len) continue;
+			        if (0 == extend_len) {
+			            extend_len = len;
+			        }
+			    }
+			    // console.log(r[0].toLowerCase(), w_ori.toLowerCase(), r[0].toLowerCase() != w_ori.toLowerCase());
+
 			    var w_extend = r[0];
 			    var ipa = m_ipa[w_extend];
 			    ipa = (ipa === undefined) ? "" : ipa;
