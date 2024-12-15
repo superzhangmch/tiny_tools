@@ -1,9 +1,8 @@
 function get_result_multi(words, do_prefix_lookup, cases_no_sentive) {
     var set_words =  [...new Set(words)];
-    var wd_arr = [];
-    var m_weight = {};
-    var m_w = {};
-    var m_w_to_wordstem = {}
+    var wd_arr = []; // 扩展词干后待search的
+    var m_w = {}; // 和 wd_arr配套的 weight
+    var m_w_to_wordstem = {} // 原词 => 扩展出的一众词干
     for (var w of set_words) {
         w = w.trim();
         if (!w) continue;
@@ -21,22 +20,22 @@ function get_result_multi(words, do_prefix_lookup, cases_no_sentive) {
     }
     // console.log(m_w, wd_arr)
     var ret = searchInDict({"weights": m_w, "words":  [...new Set(wd_arr)]}, words.join("|"), do_prefix_lookup, cases_no_sentive);
-    var m1 = {}
-    var m_used = {}
-    for (var word_stem in m_w_to_wordstem) {
-        m1[word_stem] = [];
-        for (var w of m_w_to_wordstem[word_stem]) {
+    var m1 = {}; // 
+    var m_used = {}; // 临时变量
+    for (var word_ori in m_w_to_wordstem) {
+        m1[word_ori] = [];
+        for (var w_extend of m_w_to_wordstem[word_ori]) {
             for (var i in ret) {
                 var row = ret[i];
-                if (row[0].toLowerCase() == w.toLowerCase() && !m_used[row[0]]) {
-                        m1[word_stem].push(row);
+                if (row[0].toLowerCase() == w_extend.toLowerCase() && !m_used[row[0]]) {
+                        m1[word_ori].push(row);
                         m_used[row[0]] = 1;
                 }
             }
         }
     }
     // console.log(ret, m1);
-    return [ret, m1];
+    return [ret, m1]; // ret: 全部查出的. m1: 原词=>扩展出的所有词
 }
 
 function get_result(word, do_prefix_lookup, cases_no_sentive) {
