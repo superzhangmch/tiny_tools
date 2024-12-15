@@ -44,7 +44,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="data/big_eng_dict.js"></script>
-    <script src="js/dict_lookup.js?a=2"></script>
+    <script src="js/dict_lookup.js"></script>
     <script src="data/dict_english_word_ipa.js"></script>
     <script src="data/word_source.js"></script>
     <script src="data/word_freq.js"></script>
@@ -242,7 +242,6 @@
 				used_words_idx[max_area_idx] = 1;
 			    }
 
-			    ocrOutput.innerHTML = "<ul>";
 			    var arr_w = [];
 			    var arr_sc = [];
 
@@ -279,6 +278,7 @@
 					}
 				}
 			    }
+			    ocrOutput.innerHTML = "<ul>";
 			    // ocrOutput.innerHTML += "<li>" + arr_w.join("|");
 			    if (arr_w.length ==0) {
 				ocrOutput.innerHTML = "no found";
@@ -287,26 +287,37 @@
 			    var ret = get_result_multi(arr_w, false, true);
 			    var m_res = ret[1];
 			    for (var i in arr_w) {
-				    var score = arr_sc[i].toFixed(2);
-				    var w = arr_w[i];
-				    var results = m_res[w];
+				    // var score = arr_sc[i].toFixed(2);
+				    var w_ori = arr_w[i];
+				    var results = m_res[w_ori];
 				    if (results.length > 0) {
-					    var ii = 0;
+					    var arr = [];
 					    for (var r of results) {
 						    if (!r) continue;
-						    var w = r[0];
-						    var ipa = m_ipa[w];
+						    arr.push([r, r[0].length]);
+					    }
+					    arr.sort((a, b) => b[1] - a[1]);
+					    var ii = 0;
+					    var extend_len = 0;
+					    for (var j in arr) {
+					            var len = arr[j][1];
+						    if (len < extend_len) continue;
+						    if (len != w_ori.length && 0 == extend_len) extend_len = len;
+
+					            var r = arr[j][0];
+						    var w_extend = r[0];
+						    var ipa = m_ipa[w_extend];
 						    ipa = (ipa === undefined) ? "" : ipa;
 						    var meaning = r[1].replace(/^_/, "");
-						    var [freq, from_cnt] = get_word_freq_rank_and_from_cnt(w, word_source, word_freq);
+						    var [freq, from_cnt] = get_word_freq_rank_and_from_cnt(w_extend, word_source, word_freq);
 						    var ff = [freq, from_cnt].join(" "); if (ff.length > 0) ff = "[" + ff+"]";
 						    if (!ipa) ipa = "读";
 						    ipa = ipa.replace(/ɹ/g, "r").replace(/ɫ/g, "l");
-						    ocrOutput.innerHTML += `<li><span class=word>${w}</span>&nbsp;<span class=ipa style='color:orange;' onclick='word_speak(\"${w}\")'>${ipa}</span>&nbsp;<span style='color:green'>${ff}</span>&nbsp;<span class=meaning>${meaning}</span></li>`;
+						    ocrOutput.innerHTML += `<li><span class=word>${w_extend}</span>&nbsp;<span class=ipa style='color:orange;' onclick='word_speak(\"${w_extend}\")'>${ipa}</span>&nbsp;<span style='color:green'>${ff}</span>&nbsp;<span class=meaning>${meaning}</span></li>`;
 						    ii += 1;
 					    }
 				    } else {
-					    ocrOutput.innerHTML += `<li><span class=word>${w}</span><span class=ipa>&nbsp;</span><span class=meaning>no found</span></li>`;
+					    ocrOutput.innerHTML += `<li><span class=word>${w_ori}</span><span class=ipa>&nbsp;</span><span class=meaning>no found</span></li>`;
 				    }
 			    } 
 		}).catch(err => { console.error('OCR ERROR:', err); });
