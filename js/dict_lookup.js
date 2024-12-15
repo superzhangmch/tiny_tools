@@ -6,7 +6,7 @@ function get_result_multi(words, do_prefix_lookup, cases_no_sentive) {
     for (var w of set_words) {
         w = w.trim();
         if (!w) continue;
-        var wordsToSearch = getWordForms(w);
+        var wordsToSearch = getWordForms(/^[A-Z]+$/ ? (w.toLowerCase()) : w);
         var set_w = wordsToSearch['words'];
         m_w_to_wordstem[w] = set_w 
         for (var w1 of set_w) {
