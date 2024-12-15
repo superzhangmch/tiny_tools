@@ -1,4 +1,3 @@
-
 function get_result_multi(words, do_prefix_lookup, cases_no_sentive) {
     var set_words =  [...new Set(words)];
     var wd_arr = [];
@@ -318,4 +317,24 @@ function word_speak(text) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US'; // 'zh-CN'; 
     window.speechSynthesis.speak(utterance);
+}
+
+function get_word_freq_rank_and_from_cnt(w, word_source, word_freq)
+{
+    var w1 = w.toLowerCase();
+
+    var freq = 1000000000;
+    var from_cnt = 0;
+
+    if (word_source[w]) from_cnt = word_source[w][0];
+    else if (word_source[w1]) from_cnt = word_source[w1][0];
+
+    if (word_freq[w]) freq = word_freq[w];
+    else if (word_freq[w1]) freq = word_freq[w1];
+
+    if (from_cnt == 0) from_cnt = ""; else from_cnt = from_cnt + "*";
+    if (freq == 1000000000) freq = "";
+    else if (freq > 1000) freq = (freq / 1000).toFixed(1) + "k";
+
+    return [freq, from_cnt];
 }
