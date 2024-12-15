@@ -253,7 +253,6 @@
 				ctx.strokeStyle = 'blue'; ctx.lineWidth = 2;
 				ctx.strokeRect(x0, y0, _selectionW, _selectionH);
 			    }
-
 			    for (var i in words) {
 				if (!used_words_idx[i]) continue;
 				var word = words[i];
@@ -284,44 +283,60 @@
 				ocrOutput.innerHTML = "no found";
 				return;
 			    }
-			    var ret = get_result_multi(arr_w, false, true);
-			    var m_res = ret[1];
-			    for (var i in arr_w) {
-				    // var score = arr_sc[i].toFixed(2);
-				    var w_ori = arr_w[i];
-				    var results = m_res[w_ori];
-				    if (results.length > 0) {
-					    var arr = [];
-					    for (var r of results) {
-						    if (!r) continue;
-						    arr.push([r, r[0].length]);
-					    }
-					    arr.sort((a, b) => b[1] - a[1]);
-					    var ii = 0;
-					    var extend_len = 0;
-					    for (var j in arr) {
-					            var len = arr[j][1];
-						    if (len < extend_len) continue;
-						    if (len != w_ori.length && 0 == extend_len) extend_len = len;
-
-					            var r = arr[j][0];
-						    var w_extend = r[0];
-						    var ipa = m_ipa[w_extend];
-						    ipa = (ipa === undefined) ? "" : ipa;
-						    var meaning = r[1].replace(/^_/, "");
-						    var [freq, from_cnt] = get_word_freq_rank_and_from_cnt(w_extend, word_source, word_freq);
-						    var ff = [freq, from_cnt].join(" "); if (ff.length > 0) ff = "[" + ff+"]";
-						    if (!ipa) ipa = "读";
-						    ipa = ipa.replace(/ɹ/g, "r").replace(/ɫ/g, "l");
-						    ocrOutput.innerHTML += `<li><span class=word>${w_extend}</span>&nbsp;<span class=ipa style='color:orange;' onclick='word_speak(\"${w_extend}\")'>${ipa}</span>&nbsp;<span style='color:green'>${ff}</span>&nbsp;<span class=meaning>${meaning}</span></li>`;
-						    ii += 1;
-					    }
-				    } else {
-					    ocrOutput.innerHTML += `<li><span class=word>${w_ori}</span><span class=ipa>&nbsp;</span><span class=meaning>no found</span></li>`;
-				    }
-			    } 
+			    search_words_and_show(arr_w);
 		}).catch(err => { console.error('OCR ERROR:', err); });
 	}
+function search_words_and_show(arr_w) {
+    ocrOutput.innerHTML = "";
+    var ret = get_result_multi(arr_w, false, true);
+    var m_res = ret[1];
+    for (var i in arr_w) {
+	    // var score = arr_sc[i].toFixed(2);
+	    var w_ori = arr_w[i];
+	    var results = m_res[w_ori];
+	    if (results.length > 0) {
+		    var w_all = {};
+		    for (var r of results) {
+			    if (!r) continue;
+			    w_all[r[0]] = 1;
+		    }
+		    console.log(w_all);
+		    var arr = [];
+		    for (var r of results) {
+			    if (!r) continue;
+			    if (/^[A-Z]+$/.test(r[0]) && r[0] != w_ori && r[0].toLowerCase() != w_ori) {
+				continue;
+			    }
+			    if (/^[A-Z]+$/.test(r[0]) && r[0].toLowerCase() == w_ori && w_all[w_ori]) {
+				continue;
+			    }
+			    arr.push([r, r[0].length]);
+		    }
+		    arr.sort((a, b) => b[1] - a[1]);
+		    var ii = 0;
+		    var extend_len = 0;
+		    for (var j in arr) {
+		            var len = arr[j][1];
+			    if (len < extend_len) continue;
+			    if (len != w_ori.length && 0 == extend_len) extend_len = len;
+
+		            var r = arr[j][0];
+			    var w_extend = r[0];
+			    var ipa = m_ipa[w_extend];
+			    ipa = (ipa === undefined) ? "" : ipa;
+			    var meaning = r[1].replace(/^_/, "");
+			    var [freq, from_cnt] = get_word_freq_rank_and_from_cnt(w_extend, word_source, word_freq);
+			    var ff = [freq, from_cnt].join(" "); if (ff.length > 0) ff = "[" + ff+"]";
+			    if (!ipa) ipa = "读";
+			    ipa = ipa.replace(/ɹ/g, "r").replace(/ɫ/g, "l");
+			    ocrOutput.innerHTML += `<li><span class=word>${w_extend}</span>&nbsp;<span class=ipa style='color:orange;' onclick='word_speak(\"${w_extend}\")'>${ipa}</span>&nbsp;<span style='color:green'>${ff}</span>&nbsp;<span class=meaning>${meaning}</span></li>`;
+			    ii += 1;
+		    }
+	    } else {
+		    ocrOutput.innerHTML += `<li><span class=word>${w_ori}</span><span class=ipa>&nbsp;</span><span class=meaning>no found</span></li>`;
+	    }
+    } 
+}
     </script>
 </body>
 </html>
