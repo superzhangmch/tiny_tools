@@ -45,17 +45,24 @@
     padding: 5px;
     z-index: 1000;
 }
+table th, td {
+   font-size: 12px;
+}
     </style>
     <script src="data/big_eng_dict.js"></script>
     <script src="data/dict_english_word_ipa.js"></script>
     <script src="data/word_freq.js"></script>
     <script src="data/word_source.js"></script>
     <script src="js/dict_lookup.js"></script>
+    <script src="js/dict_lookup.js"></script>
+    <script src="data/irregular_verb_noun.js"></script>
 </head>
 <body>
 
-<button id="processButton" onclick="processContent()">处理文本</button>
-<button id="clearButton" onclick="clearContent()">清空</button>
+<button id="processButton" onclick="processContent()">process</button>
+<button id="clearButton" onclick="clearContent()">clear</button>
+advanced:<input type="checkbox" name="multiCheck_advanced" value="1" onchange='handlePaste()'>
+have ref:<input type="checkbox" name="multiCheck_has_ref" value="1" onchange='handlePaste()'>
 <div id="tooltip" style="display:none; position:absolute; background-color:lightyellow; border:1px solid black; padding:5px;">
     <!-- 动态内容将在这里插入 -->
 </div>
@@ -71,12 +78,12 @@
 	    <table id="lowFreqWordsTable">
 		<thead>
 		    <tr>
-			<th>#</th>
-			<th>word</th>
-			<th></th>
-			<th>word rank</th>
-			<th>stars</th>
-			<th>meaning</th>
+			<td></td>
+			<td>word</td>
+			<td></td>
+			<td>word rank</td>
+			<td>ref</td>
+			<td>meaning</td>
 		    </tr>
 		</thead>
 		<tbody id="lowFreqWordsList"></tbody>
@@ -291,6 +298,22 @@ function displayLowFrequencyWords(arr_wf, m_rev) {
 	m_meaning[res[i][0]] = res[i][1];
     }
 
+
+    var only_advanced = document.querySelectorAll('input[name="multiCheck_advanced"]:checked').length == 1;
+    var has_ref = document.querySelectorAll('input[name="multiCheck_has_ref"]:checked').length == 1;
+    var advanced_ids = [];
+    var junior_ids = [];
+    for (var id of source_info['simple']) {
+    	var name = id2source[id];
+	if (["ielts", "toefl", "gre", "sat", "gmat"].includes(name)) {
+	    advanced_ids.push(id);
+	}
+	if (["xiaoxue", "chuzhong", "gaozhong"].includes(name)) {
+	    junior_ids.push(id);
+	}
+    }
+
+    // console.log(res, advanced_ids, only_advanced);
     c = 0;
     var show_words = [];
     for (var i in arr_wf) {
@@ -299,12 +322,47 @@ function displayLowFrequencyWords(arr_wf, m_rev) {
 	var w1 = w.slice(0, 1).toUpperCase() + w.slice(1);
 	var freq = arr_wf[i][1];
 	var ref_c = "";
+	var ref_arr = [];
 	if (m_word_source[w]) {
-		ref_c = m_word_source[w][0];
+	        ref_arr = m_word_source[w];
+	        ref_c = ref_arr[0];
 	}
 	if (m_word_source[w1]) {
-		ref_c = m_word_source[w1][0];
+	        ref_arr = m_word_source[w1];
+	        ref_c = ref_arr[0];
 	}
+	if (1) {
+		var c1 = 0;
+		var c2 = 0;
+		//console.log('xxx', ref_arr, advanced_ids);
+		var ref_detail = [];
+		var adv_detail = [];
+		for (var j in ref_arr) {
+			if (j <= 2) continue;
+			var id = ref_arr[j];
+			ref_detail.push(id2source[id]);
+			// console.log("aa", id);
+			if (advanced_ids.includes(id)) {
+				adv_detail.push(id2source[id]);
+				c1 += 1;
+			}
+			if (junior_ids.includes(id)) {
+				c2 += 1;
+			}
+		}
+		// ref_c = ref_detail.join("|");
+		if (only_advanced) {
+		    if (c1 ==0) continue;
+		} else {
+		    //if (c1 > 0 && c1 == ref_arr.length - 3) {
+		    //    ref_c += "**";
+		    //} else if (ref_c != '') {
+		    if (ref_c != '') {
+		        ref_c += "*";
+		    }
+		}
+	}
+	if (has_ref && ref_c == "") continue;
 	var meaning = "";
 	var meaning_word_ori = "";
 	if (m_meaning[w]) {
