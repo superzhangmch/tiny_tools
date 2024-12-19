@@ -1,16 +1,12 @@
+
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
 <HTML><HEAD>
 <META http-equiv=Content-Type content="text/html; charset=utf8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<SCRIPT>
-
-
-</SCRIPT>
-
 <META content="MSHTML 6.00.2900.5512" name=GENERATOR></HEAD>
 <BODY><INPUT id=txt1 size=14> 
 <INPUT onclick=find_char_en() type=button value=英文><BR><INPUT id=txt2 size=14> <INPUT onclick=find_char_zh() type=button value=中文><BR><INPUT onclick=find_char_en_zh() type=button value=中英混合> 
-<br>(只显示前200个结果；按中文意思检索时，可输入多个词语用空格间隔)
+<br>(按中文意思检索时，可输入多个词语用空格间隔)
 <HR>
 <script src="js/dict_lookup.js"></script>
 <script src="data/big_eng_dict.js"></script>
@@ -86,7 +82,7 @@ function show_result(mm, zh_str)
 			var w1 = w.toLowerCase();
 			var meaning = arr[1];
 			var yb = "";
-			var freq = 1000000000;
+			var freq = null;
 			var from_cnt = 0;
 			if (m_word_source[w]) from_cnt = m_word_source[w][0];
 			else if (m_word_source[w1]) from_cnt = m_word_source[w1][0];
@@ -100,7 +96,13 @@ function show_result(mm, zh_str)
 
 			found_arr.push([w, yb, from_cnt, freq, meaning]);
 		}
-		found_arr.sort(function(a, b) { return b[2] - a[2]; });
+		found_arr.sort(function(a, b) {
+			if (b[2] != a[2]) return b[2] - a[2];
+			if (b[3] === a[3]) return 0;
+			if (b[3] === null) return 1;
+			if (a[3] === null) return -1;
+			return a[3] - b[3]; 
+		});
 
 		str="<table border=1>";
 		str += "<tr><th>word<th>读音<th>星级<th>词频rank<th>meaning";
@@ -109,7 +111,7 @@ function show_result(mm, zh_str)
 			let [w, yb, from_cnt, freq, meaning] = found_arr[i];
 			str += "<tr><td><font color=red>"+ w + "</font>";
 			if (from_cnt == 0) from_cnt = ""; else from_cnt = from_cnt + "*";
-			if (freq == 1000000000) freq = "";
+			if (freq === null) freq = "";
 			else if (freq > 1000) freq = (freq / 1000).toFixed(1) + "k";
 			str += "<td><a href='javascript:word_speak(\""+w+"\")'>听</a>&nbsp;" + yb;
 			str += "<td>" + from_cnt;
@@ -160,3 +162,4 @@ function find_char_en_zh(type)
 </FONT>
 <HR>
 <A href="#ttt">TOP</A> </BODY></HTML>
+
