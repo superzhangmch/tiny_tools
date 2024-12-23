@@ -1,4 +1,3 @@
-
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
 <HTML><HEAD>
 <META http-equiv=Content-Type content="text/html; charset=utf8">
@@ -61,6 +60,7 @@ function find_char_zh()
 	mm=str.match(re)
 	show_result(mm, txt2.value);
 }
+var debug = null;
 function show_result(mm, zh_str)
 {
 	var m_word_source = word_source;
@@ -96,12 +96,18 @@ function show_result(mm, zh_str)
 
 			found_arr.push([w, yb, from_cnt, freq, meaning]);
 		}
+		debug = JSON.parse(JSON.stringify(found_arr));
+
 		found_arr.sort(function(a, b) {
-			if (b[2] != a[2]) return b[2] - a[2];
-			if (b[3] === a[3]) return 0;
-			if (b[3] === null) return 1;
-			if (a[3] === null) return -1;
-			return a[3] - b[3]; 
+			if (b[2] !== a[2] && b[2] !== null && a[2] !== null) return b[2] - a[2];
+			if (b[2] === null && a[2] !== null) return 1;
+			if (a[2] === null && b[2] !== null) return -1;
+
+			if (b[3] !== a[3] && b[3] !== null && a[3] !== null) return a[3] - b[3];
+			if (b[3] === null && a[3] !== null) return -1;
+			if (a[3] === null && b[3] !== null) return 1;
+
+			return 0;
 		});
 
 		str="<table border=1>";
@@ -162,4 +168,3 @@ function find_char_en_zh(type)
 </FONT>
 <HR>
 <A href="#ttt">TOP</A> </BODY></HTML>
-
