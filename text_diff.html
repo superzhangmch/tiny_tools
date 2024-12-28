@@ -103,12 +103,14 @@
 			var color = 'lightgreen';
 			if (idx_arr[i] < 0) color = 'yellow';
 			s2 += "<span style='background-color:"+color+";'>" + content + "</span><sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
+			s1 += "<sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
 			idx += 1;
 		}
 		if (tp == -1) {
 			var color = 'lightgreen';
 			if (idx_arr[i] < 0) color = 'yellow';
 			s1 += "<span style='background-color:"+color+";'>" + content + "</span><sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
+			s2 += "<sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
 			idx += 1;
 		}
 	    }
