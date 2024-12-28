@@ -32,6 +32,18 @@
 	span.word {font-weight: bold; color:red}
 	span.ipa {}
 	span.meaning {font-size:14px;color:blue}
+	#fixedButton {
+	    position: fixed; /* 使用fixed属性使按钮固定在页面上的特定位置 */
+	    bottom: 50px;    /* 距离页面底部20px */
+	    right: 20px;     /* 距离页面右边20px */
+	    padding: 10px;   /* 按钮内填充 */
+	    background-color: #007bff; /* 按钮背景颜色 */
+	    color: white;    /* 文字颜色 */
+	    border: none;    /* 无边框 */
+	    border-radius: 5px; /* 边角圆滑处理 */
+	    cursor: pointer; /* 鼠标悬停时显示指针 */
+	    opacity: 0.5;
+	}
     </style>
 </head>
 <body>
@@ -40,6 +52,8 @@
     <button id="toggleCamera">Open Camera</button>
     <input type="file" accept="image/*" onchange="handleImageUpload(event)">
     自动读<input type="checkbox" id="auto_read" name="multiCheck" value="1">
+
+    <button id="fixedButton" onclick='toggleCamera()'>拍</button>
 
     <div id="ocr-output"></div>
     <div id="selection"></div>
