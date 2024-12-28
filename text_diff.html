@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>字符级文本比较工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        pre {
+            white-space: pre-wrap; /* 保留空格和换行符，同时允许自动换行 */
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 20px;
+            width: 100%; /* 让 pre 标签占据全宽度 */
+            box-sizing: border-box; /* 使 padding 不影响宽度 */
+        }
+    </style>
+    <!-- 引入 diff-match-patch 库 -->
+    <script src="https://cdn.jsdelivr.net/gh/google/diff-match-patch/javascript/diff_match_patch.js"></script>
+</head>
+<body>
+    <h1>字符级文本比较工具</h1>
+    <textarea id="text1" placeholder="输入第一段文本..."></textarea>
+    <textarea id="text2" placeholder="输入第二段文本..."></textarea>
+    <button onclick="compareTexts()">比较文本</button>
+
+    <table border=0>
+	    <tr><td valign=top><pre id=pre1></pre></td>
+		<td valign=top><pre id=pre2></pre></td>
+    </table>
+    <script>
+	function trans(s) {
+		return s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	}
+        function compareTexts() {
+            const text1 = document.getElementById('text1').value;
+            const text2 = document.getElementById('text2').value;
+            const pre1 = document.getElementById('pre1');
+            const pre2 = document.getElementById('pre2');
+	    pre1.innerHTML = "";
+	    pre2.innerHTML = "";
+
+            const dmp = new diff_match_patch();
+            const diffs = dmp.diff_main(text1, text2);
+
+            // 清理diff结果
+            dmp.diff_cleanupSemantic(diffs);
+	    if (diffs.length == 1 && diffs[0][0] == 0) {
+	    	pre1.innerHTML = "same";
+	    	pre2.innerHTML = "same";
+		return;
+	    }
+
+	    var last = 0;
+	    var last_is_same = 0;
+	    var idx = 1;
+	    var idx_arr = [];
+	    for (var i in diffs) {
+		var tp = diffs[i][0];
+		if (last == 1 && tp == -1 || last == -1 && tp == 1) {
+			idx_arr.push(idx);
+			idx_arr[idx_arr.length - 1] = -idx;
+			idx_arr[idx_arr.length - 2] = -idx;
+			last_is_same = 1;
+			idx += 1;
+		} else if ((last == 1 || last == -1) && last_is_same ==0 && tp == 0) {
+			idx_arr[idx_arr.length - 1] = idx;
+			idx += 1;
+			idx_arr.push(0);
+			last_is_same = 0;
+		} else if (i == diffs.length - 1 && tp != 0) {
+			idx_arr.push(idx);
+			idx += 1;
+		} else {
+			idx_arr.push(0);
+			last_is_same = 0;
+		}
+		last = tp;
+	    }
+	    // console.log(idx_arr)
+
+	    var s1 = "";
+	    var s2 = "";
+	    var idx = 1;
+	    for (var i in diffs) {
+		var tp = diffs[i][0];
+		var content = trans(diffs[i][1]);
+		if (tp == 0) {s1 += content; s2 += content;}
+		if (tp == 1) {
+			var color = 'lightgreen';
+			if (idx_arr[i] < 0) color = 'yellow';
+			s2 += "<span style='background-color:"+color+";'>" + content + "</span><sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
+			idx += 1;
+		}
+		if (tp == -1) {
+			var color = 'lightgreen';
+			if (idx_arr[i] < 0) color = 'yellow';
+			s1 += "<span style='background-color:"+color+";'>" + content + "</span><sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
+			idx += 1;
+		}
+	    }
+	    pre1.innerHTML = s1;
+	    pre2.innerHTML = s2;
+        }
+    </script>
+</body>
+</html>
