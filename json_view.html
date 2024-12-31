@@ -39,6 +39,9 @@
     <div id="output"></div>
 
     <script>
+	function trans(s) {
+	    return s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
 	function generateCombinations(n, m) {
 	    const result = [];
 	    const combination = [];
@@ -354,10 +357,10 @@ function hide_show(td_idx)
 	function formatDict(dict, path) {
 	    const table = document.createElement('table');
 	    for (const [key, val] of Object.entries(dict)) {
-	        cur_path = path + "[\"" + key + "\"]"
+	        cur_path = path + "[\"" + trans(key) + "\"]"
 	        const row = table.insertRow();
 	        const keyCell = row.insertCell();
-		keyCell.innerHTML = "<a href='javascript:show_path(\"td_"+td_idx+"\")'>" + key + "</a> <a id='a_"+td_idx+"' href='javascript:hide_show(\""+td_idx+"\")'>-</a>" + "<span id='td_"+td_idx+"' style='color:red;font-size:14px;display:none'><br>"+cur_path+"</span>";
+		keyCell.innerHTML = "<a href='javascript:show_path(\"td_"+td_idx+"\")'>" + trans(key) + "</a> <a id='a_"+td_idx+"' href='javascript:hide_show(\""+td_idx+"\")'>-</a>" + "<span id='td_"+td_idx+"' style='color:red;font-size:14px;display:none'><br>"+cur_path+"</span>";
 		td_idx += 1;
 	        keyCell.style.backgroundColor = 'lightgreen';
 
@@ -481,13 +484,13 @@ function hide_show(td_idx)
 
 	    if (str.includes('\n') || str.includes('\\n')) {
 	            const pre = document.createElement('pre');
-	            pre.innerHTML = str.replace(/\\n/g, '\n').replace(/\n/g, '\n').replace(/\\t/g, '\t').replace("<", "&lt").replace(">", "&gt;");
+	            pre.innerHTML = trans(str.replace(/\\n/g, '\n').replace(/\n/g, '\n').replace(/\\t/g, '\t'));
 
 	            // pre.textContent = str;
 		    if (de_base64) {
-		        pre.innerHTML += "\n<br><span class=ori_txt>__原始内容__: " + de_base64.replace("<", "&lt").replace(">", "&gt;") + "</span>";
+		        pre.innerHTML += "\n<br><span class=ori_txt>__原始内容__: " + trans(de_base64) + "</span>";
 		    } else if (de_uri) {
-		        pre.innerHTML += "\n<br><span class=ori_txt>__原始内容__: " + de_uri.replace("<", "&lt").replace(">", "&gt;") + "<span>";
+		        pre.innerHTML += "\n<br><span class=ori_txt>__原始内容__: " + trans(de_uri) + "<span>";
 		    }
 	            return pre;
 	   } else {
