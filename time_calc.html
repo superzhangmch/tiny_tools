@@ -182,25 +182,25 @@
 
             const convertedInput = input.replace(timestampPattern, (match) => {
                 const timestamp = parseInt(match, 10);
-		var date1 = null; 
-		date1 = new Date(timestamp*1000);
-                if (date1.getFullYear() >= 2000 && date1.getFullYear() <= 2050) {
+		var date = null; 
+		date = new Date(timestamp*1000);
+                if (date.getFullYear() >= 2000 && date.getFullYear() <= 2050) {
                        return `${match}s = <font color=red>(${date.toISOString().replace('T', ' ').split('.')[0]})</font>`;
                 }
 		    
-                date1 = new Date(timestamp);
+                date = new Date(timestamp);
                 if (date.getFullYear() >= 2000 && date.getFullYear() <= 2050) {
                        return `${match}ms = <font color=red>(${date.toISOString().replace('T', ' ').split('.')[0]})</font>`;
                 }
-                date1 = new Date(parseInt(timestamp/1000));
+                date = new Date(parseInt(timestamp/1000));
                 if (date.getFullYear() >= 2000 && date.getFullYear() <= 2050) {
                        return `${match}us = <font color=red>(${date.toISOString().replace('T', ' ').split('.')[0]})</font>`;
                 }
                 return match;
             })
-	              const convertedInput_1 = input.replace(datePattern, (match) => {
-                const date = new Date(match);
-                                return `${match} <font color=red>(${date.getTime()})</font>`;
+	    const convertedInput_1 = input.replace(datePattern, (match) => {
+            	const date = new Date(match);
+                return `${match} <font color=red>(${date.getTime()})</font>`;
             });
 
 			    document.getElementById('result').innerHTML = "<pre>" + convertedInput + "<hr>" + convertedInput_1 + "</pre>";
