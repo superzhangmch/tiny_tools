@@ -177,7 +177,7 @@
     function convertTimestamps() {
 	    if (timer) {clearInterval(timer)}
             const input = document.getElementById('inputArea').value;
-            const timestampPattern = /\b\d{10,13}\b/g;
+            const timestampPattern = /\b\d{10,19}\b/g;
             const datePattern = /\b\d{4}-\d{2}-\d{2}( \d{2}:\d{2}:\d{2})?\b/g;
 
             const convertedInput = input.replace(timestampPattern, (match) => {
