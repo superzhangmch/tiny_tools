@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>汇率计算器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+            background-color: #f4f4f9;
+        }
+        .container {
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        label, input {
+            width: 150px;
+            margin-bottom: 10px;
+        }
+        input[type="number"] {
+            padding: 8px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>汇率计算器</h1>
+        <label for="a1">A →  B 汇率:</label>
+	<input type="number" id="a1" value="1" step="0.01"> →  <input type="number" id="b1" value="1" step="0.01">
+
+	<br>
+        <label for="b2">B →  C 汇率:</label>
+        <input type="number" id="b2" value="1" step="0.01"> →  <input type="number" id="c2" value="1" step="0.01">
+	<br>
+	<label for="a3">A →  C 汇率:</label>
+        <input type="number" id="a3" value="1" step="0.01"> →  <input type="number" id="c3" value="1" step="0.01">
+
+	<br>
+        <label for="amountA">货币 A 的值</label>
+	<input type="number" id="amountA" value="1" step="0.01" oninput="calculate()"> → <button onclick='calculate()'>计算</button>
+	<table>
+		<tr><th align=right>A→ B: <td><span id="resultB">1</span>
+					<tr><th align=right>A→ C: <td><span id="resultC1">1</span>
+								<tr><th algn=right>A→ B→ C<td><span id="resultC2">1</span>
+        </table>
+    </div>
+
+    <script>
+        function calculate() {
+            const a1 = parseFloat(document.getElementById('a1').value) || 1;
+            const b1 = parseFloat(document.getElementById('b1').value) || 1;
+            const b2 = parseFloat(document.getElementById('b2').value) || 1;
+            const c2 = parseFloat(document.getElementById('c2').value) || 1;
+            const a3 = parseFloat(document.getElementById('a3').value) || 1;
+            const c3 = parseFloat(document.getElementById('c3').value) || 1;
+            const amountA = parseFloat(document.getElementById('amountA').value) || 1;
+
+            // 计算 B 的值 (A -> B)
+            const amountB = amountA * b1/a1;
+            document.getElementById('resultB').textContent = amountB.toFixed(2);
+
+            // 计算 C 的值 (A -> C)
+            const amountC1 = amountA * c3/a3;
+            document.getElementById('resultC1').textContent = amountC1.toFixed(2);
+
+            // 计算 C 的值 (A -> B -> C)
+            const amountC2 = amountB * c2/b2;
+            document.getElementById('resultC2').textContent = amountC2.toFixed(2);
+        }
+
+        // 初始计算
+        calculate();
+    </script>
+</body>
+</html>
