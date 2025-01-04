@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>比例计算器</title>
+<style>
+
+input[type="number"], input[type="text"] {
+    width: 200px;
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+</style>
+</head>
+<body>
+    <h1>比例计算器</h1>
+<p>
+<table border=1>
+  <tr>
+    <td>X = <input type="number" id="X" placeholder="X" oninput="calculate()"></td>
+    <td>Y = <input type="number" id="Y" placeholder="Y" oninput="calculate()"></td>
+  </tr>
+  <tr>
+    <td>x = <input type="number" id="x" placeholder="x" oninput="calculate()"></td>
+    <td>y = <input type="text" id="y" placeholder="?" readonly></td>
+  </tr>
+</table>
+<script>
+function calculate() {
+  // 获取输入框的值
+  const X = parseFloat(document.getElementById('X').value) || 0;
+  const Y = parseFloat(document.getElementById('Y').value) || 0;
+  const x = parseFloat(document.getElementById('x').value) || 0;
+
+  // 检查哪三个输入框有值
+  if ((X !== 0 && Y !== 0 && x !== 0) || // X, Y, x 有值
+      (X !== 0 && Y !== 0 && !isNaN(document.getElementById('y').value)) || // X, Y, y（但y是计算得出的，所以这里不直接用它来触发计算）
+      (X !== 0 && x !== 0 && !isNaN(document.getElementById('Y').value)) || // X, x, Y
+      (Y !== 0 && x !== 0 && !isNaN(document.getElementById('X').value))) { // Y, x, X
+
+    // 检查是否有三个非零数字
+    if ((X !== 0 && Y !== 0 && x !== 0) ||
+        (X !== 0 && isNaN(document.getElementById('y').value) && Y !== 0 && x !== 0)) {
+
+      // 根据公式 x/X = y/Y 计算 y
+      const yValue = (x / X) * Y;
+
+      // 更新 y 输入框的值
+      document.getElementById('y').value = yValue.toFixed(2); // 保留两位小数
+    }
+    // 注意：这里没有处理 y, Y, X 有值而 x 为空的情况，因为根据公式，x 是必需的。
+    // 如果需要处理这种情况，可以添加额外的逻辑来提示用户输入 x。
+  } else {
+    // 如果不足三个输入框有值，则清空 y（可选）
+    document.getElementById('y').value = '';
+  }
+
+}
+</script>
+</body>
+</html>
