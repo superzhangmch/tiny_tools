@@ -35,7 +35,7 @@
   <br>
   <button onclick="evaluateExpressions_simple()">数字求和</button>
   <button onclick="evaluateExpressions()">表达式计算</button>
-  <button onclick="clearText()">Clear</button>
+  <button onclick="clearText()">清除</button>
   <p id="result"></p>
 
   <script>
@@ -59,7 +59,7 @@
       var be_sumed = [];
       for (let index = 0; index < lines.length; index++) {
         let line = lines[index];
-        line = line.replace(/(\d)\s+(\d)/g, "$1 , $2");
+        line = line.replace(/(\d)\s+(\d)/g, "$1 , $2").replace(/[\u200B-\u200F\u202A-\u202E]/g, "");
         let lineHTML = line;
         let match;
         // 针对当前行查找所有可能的表达式
@@ -77,9 +77,12 @@
           if (exprToEvaluate.includes('=')) {
             // 按第一个等号拆分（允许格式如 "(2+3)*2.5=12.5"）
             let parts = exprToEvaluate.split('=');
-            if (parts.length < 2) continue; // 若没有右侧部分则忽略
+            if (parts.length < 2) continue;
             let leftExpr = parts[0].trim();
             let rightExpr = parts[1].trim();
+            if (leftExpr.length == 0) {
+              leftExpr = parts[1].trim();
+            }
             try {
               let leftVal = eval(leftExpr);
               let rightVal = eval(rightExpr);
@@ -117,7 +120,11 @@
             }
           }
           if (exprValue === undefined) continue;
-          be_sumed.push(exprToEvaluate);
+          if (exprToEvaluate != exprValue) {
+            be_sumed.push(exprValue + " from: " + exprToEvaluate);
+          } else {
+            be_sumed.push(exprToEvaluate);
+          }
           // console.log('bb ' + exprToEvaluate + ' ' + exprValue + ' ' + totalSum);
           // 累加计算结果
           totalSum += exprValue;
