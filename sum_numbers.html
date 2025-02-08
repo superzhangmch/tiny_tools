@@ -28,9 +28,9 @@
   </style>
 </head>
 <body>
-  <h1>sum of numbers</h1>
+  <h1>求和</h1>
   <textarea id="inputText" placeholder="1. 直接求和：一段文本里面有数字，则把所有数字相加.
-如果有四则运算表达式也会先计算再累加。对于(2+3)*5=12.5, 会只累加等号左边的。
+同时对里面的不带括号四则计算式如1+2*3会当整体
 2. 表达式计算：数学表达式(三角函数,log，括号等)，可以有多行，会把有全加起来"></textarea>
   <br>
   <button onclick="evaluateExpressions_simple()">数字求和</button>
@@ -56,8 +56,10 @@
       const expressionRegex = /[+\-*\/×x÷()\d.\s=]+/g;
 
       // 逐行处理
+      var be_sumed = [];
       for (let index = 0; index < lines.length; index++) {
         let line = lines[index];
+        line = line.replace(/(\d)\s+(\d)/g, "$1 , $2");
         let lineHTML = line;
         let match;
         // 针对当前行查找所有可能的表达式
@@ -65,6 +67,7 @@
           let exprStr = match[0].trim();
           if (exprStr === '') continue;
           // 替换非标准运算符
+          // console.log('aa ' + exprStr);
           let exprToEvaluate = exprStr.replace(/×/g, '*')
                                       .replace(/x/g, '*')
                                       .replace(/÷/g, '/');
@@ -106,16 +109,21 @@
             // 无等号时直接计算整个表达式
             try {
               exprValue = eval(exprToEvaluate);
+              // console.log("cc"+ exprToEvaluate + ' ' + exprValue);
             } catch (e) {
               outputHTML += `<p style="color:red;">Error evaluating expression "${exprStr}": ${e.message}</p>`;
               errorFound = true;
               break;
             }
           }
+          if (exprValue === undefined) continue;
+          be_sumed.push(exprToEvaluate);
+          // console.log('bb ' + exprToEvaluate + ' ' + exprValue + ' ' + totalSum);
           // 累加计算结果
           totalSum += exprValue;
           // 在当前行中高亮显示该表达式
-          lineHTML = lineHTML.replace(exprStr, `<span class="highlight">${exprStr}</span>`);
+          // console.log('xx', exprStr);
+          lineHTML = lineHTML.replaceAll(exprStr, `<span class="highlight">${exprStr}</span>`);
         }
         if (errorFound) break;
         outputHTML += lineHTML + '<br>';
@@ -126,6 +134,7 @@
         return;
       }
       resultDiv.innerHTML = `Total Sum: ${totalSum}<br><br>${outputHTML}`;
+      resultDiv.innerHTML += "<hr><ul><li>" + be_sumed.join("<li>") + "</ul>";
     }
 
     // 表达式计算：支持三角函数、log、括号等 Math 函数计算
