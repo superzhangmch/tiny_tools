@@ -1,157 +1,179 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>求和</title>
-    <style>
-        .highlight {
-            color: red;
-        }
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        textarea {
-            width: 100%;
-            height: 100px;
-        }
-        button {
-            margin-top: 10px;
-            padding: 10px 20px;
-            font-size: 16px;
-        }
-        p {
-            margin-top: 10px;
-            font-weight: bold;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>求和</title>
+  <style>
+    .highlight {
+      color: red;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+    }
+    p {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
-
-    <h1>sum of numbers</h1>
-    <textarea id="inputText" placeholder="1. 直接求和：一段文本里面有数字，则把所有数字相加. 
-   同时对里面的不带括号四则计算式如1+2*3会当整体
+  <h1>sum of numbers</h1>
+  <textarea id="inputText" placeholder="1. 直接求和：一段文本里面有数字，则把所有数字相加.
+如果有四则运算表达式也会先计算再累加。对于(2+3)*5=12.5, 会只累加等号左边的。
 2. 表达式计算：数学表达式(三角函数,log，括号等)，可以有多行，会把有全加起来"></textarea>
-    <button onclick="evaluateExpressions_simple()">数字求和</button>
-    <button onclick="evaluateExpressions()">表达式计算</button>
-    <p id="result"></p>
+  <br>
+  <button onclick="evaluateExpressions_simple()">数字求和</button>
+  <button onclick="evaluateExpressions()">表达式计算</button>
+  <button onclick="clearText()">Clear</button>
+  <p id="result"></p>
 
-    <script>
-        function evaluateExpressions() {
-            const input = document.getElementById('inputText').value.toLowerCase();
-            // Split the input into lines
+  <script>
+    // 清空文本和结果
+    function clearText() {
+      document.getElementById('inputText').value = '';
+      document.getElementById('result').innerHTML = '';
+    }
 
-            const lines = input.split('\n');
-            let totalSum = 0;
-            let results = [];
+    // 数字求和：对包含允许的数学表达式（由数字、加减乘除、括号组成）的文本进行处理
+    function evaluateExpressions_simple() {
+      const input = document.getElementById('inputText').value;
+      const lines = input.split('\n');
+      let totalSum = 0;
+      let outputHTML = '';
+      let errorFound = false;
+      // 正则：匹配数字、括号、运算符、空格及等号
+      const expressionRegex = /[+\-*\/×x÷()\d.\s=]+/g;
 
-            // Regular expression to match and replace functions
-            const functionRegex = /\b(sin|cos|tan|log|sqrt|abs|exp|pi)\b/g;
+      // 逐行处理
+      for (let index = 0; index < lines.length; index++) {
+        let line = lines[index];
+        let lineHTML = line;
+        let match;
+        // 针对当前行查找所有可能的表达式
+        while ((match = expressionRegex.exec(line)) !== null) {
+          let exprStr = match[0].trim();
+          if (exprStr === '') continue;
+          // 替换非标准运算符
+          let exprToEvaluate = exprStr.replace(/×/g, '*')
+                                      .replace(/x/g, '*')
+                                      .replace(/÷/g, '/');
 
-            var c = 0
-            var e = 0
-            for (let line of lines) {
-                // Trim whitespace and skip empty lines
-                line = line.trim();
-                if (line === '') continue;
-
-                // Replace functions with Math functions
-                let expression = line.replace(functionRegex, (match) => {
-                    if (match === 'pi') return 'Math.PI';
-                    return `Math.${match}`;
-                });
-
-                // Replace ^ with ** for exponentiation
-                expression = expression.replace(/\^/g, '**');
-                expression = expression.replace(/×/g, '*');
-                expression = expression.replace(/x/g, '*');
-                expression = expression.replace(/÷/g, '/');
-
-                try {
-                    // Evaluate the expression
-                    const result = eval(expression);
-                    totalSum += result;
-                    results.push(`${line} = ${result}`);
-                    c += 1
-                } catch (error) {
-                    results.push(`Error evaluating <font color=red> '${line}': </font>${error.message}`);
-                    e += 1
+          let exprValue;
+          // 判断是否包含等号
+          if (exprToEvaluate.includes('=')) {
+            // 按第一个等号拆分（允许格式如 "(2+3)*2.5=12.5"）
+            let parts = exprToEvaluate.split('=');
+            if (parts.length < 2) continue; // 若没有右侧部分则忽略
+            let leftExpr = parts[0].trim();
+            let rightExpr = parts[1].trim();
+            try {
+              let leftVal = eval(leftExpr);
+              let rightVal = eval(rightExpr);
+              // 判断两边数值是否接近（允许5%的误差）
+              if (rightVal === 0) {
+                if (leftVal !== 0) {
+                  outputHTML += `<p style="color:red;">Error: 表达式 "${exprStr}" 左侧(${leftVal})与右侧(${rightVal})不一致。</p>`;
+                  errorFound = true;
+                  break;
                 }
-            }
-
-            // Get the output div
-            const outputDiv = document.getElementById('result');
-            outputDiv.innerHTML = ''
-            // Display the total sum
-            if (c > 1) {
-                if (e>0) {
-                    outputDiv.innerHTML += `<p style='color:red'>有表达式语法错误！</p>`;
+              } else {
+                let diff = Math.abs(leftVal - rightVal);
+                if (diff > 0.05 * Math.abs(rightVal)) {
+                  outputHTML += `<p style="color:red;">Error: 表达式 "${exprStr}" 左侧(${leftVal})与右侧(${rightVal})相差超过5%。</p>`;
+                  errorFound = true;
+                  break;
                 }
-                outputDiv.innerHTML += `<p>Total Sum: ${totalSum}</p>`;
+              }
+              // 若误差允许，则取左侧结果计入求和
+              exprValue = leftVal;
+            } catch (e) {
+              outputHTML += `<p style="color:red;">Error evaluating expression "${exprStr}": ${e.message}</p>`;
+              errorFound = true;
+              break;
             }
-            // Display each result on a new line
-            results.forEach(result => {
-                outputDiv.innerHTML += `<p>${result}</p>`;
-            });
+          } else {
+            // 无等号时直接计算整个表达式
+            try {
+              exprValue = eval(exprToEvaluate);
+            } catch (e) {
+              outputHTML += `<p style="color:red;">Error evaluating expression "${exprStr}": ${e.message}</p>`;
+              errorFound = true;
+              break;
+            }
+          }
+          // 累加计算结果
+          totalSum += exprValue;
+          // 在当前行中高亮显示该表达式
+          lineHTML = lineHTML.replace(exprStr, `<span class="highlight">${exprStr}</span>`);
         }
-        function calculateSum() {
-            // 获取 textarea 的值
-            const inputText = document.getElementById('inputText').value;
-            
-            // 正则表达式匹配所有数字（包括整数和浮点数，可以为负）
-            const regex = /-?\d+(\.\d+)?/g;
-            const matches = inputText.match(regex);
-            
-            // 计算和
-            if (matches) {
-                let sum = 0;
-                sum = matches.reduce((acc, num) => acc + parseFloat(num), 0);
-
-                // 显示结果
-                document.getElementById('result').innerHTML = `sum = ${sum}`;
-
-                // 高亮显示匹配的数字
-                const highlightedText = inputText.replace(regex, match => `<font color=red>${match}</font>`);
-                document.getElementById('result').innerHTML += "<hr><pre>" + highlightedText + "</pre>";
-            } else {
-                document.getElementById('result').innerHTML = "no number found";
-            }
+        if (errorFound) break;
+        outputHTML += lineHTML + '<br>';
       }
-      function evaluateExpressions_simple() {
-            const input = document.getElementById('inputText').value;
-            const lines = input.split('\n');
-            let totalSum = 0;
-            let outputHTML = '';
+      const resultDiv = document.getElementById('result');
+      if (errorFound) {
+        resultDiv.innerHTML = outputHTML;
+        return;
+      }
+      resultDiv.innerHTML = `Total Sum: ${totalSum}<br><br>${outputHTML}`;
+    }
 
-	    const expressionRegex = /\d+(\.\d+)?(\s*[+\-*/×x÷]\s*\d+(\.\d+)?)*/g;
+    // 表达式计算：支持三角函数、log、括号等 Math 函数计算
+    function evaluateExpressions() {
+      const input = document.getElementById('inputText').value.toLowerCase();
+      const lines = input.split('\n');
+      let totalSum = 0;
+      let results = [];
+      // 替换函数名称（如 sin、cos 等）
+      const functionRegex = /\b(sin|cos|tan|log|sqrt|abs|exp|pi)\b/g;
 
-            lines.forEach((line, index) => {
-                let lineHTML = line;
-                let match;
-                while ((match = expressionRegex.exec(line)) !== null) {
-                    var expression = match[0];
-		    var expression_ori = match[0];
-                    expression = expression.replace(/×/g, '*');
-                    expression = expression.replace(/x/g, '*');
-		    expression = expression.replace(/÷/g, '/');
-                    try {
+      let countValid = 0, countError = 0;
+      for (let line of lines) {
+        line = line.trim();
+        if (line === '') continue;
 
-                        const value = eval(expression);
-                        totalSum += value;
-                        lineHTML = lineHTML.replace(expression_ori, `<span class="highlight">${expression_ori}</span>`);
-                    } catch (error) {
-                        console.error(`Error evaluating expression_ori "${expression_ori}" on line ${index + 1}: ${error.message}`);
-                        lineHTML = lineHTML.replace(expression_ori, `<span class="highlight" style="background-color: yellow;">${expression_ori} (Error)</span>`);
-                    }
-                }
-                outputHTML += lineHTML + '<br>';
-            });
+        let expression = line.replace(functionRegex, (match) => {
+          if (match === 'pi') return 'Math.PI';
+          return `Math.${match}`;
+        });
+        // 替换符号
+        expression = expression.replace(/\^/g, '**')
+                               .replace(/×/g, '*')
+                               .replace(/x/g, '*')
+                               .replace(/÷/g, '/');
 
-            const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = `Total Sum: ${totalSum}<br><br>${outputHTML}`;
+        try {
+          const result = eval(expression);
+          totalSum += result;
+          results.push(`${line} = ${result}`);
+          countValid++;
+        } catch (error) {
+          results.push(`Error evaluating <font color=red> '${line}': </font>${error.message}`);
+          countError++;
         }
-    </script>
-
+      }
+      const outputDiv = document.getElementById('result');
+      outputDiv.innerHTML = '';
+      if (countValid > 1) {
+        if (countError > 0) {
+          outputDiv.innerHTML += `<p style='color:red'>有表达式语法错误！</p>`;
+        }
+        outputDiv.innerHTML += `<p>Total Sum: ${totalSum}</p>`;
+      }
+      results.forEach(result => {
+        outputDiv.innerHTML += `<p>${result}</p>`;
+      });
+    }
+  </script>
 </body>
 </html>
