@@ -8,12 +8,11 @@
     body { font-family: Arial, sans-serif; margin: 20px; }
     textarea { width: 100%; margin-bottom: 10px; }
     #statistics { margin-top: 20px; }
-    /* Center the chart container */
+    /* Center the chart container and set initial dimensions */
     #chartContainer {
       margin: auto;
-      /* initial width: 100% of window width; height will be set dynamically */
-      width: 100%;
-      height: 400px;
+      width: 100%; /* initial width = window width */
+      height: 400px; /* initial height; will be updated by updateChartSize() */
     }
     /* Ensure the canvas fills its container */
     #lineChart {
@@ -25,10 +24,10 @@
     let chartInstance = null; // Global Chart instance
     // currentChartWidthPercentage: fraction of window width (1.0 = 100%)
     let currentChartWidthPercentage = 1.0;
-    // currentChartAspect: represents height/width ratio. (1 = square, 0.1 = very flat)
+    // currentChartAspect: height/width ratio (1 = square, 0.1 = very flat)
     let currentChartAspect = 1.0; 
 
-    // Update both the width and height of the chart container and trigger a resize.
+    // Update the chart container's width and height based on current settings.
     function updateChartSize() {
       const container = document.getElementById('chartContainer');
       const newWidth = Math.round(window.innerWidth * currentChartWidthPercentage);
@@ -50,12 +49,13 @@
       updateChartSize();
     }
 
-    // Aspect ratio controls: adjust the height/width ratio.
+    // Adjust the aspect ratio: increase makes the chart taller.
     function increaseChartAspect() {
       currentChartAspect = Math.min(currentChartAspect + 0.1, 1.0);
       updateChartSize();
     }
 
+    // Decrease aspect ratio to make the chart flatter.
     function decreaseChartAspect() {
       currentChartAspect = Math.max(currentChartAspect - 0.1, 0.1);
       updateChartSize();
@@ -98,7 +98,7 @@
         return;
       }
       
-      var arrays = parseDataByColumns(inputData);
+      const arrays = parseDataByColumns(inputData);
       const statistics = arrays.map(arr => calculateStatistics(arr));
       displayStatistics(statistics);
       drawLineChart(arrays);
@@ -139,15 +139,19 @@
       return fields.map(field => columnData[field]);
     }
 
+    // Calculate statistics using only valid (non-null) values.
     function calculateStatistics(array) {
-      const mean = array.reduce((sum, value) => sum + value, 0) / array.length;
-      const sortedArray = [...array].sort((a, b) => a - b);
-      const median = (sortedArray[(array.length - 1) >> 1] + sortedArray[array.length >> 1]) / 2;
-      const stdDev = Math.sqrt(array.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / array.length);
-      const max = Math.max(...array);
-      const min = Math.min(...array);
-      const count = array.length;
-      return { mean, median, stdDev, max, min, count };
+      const valid = array.filter(v => v !== null);
+      if (valid.length === 0) {
+        return { mean: 0, median: 0, stdDev: 0, max: 0, min: 0, count: 0 };
+      }
+      const mean = valid.reduce((sum, value) => sum + value, 0) / valid.length;
+      const sorted = [...valid].sort((a, b) => a - b);
+      const median = (sorted[(valid.length - 1) >> 1] + sorted[valid.length >> 1]) / 2;
+      const stdDev = Math.sqrt(valid.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / valid.length);
+      const max = Math.max(...valid);
+      const min = Math.min(...valid);
+      return { mean, median, stdDev, max, min, count: valid.length };
     }
 
     function displayStatistics(statistics) {
@@ -162,49 +166,35 @@
       table.setAttribute('border', '1');
       const thead = document.createElement('thead');
       const headerRow = document.createElement('tr');
-      const headers = ['Array Index', 'Mean', 'Median', 'Standard Deviation', 'Max', 'Min', 'Count'];
-      headers.forEach(headerText => {
+      const headers = ['Array Index', 'Mean', 'Median', 'Std. Dev.', 'Max', 'Min', 'Count'];
+      headers.forEach(text => {
         const th = document.createElement('th');
-        th.appendChild(document.createTextNode(headerText));
+        th.appendChild(document.createTextNode(text));
         headerRow.appendChild(th);
       });
       thead.appendChild(headerRow);
       table.appendChild(thead);
       const tbody = document.createElement('tbody');
-      statistics.forEach((stat, index) => {
+      statistics.forEach((stat, i) => {
         const row = document.createElement('tr');
-        let cell = document.createElement('td');
-        cell.appendChild(document.createTextNode(index + 1));
-        row.appendChild(cell);
-        cell = document.createElement('td');
-        cell.appendChild(document.createTextNode(stat.mean.toFixed(2)));
-        row.appendChild(cell);
-        cell = document.createElement('td');
-        cell.appendChild(document.createTextNode(stat.median.toFixed(2)));
-        row.appendChild(cell);
-        cell = document.createElement('td');
-        cell.appendChild(document.createTextNode(stat.stdDev.toFixed(2)));
-        row.appendChild(cell);
-        cell = document.createElement('td');
-        cell.appendChild(document.createTextNode(stat.max));
-        row.appendChild(cell);
-        cell = document.createElement('td');
-        cell.appendChild(document.createTextNode(stat.min));
-        row.appendChild(cell);
-        cell = document.createElement('td');
-        cell.appendChild(document.createTextNode(stat.count));
-        row.appendChild(cell);
+        [i+1, stat.mean.toFixed(2), stat.median.toFixed(2), stat.stdDev.toFixed(2), stat.max, stat.min, stat.count]
+          .forEach(text => {
+            const td = document.createElement('td');
+            td.appendChild(document.createTextNode(text));
+            row.appendChild(td);
+          });
         tbody.appendChild(row);
       });
       table.appendChild(tbody);
       container.appendChild(table);
     }
 
+    // Draw a line chart for non-TABLE mode.
     function drawLineChart(data) {
       const ctx = document.getElementById('lineChart').getContext('2d');
       if (chartInstance) { chartInstance.destroy(); }
-      const datasets = data.map((arr, index) => ({
-        label: `Array ${index + 1}`,
+      const datasets = data.map((arr, i) => ({
+        label: `Array ${i+1}`,
         data: arr,
         borderColor: getRandomColor(),
         fill: false
@@ -225,7 +215,7 @@
       });
     }
 
-    // For TABLE mode with non-numeric x-axis labels.
+    // Draw a line chart for TABLE mode.
     function drawLineChartTable(xLabels, datasets) {
       const ctx = document.getElementById('lineChart').getContext('2d');
       if (chartInstance) { chartInstance.destroy(); }
@@ -254,6 +244,22 @@
       return color;
     }
 
+    // ------------------ Normalization Helper ------------------
+    // Given an array (which may contain nulls), compute the normalized values.
+    function normalizeLine(yValues, newMin, newMax) {
+      const valid = yValues.filter(v => v !== null);
+      if (valid.length === 0) return yValues;
+      const origMin = Math.min(...valid);
+      const origMax = Math.max(...valid);
+      if (origMax === origMin) {
+        return yValues.map(v => (v === null ? null : newMin));
+      }
+      return yValues.map(v => {
+        if (v === null) return null;
+        return newMin + ((v - origMin) * (newMax - newMin)) / (origMax - origMin);
+      });
+    }
+
     // ------------------ TABLE Mode Processing ------------------
     // TABLE mode: Row mode.
     function processTableDataRow() {
@@ -280,22 +286,26 @@
       const xLabels = table[0].slice(1);
       const datasets = [];
       const statisticsArray = [];
+      const normalizeFlag = document.getElementById("normalize").checked;
+      const normMinInput = parseFloat(document.getElementById("normMin").value);
+      const normMaxInput = parseFloat(document.getElementById("normMax").value);
       for (let i = 1; i < table.length; i++) {
         const row = table[i];
         const seriesName = row[0];
-        const yValues = row.slice(1).map(v => {
-          const num = parseFloat(v);
+        // For each cell, try to parse as number; if not valid, use null (which will produce a gap)
+        let yValues = row.slice(1).map(v => {
+          let num = parseFloat(v);
           return isNaN(num) ? null : num;
         });
-        if (yValues.some(v => v === null)) {
-          alert("Invalid y-axis value in row " + (i + 1) + ". All y-axis values must be numeric.");
-          return;
+        if (normalizeFlag) {
+          yValues = normalizeLine(yValues, normMinInput, normMaxInput);
         }
         datasets.push({
           label: seriesName,
           data: yValues,
           borderColor: getRandomColor(),
-          fill: false
+          fill: false,
+          spanGaps: false
         });
         statisticsArray.push(calculateStatistics(yValues));
       }
@@ -329,21 +339,24 @@
       const xLabels = table.slice(1).map(row => row[0]);
       const datasets = [];
       const statisticsArray = [];
+      const normalizeFlag = document.getElementById("normalize").checked;
+      const normMinInput = parseFloat(document.getElementById("normMin").value);
+      const normMaxInput = parseFloat(document.getElementById("normMax").value);
       for (let col = 1; col < numCols; col++) {
         const seriesName = table[0][col];
-        const yValues = table.slice(1).map(row => {
-          const num = parseFloat(row[col]);
+        let yValues = table.slice(1).map(row => {
+          let num = parseFloat(row[col]);
           return isNaN(num) ? null : num;
         });
-        if (yValues.some(v => v === null)) {
-          alert("Invalid y-axis value in column " + (col + 1) + ". All y-axis values must be numeric.");
-          return;
+        if (normalizeFlag) {
+          yValues = normalizeLine(yValues, normMinInput, normMaxInput);
         }
         datasets.push({
           label: seriesName,
           data: yValues,
           borderColor: getRandomColor(),
-          fill: false
+          fill: false,
+          spanGaps: false
         });
         statisticsArray.push(calculateStatistics(yValues));
       }
@@ -354,29 +367,33 @@
   </script>
 </head>
 <body>
-  <h1>序列数据画折线图</h1>
-  <textarea id="inputData" rows="10" cols="50" placeholder="行序列：每行是一类序列数据，分隔符不限。 for example:
+  <h1>统计分析与折线图</h1>
+  <textarea id="inputData" rows="10" cols="50" placeholder="行序列：每行是一类序列数据，分隔符不限。 例如:
 aaa: [1,12,3,4,6]
 bbb 1 2 3 55 1
 -1.1 2 3 5
 ==========
-列序列：每列是一类序列数据。列分隔符默认空格或TAB
+列序列：每列是一类序列数据。分隔符可为空格或 TAB。
 TABLE 模式（CSV格式）：第一行作为列头，第一列作为行头，其余为数据
-（在TABLE模式中，x轴值可以是字符串，如模型名称，而y轴值必须为数字）
-对于分隔符，输入“TAB”表示制表符，输入“SPACE”表示空格；对于fields，输入“TABLE”或“table”启用TABLE模式。"></textarea>
+（在 TABLE 模式中，x 轴值可为字符串（如模型名称），y 轴值必须为数字；无效数字将被跳过，形成断点）
+对于分隔符，输入“TAB”表示制表符，输入“SPACE”表示空格；对于 fields，输入“TABLE”或“table”启用 TABLE 模式。"></textarea>
   <div>
     <button onclick="processData()">行序列：画折线图</button> | 
     <button onclick="processColData()">列序列：画折线图</button> 
-    <input type="text" id="delimiter" placeholder="列分隔符" style="width:100px"> 
-    <input type="text" id="fields" placeholder="列序号: 逗号隔开, 或用 TABLE 表示csv模式" style='width:300px'>
+    <input type="text" id="delimiter" placeholder="列分隔符" value='tab' style="width:150px"> 
+    <input type="text" id="fields" placeholder="列序号，逗号隔开 或 TABLE" style='width:200px'>
   </div>
   <div style="margin-top:10px;">
     <button onclick="shrinkChart()">Smaller Chart</button>
     <button onclick="enlargeChart()">Bigger Chart</button>
-  </div>
-  <div style="margin-top:10px;">
+|
     <button onclick="decreaseChartAspect()">Shorter Chart</button>
     <button onclick="increaseChartAspect()">Taller Chart</button>
+|
+    <!-- Normalization controls -->
+    <input type="checkbox" id="normalize"> Normalize Data&nbsp;
+    <input type="number" id="normMin" placeholder="Normalized Min" value="0.7" style='width:100px'>
+    <input type="number" id="normMax" placeholder="Normalized Max" value="0.9" style='width:100px'>
   </div>
   <p>
   <div id="statisticsTableContainer"></div>
