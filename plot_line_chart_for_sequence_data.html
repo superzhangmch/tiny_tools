@@ -1,245 +1,388 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<meta http-equiv="content-type" content="text/html;charset=utf8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>统计分析与折线图</title>
+  <meta http-equiv="content-type" content="text/html;charset=utf8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>统计分析与折线图</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    textarea { width: 100%; margin-bottom: 10px; }
+    #statistics { margin-top: 20px; }
+    /* Center the chart container */
+    #chartContainer {
+      margin: auto;
+      /* initial width: 100% of window width; height will be set dynamically */
+      width: 100%;
+      height: 400px;
+    }
+    /* Ensure the canvas fills its container */
+    #lineChart {
+      width: 100% !important;
+      height: 100% !important;
+    }
+  </style>
+  <script>
+    let chartInstance = null; // Global Chart instance
+    // currentChartWidthPercentage: fraction of window width (1.0 = 100%)
+    let currentChartWidthPercentage = 1.0;
+    // currentChartAspect: represents height/width ratio. (1 = square, 0.1 = very flat)
+    let currentChartAspect = 1.0; 
 
-<style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 20px;
-}
+    // Update both the width and height of the chart container and trigger a resize.
+    function updateChartSize() {
+      const container = document.getElementById('chartContainer');
+      const newWidth = Math.round(window.innerWidth * currentChartWidthPercentage);
+      const newHeight = Math.round(newWidth * currentChartAspect);
+      container.style.width = newWidth + "px";
+      container.style.height = newHeight + "px";
+      if (chartInstance) {
+        chartInstance.resize();
+      }
+    }
 
-textarea {
-    width: 100%;
-    margin-bottom: 10px;
-}
+    function enlargeChart() {
+      currentChartWidthPercentage = Math.min(currentChartWidthPercentage + 0.1, 1.0);
+      updateChartSize();
+    }
 
-#statistics {
-    margin-top: 20px;
-}
-</style>
+    function shrinkChart() {
+      currentChartWidthPercentage = Math.max(currentChartWidthPercentage - 0.1, 1/3);
+      updateChartSize();
+    }
 
-<script>
-function processData() {
-    const inputData = document.getElementById('inputData').value.trim();
-    if (!inputData) return;
+    // Aspect ratio controls: adjust the height/width ratio.
+    function increaseChartAspect() {
+      currentChartAspect = Math.min(currentChartAspect + 0.1, 1.0);
+      updateChartSize();
+    }
 
-    const lines = inputData.split('\n');
-    const arrays = lines.map(line => {
-        const regex = /-?\d+(\.\d+)?/g; // 匹配整数和浮点数，包括负数
+    function decreaseChartAspect() {
+      currentChartAspect = Math.max(currentChartAspect - 0.1, 0.1);
+      updateChartSize();
+    }
+
+    window.addEventListener('resize', updateChartSize);
+
+    // ------------------ Data Processing and Chart Drawing ------------------
+    function processData() {
+      const inputData = document.getElementById('inputData').value.trim();
+      if (!inputData) return;
+      
+      const fieldsValue = document.getElementById('fields').value.trim();
+      if (fieldsValue.toUpperCase() === "TABLE") {
+        processTableDataRow();
+        return;
+      }
+      
+      // Non-TABLE mode: process each row to extract numeric values.
+      const lines = inputData.split('\n');
+      const arrays = lines.map(line => {
+        const regex = /-?\d+(\.\d+)?/g;
         const matches = line.match(regex);
         return matches ? matches.map(Number) : [];
-    }).filter(arr => arr.length > 1); // 过滤掉没有数字或只有一个数字的行
+      }).filter(arr => arr.length > 1);
 
-    const statistics = arrays.map(arr => calculateStatistics(arr));
-	
-  
-    displayStatistics(statistics);
-    drawLineChart(arrays);
-}
-
-function parseDataByColumns(input) {
-    const lines = input.split('\n');
-    let delimiter = document.getElementById('delimiter').value.trim();
-    if (!delimiter) delimiter = ' ';
-    if ('space' == delimiter) delimiter = ' ';
-    if ('tab' == delimiter) delimiter = '\t';
-
-    let fieldsInput = document.getElementById('fields').value.trim();
-    let columnData = {};
-    let fields = fieldsInput.split(',').map(Number);
-    if (fieldsInput.length == 0 || !fields) {
-	fields = [0];
-	columnData[0] = [];
-    } else {
-	for (var f in fields) {
-	    columnData[fields[f]] = [];
-	}
+      const statistics = arrays.map(arr => calculateStatistics(arr));
+      displayStatistics(statistics);
+      drawLineChart(arrays);
+      updateChartSize();
     }
-    console.log('xx', '<'+delimiter+'>', fields, fields.length, columnData);
-    for (let line of lines) {
-        line = line.trim();
 
-        if (line) {
-            const values = line.split(delimiter);
-            fields.forEach(field => {
-                const value = values[field];
-                if (!isNaN(value)) {
-                    columnData[field].push(Number(value));
-                }
-            });
+    function processColData() {
+      const inputData = document.getElementById('inputData').value.trim();
+      if (!inputData) return;
+      
+      const fieldsValue = document.getElementById('fields').value.trim();
+      if (fieldsValue.toUpperCase() === "TABLE") {
+        processTableDataCol();
+        return;
+      }
+      
+      var arrays = parseDataByColumns(inputData);
+      const statistics = arrays.map(arr => calculateStatistics(arr));
+      displayStatistics(statistics);
+      drawLineChart(arrays);
+      updateChartSize();
+    }
+
+    // Parse data by columns for non-TABLE mode.
+    function parseDataByColumns(input) {
+      const lines = input.split('\n');
+      let delimiter = document.getElementById('delimiter').value.trim();
+      if (!delimiter) delimiter = ' ';
+      if (delimiter.toUpperCase() === 'SPACE') delimiter = ' ';
+      if (delimiter.toUpperCase() === 'TAB') delimiter = '\t';
+
+      let fieldsInput = document.getElementById('fields').value.trim();
+      let columnData = {};
+      let fields = fieldsInput.split(',').map(Number);
+      if (fieldsInput.length == 0 || isNaN(fields[0])) {
+        fields = [0];
+        columnData[0] = [];
+      } else {
+        for (let f in fields) {
+          columnData[fields[f]] = [];
         }
+      }
+      for (let line of lines) {
+        line = line.trim();
+        if (line) {
+          const values = line.split(delimiter);
+          fields.forEach(field => {
+            const value = values[field];
+            if (!isNaN(value)) {
+              columnData[field].push(Number(value));
+            }
+          });
+        }
+      }
+      return fields.map(field => columnData[field]);
     }
 
-    return fields.map(field => columnData[field]);
-}
+    function calculateStatistics(array) {
+      const mean = array.reduce((sum, value) => sum + value, 0) / array.length;
+      const sortedArray = [...array].sort((a, b) => a - b);
+      const median = (sortedArray[(array.length - 1) >> 1] + sortedArray[array.length >> 1]) / 2;
+      const stdDev = Math.sqrt(array.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / array.length);
+      const max = Math.max(...array);
+      const min = Math.min(...array);
+      const count = array.length;
+      return { mean, median, stdDev, max, min, count };
+    }
 
-function processColData() {
-    const inputData = document.getElementById('inputData').value.trim();
-    if (!inputData) return;
-    var arrays = parseDataByColumns(inputData);
-    const statistics = arrays.map(arr => calculateStatistics(arr));
-	
-  
-    displayStatistics(statistics);
-    drawLineChart(arrays);
-}
-
-function calculateStatistics(array) {
-    const mean = array.reduce((sum, value) => sum + value, 0) / array.length;
-
-    const sortedArray = [...array].sort((a, b) => a - b);
-    const median = (sortedArray[(array.length - 1) >> 1] + sortedArray[array.length >> 1]) / 2;
-
-    const stdDev = Math.sqrt(array.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / array.length);
-
-    const max = Math.max(...array);
-    const min = Math.min(...array);
-    const count = array.length;
-
-    return { mean, median, stdDev, max, min, count };
-}
-
-function displayStatistics(statistics) {
-    const container = document.getElementById('statisticsTableContainer');
-    
-    // 清空之前的内容
-    container.innerHTML = '';
-
-    // 如果没有统计数据，直接返回
-    if (statistics.length === 0) {
+    function displayStatistics(statistics) {
+      const container = document.getElementById('statisticsTableContainer');
+      container.innerHTML = '';
+      if (statistics.length === 0) {
         container.innerHTML = '<p>No data available.</p>';
         return;
-    }
-
-    // 创建表格元素
-    const table = document.createElement('table');
-    table.style.width = '80%';
-    table.setAttribute('border', '1');
-    
-    // 创建表头
-    const thead = document.createElement('thead');
-    const headerRow = document.createElement('tr');
-    const headers = ['Array Index', 'Mean', 'Median', 'Standard Deviation', 'Max', 'Min', 'Count'];
-    
-    headers.forEach(headerText => {
+      }
+      const table = document.createElement('table');
+      table.style.width = '80%';
+      table.setAttribute('border', '1');
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      const headers = ['Array Index', 'Mean', 'Median', 'Standard Deviation', 'Max', 'Min', 'Count'];
+      headers.forEach(headerText => {
         const th = document.createElement('th');
         th.appendChild(document.createTextNode(headerText));
         headerRow.appendChild(th);
-    });
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
-
-    // 创建表体
-    const tbody = document.createElement('tbody');
-    
-    statistics.forEach((stat, index) => {
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      statistics.forEach((stat, index) => {
         const row = document.createElement('tr');
-        
-        // 添加数组索引
         let cell = document.createElement('td');
         cell.appendChild(document.createTextNode(index + 1));
         row.appendChild(cell);
-
-        // 添加均值
         cell = document.createElement('td');
         cell.appendChild(document.createTextNode(stat.mean.toFixed(2)));
         row.appendChild(cell);
-
-        // 添加中位数
         cell = document.createElement('td');
         cell.appendChild(document.createTextNode(stat.median.toFixed(2)));
         row.appendChild(cell);
-
-        // 添加标准差
         cell = document.createElement('td');
         cell.appendChild(document.createTextNode(stat.stdDev.toFixed(2)));
         row.appendChild(cell);
-
-        // 添加最大值
         cell = document.createElement('td');
         cell.appendChild(document.createTextNode(stat.max));
         row.appendChild(cell);
-
-        // 添加最小值
         cell = document.createElement('td');
         cell.appendChild(document.createTextNode(stat.min));
         row.appendChild(cell);
-
-        // 添加元素个数
         cell = document.createElement('td');
         cell.appendChild(document.createTextNode(stat.count));
         row.appendChild(cell);
-
         tbody.appendChild(row);
-    });
-
-    table.appendChild(tbody);
-    container.appendChild(table);
-}
-
-let chartInstance = null; // 全局变量来存储当前的 Chart 实例
-
-function drawLineChart(data) {
-    const ctx = document.getElementById('lineChart').getContext('2d');
-
-    // 如果已经有一个 Chart 实例，先销毁它
-    if (chartInstance) {
-        chartInstance.destroy();
+      });
+      table.appendChild(tbody);
+      container.appendChild(table);
     }
 
-    const datasets = data.map((arr, index) => ({
+    function drawLineChart(data) {
+      const ctx = document.getElementById('lineChart').getContext('2d');
+      if (chartInstance) { chartInstance.destroy(); }
+      const datasets = data.map((arr, index) => ({
         label: `Array ${index + 1}`,
         data: arr,
         borderColor: getRandomColor(),
         fill: false
-    }));
-
-    chartInstance = new Chart(ctx, {
+      }));
+      chartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: data[0].map((_, i) => i), // 假定所有数组长度相同
-            datasets: datasets
+          labels: data[0].map((_, i) => i),
+          datasets: datasets
         },
         options: {
-            responsive: true,
-            scales: {
-                x: {
-                    type: 'linear',
-                    position: 'bottom'
-                }
-            }
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { type: 'linear', position: 'bottom' }
+          }
         }
-    });
-}
-
-function getRandomColor() {
-    const letters = '0123456789ABCDEF';
-    let color = '#';
-    for (let i = 0; i < 6; i++) {
-        color += letters[Math.floor(Math.random() * 16)];
+      });
     }
-    return color;
-}
 
-</script>
+    // For TABLE mode with non-numeric x-axis labels.
+    function drawLineChartTable(xLabels, datasets) {
+      const ctx = document.getElementById('lineChart').getContext('2d');
+      if (chartInstance) { chartInstance.destroy(); }
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: xLabels,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { type: 'category', position: 'bottom' }
+          }
+        }
+      });
+    }
+
+    function getRandomColor() {
+      const letters = '0123456789ABCDEF';
+      let color = '#';
+      for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+      }
+      return color;
+    }
+
+    // ------------------ TABLE Mode Processing ------------------
+    // TABLE mode: Row mode.
+    function processTableDataRow() {
+      const inputData = document.getElementById('inputData').value.trim();
+      let delimiter = document.getElementById('delimiter').value.trim();
+      if (!delimiter) delimiter = ',';
+      if (delimiter.toUpperCase() === 'SPACE') delimiter = ' ';
+      if (delimiter.toUpperCase() === 'TAB') delimiter = '\t';
+
+      const lines = inputData.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      const table = lines.map(line => line.split(delimiter).map(cell => cell.trim()));
+      const numCols = table[0].length;
+      for (let i = 1; i < table.length; i++) {
+        if (table[i].length !== numCols) {
+          alert("Invalid table: rows have different number of columns.");
+          return;
+        }
+      }
+      if (table.length < 2 || numCols < 2) {
+        alert("Table must have at least 2 rows and 2 columns (including headers).");
+        return;
+      }
+      // First row: x-axis labels (as strings)
+      const xLabels = table[0].slice(1);
+      const datasets = [];
+      const statisticsArray = [];
+      for (let i = 1; i < table.length; i++) {
+        const row = table[i];
+        const seriesName = row[0];
+        const yValues = row.slice(1).map(v => {
+          const num = parseFloat(v);
+          return isNaN(num) ? null : num;
+        });
+        if (yValues.some(v => v === null)) {
+          alert("Invalid y-axis value in row " + (i + 1) + ". All y-axis values must be numeric.");
+          return;
+        }
+        datasets.push({
+          label: seriesName,
+          data: yValues,
+          borderColor: getRandomColor(),
+          fill: false
+        });
+        statisticsArray.push(calculateStatistics(yValues));
+      }
+      displayStatistics(statisticsArray);
+      drawLineChartTable(xLabels, datasets);
+      updateChartSize();
+    }
+
+    // TABLE mode: Column mode.
+    function processTableDataCol() {
+      const inputData = document.getElementById('inputData').value.trim();
+      let delimiter = document.getElementById('delimiter').value.trim();
+      if (!delimiter) delimiter = ',';
+      if (delimiter.toUpperCase() === 'SPACE') delimiter = ' ';
+      if (delimiter.toUpperCase() === 'TAB') delimiter = '\t';
+
+      const lines = inputData.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      const table = lines.map(line => line.split(delimiter).map(cell => cell.trim()));
+      const numCols = table[0].length;
+      for (let i = 1; i < table.length; i++) {
+        if (table[i].length !== numCols) {
+          alert("Invalid table: rows have different number of columns.");
+          return;
+        }
+      }
+      if (table.length < 2 || numCols < 2) {
+        alert("Table must have at least 2 rows and 2 columns (including headers).");
+        return;
+      }
+      // First column: x-axis labels (as strings) from second row onward.
+      const xLabels = table.slice(1).map(row => row[0]);
+      const datasets = [];
+      const statisticsArray = [];
+      for (let col = 1; col < numCols; col++) {
+        const seriesName = table[0][col];
+        const yValues = table.slice(1).map(row => {
+          const num = parseFloat(row[col]);
+          return isNaN(num) ? null : num;
+        });
+        if (yValues.some(v => v === null)) {
+          alert("Invalid y-axis value in column " + (col + 1) + ". All y-axis values must be numeric.");
+          return;
+        }
+        datasets.push({
+          label: seriesName,
+          data: yValues,
+          borderColor: getRandomColor(),
+          fill: false
+        });
+        statisticsArray.push(calculateStatistics(yValues));
+      }
+      displayStatistics(statisticsArray);
+      drawLineChartTable(xLabels, datasets);
+      updateChartSize();
+    }
+  </script>
 </head>
 <body>
-    <h1>序列数据画折线图</h1>
-    <textarea id="inputData" rows="10" cols="50" placeholder="行序列：每行是一类序列数据，分隔符不限。 for example:
+  <h1>序列数据画折线图</h1>
+  <textarea id="inputData" rows="10" cols="50" placeholder="行序列：每行是一类序列数据，分隔符不限。 for example:
 aaa: [1,12,3,4,6]
 bbb 1 2 3 55 1
 -1.1 2 3 5
 ==========
-列序列：每列是一类序列数据。列序号比如1,2,3。列分隔符，默认空格, \t用tag"></textarea>
-    <button onclick="processData()">行序列：画折线图</button> | <button onclick="processColData()">列序列：画折线图</button> <input type="text" id="delimiter" placeholder="列分隔符" style='width:60px'> <input type="text" id="fields" placeholder="列序号，逗号隔开, 0开始">
-    <p>
-    <div id="statisticsTableContainer"></div>
+列序列：每列是一类序列数据。列分隔符默认空格或TAB
+TABLE 模式（CSV格式）：第一行作为列头，第一列作为行头，其余为数据
+（在TABLE模式中，x轴值可以是字符串，如模型名称，而y轴值必须为数字）
+对于分隔符，输入“TAB”表示制表符，输入“SPACE”表示空格；对于fields，输入“TABLE”或“table”启用TABLE模式。"></textarea>
+  <div>
+    <button onclick="processData()">行序列：画折线图</button> | 
+    <button onclick="processColData()">列序列：画折线图</button> 
+    <input type="text" id="delimiter" placeholder="列分隔符" style="width:100px"> 
+    <input type="text" id="fields" placeholder="列序号: 逗号隔开, 或用 TABLE 表示csv模式" style='width:300px'>
+  </div>
+  <div style="margin-top:10px;">
+    <button onclick="shrinkChart()">Smaller Chart</button>
+    <button onclick="enlargeChart()">Bigger Chart</button>
+  </div>
+  <div style="margin-top:10px;">
+    <button onclick="decreaseChartAspect()">Shorter Chart</button>
+    <button onclick="increaseChartAspect()">Taller Chart</button>
+  </div>
+  <p>
+  <div id="statisticsTableContainer"></div>
+  <div id="chartContainer">
     <canvas id="lineChart"></canvas>
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 </html>
-
