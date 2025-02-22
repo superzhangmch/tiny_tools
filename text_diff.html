@@ -5,6 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>字符级文本比较工具</title>
     <style>
+table {
+  border: 1px solid black; /* 为整个表格添加边框 */
+  border-collapse: collapse; /* 确保没有重复边框 */
+}
+
+table th, table td {
+//  border-top: none; border-bottom: none;
+border-top: none; border-bottom: 1px dashed gray;
+margin-left:5px;
+margin-right:5px;
+}
+
+table th {
+  border: 1px solid black; /* 为表头添加完整的边框 */
+}
+
+table td {
+  border-left: 1px solid black;  /* 保留左侧竖直边框 */
+  border-right: 1px solid black; /* 保留右侧竖直边框 */
+  text-align: left; /* 左对齐 */
+  vertical-align: top; /* 上对齐 */
+}
         body {
             font-family: Arial, sans-serif;
             margin: 20px;
@@ -27,95 +49,168 @@
             width: 100%; /* 让 pre 标签占据全宽度 */
             box-sizing: border-box; /* 使 padding 不影响宽度 */
         }
+        pre.pre_1 {
+            white-space: pre-wrap; /* 保留空格和换行符，同时允许自动换行 */
+            border: 0px solid #ccc;
+            padding: 0px;
+            margin-top: 0px;
+            margin-bottom: 0px;
+            width: 100%; /* 让 pre 标签占据全宽度 */
+        }
     </style>
     <!-- 引入 diff-match-patch 库 -->
     <script src="https://cdn.jsdelivr.net/gh/google/diff-match-patch/javascript/diff_match_patch.js"></script>
 </head>
 <body>
-    <h1>字符级文本比较工具</h1>
+    <h1>text compare</h1>
     <textarea id="text1" placeholder="输入第一段文本..."></textarea>
     <textarea id="text2" placeholder="输入第二段文本..."></textarea>
     <button onclick="compareTexts()">比较文本</button>
-
-    <table border=0>
-	    <tr><td valign=top><pre id=pre1></pre></td>
-		<td valign=top><pre id=pre2></pre></td>
+<br>
+<br>
+    <table border=0 style='display:none'>
+            <tr><td valign=top><pre id=pre1></pre></td>
+                <td valign=top><pre id=pre2></pre></td>
     </table>
+    <div id=show_div></div>
     <script>
-	function trans(s) {
-		return s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-	}
+        function trans(s) {
+		if (s == '\n') { return " \n";}
+                return s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
         function compareTexts() {
             const text1 = document.getElementById('text1').value;
             const text2 = document.getElementById('text2').value;
             const pre1 = document.getElementById('pre1');
             const pre2 = document.getElementById('pre2');
-	    pre1.innerHTML = "";
-	    pre2.innerHTML = "";
+            const show_div = document.getElementById('show_div');
+            pre1.innerHTML = "";
+            pre2.innerHTML = "";
 
             const dmp = new diff_match_patch();
             const diffs = dmp.diff_main(text1, text2);
 
             // 清理diff结果
             dmp.diff_cleanupSemantic(diffs);
-	    if (diffs.length == 1 && diffs[0][0] == 0) {
-	    	pre1.innerHTML = "same";
-	    	pre2.innerHTML = "same";
-		return;
-	    }
+            if (diffs.length == 1 && diffs[0][0] == 0) {
+                    pre1.innerHTML = "same";
+                    pre2.innerHTML = "same";
+                return;
+            }
 
-	    var last = 0;
-	    var last_is_same = 0;
-	    var idx = 1;
-	    var idx_arr = [];
-	    for (var i in diffs) {
-		var tp = diffs[i][0];
-		if (last == 1 && tp == -1 || last == -1 && tp == 1) {
-			idx_arr.push(idx);
-			idx_arr[idx_arr.length - 1] = -idx;
-			idx_arr[idx_arr.length - 2] = -idx;
-			last_is_same = 1;
-			idx += 1;
-		} else if ((last == 1 || last == -1) && last_is_same ==0 && tp == 0) {
-			idx_arr[idx_arr.length - 1] = idx;
-			idx += 1;
-			idx_arr.push(0);
-			last_is_same = 0;
-		} else if (i == diffs.length - 1 && tp != 0) {
-			idx_arr.push(idx);
-			idx += 1;
-		} else {
-			idx_arr.push(0);
-			last_is_same = 0;
-		}
-		last = tp;
-	    }
-	    // console.log(idx_arr)
+            var last = 0;
+            var last_is_same = 0;
+            var idx = 1;
+            var idx_arr = [];
+            for (var i in diffs) {
+                var tp = diffs[i][0];
+                if (last == 1 && tp == -1 || last == -1 && tp == 1) {
+                        idx_arr.push(idx);
+                        idx_arr[idx_arr.length - 1] = -idx;
+                        idx_arr[idx_arr.length - 2] = -idx;
+                        last_is_same = 1;
+                        idx += 1;
+                } else if ((last == 1 || last == -1) && last_is_same ==0 && tp == 0) {
+                        idx_arr[idx_arr.length - 1] = idx;
+                        idx += 1;
+                        idx_arr.push(0);
+                        last_is_same = 0;
+                } else if (i == diffs.length - 1 && tp != 0) {
+                        idx_arr.push(idx);
+                        idx += 1;
+                } else {
+                        idx_arr.push(0);
+                        last_is_same = 0;
+                }
+                last = tp;
+            }
+            console.log(idx_arr); console.log(diffs)
 
-	    var s1 = "";
-	    var s2 = "";
-	    var idx = 1;
-	    for (var i in diffs) {
-		var tp = diffs[i][0];
-		var content = trans(diffs[i][1]);
-		if (tp == 0) {s1 += content; s2 += content;}
-		if (tp == 1) {
-			var color = 'lightgreen';
-			if (idx_arr[i] < 0) color = 'yellow';
-			s2 += "<span style='background-color:"+color+";'>" + content + "</span><sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
-			s1 += "<sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
-			idx += 1;
-		}
-		if (tp == -1) {
-			var color = 'lightgreen';
-			if (idx_arr[i] < 0) color = 'yellow';
-			s1 += "<span style='background-color:"+color+";'>" + content + "</span><sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
-			s2 += "<sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
-			idx += 1;
-		}
-	    }
-	    pre1.innerHTML = s1;
-	    pre2.innerHTML = s2;
+            var s1 = "";
+            var s2 = "";
+
+            var s1_arr = [];
+            var s2_arr = [];
+
+            var idx = 1;
+	    var last1_has_line_end = 0;
+	    var last2_has_line_end = 0;
+            for (var i in diffs) {
+                var tp = diffs[i][0];
+                var content = trans(diffs[i][1]);
+                if (tp == 0) {
+                        s1 += content; 
+                        s2 += content;
+
+                        var arr = content.split("\n");
+			// console.log("=====\n"+content); console.log(arr);
+			var already_split = 0;
+                        for (var j in arr) {
+                                if (j == 0 && ((last1_has_line_end && last2_has_line_end) || arr[j] == '')) {
+                                        s1_arr.push(arr[j]);
+                                        s2_arr.push(arr[j]);
+					already_split = 1;
+                                } else if (j == 0 && s1_arr.length > 0) {
+                                        s1_arr[s1_arr.length-1] += arr[j];
+                                        s2_arr[s2_arr.length-1] += arr[j];
+                                } else if (j == 1 && j < arr.length - 1 && !already_split) {
+                                        s1_arr.push(arr[j]);
+                                        s2_arr.push(arr[j]);
+					already_split = 1;
+                                } else if (already_split && j < arr.length - 1) {
+                                        s1_arr[s1_arr.length-1] += "\n" + arr[j];
+                                        s2_arr[s2_arr.length-1] += "\n" + arr[j];
+                                } else {
+                                        s1_arr.push(arr[j]);
+                                        s2_arr.push(arr[j]);
+					already_split = 1;
+                                }
+                        }
+			last1_has_line_end = last2_has_line_end = 0;
+                }
+                if (tp == 1) {
+                        var color = 'lightgreen';
+                        if (idx_arr[i] < 0) color = 'yellow';
+                        var c2 = "<span style='background-color:"+color+";'>" + content + "</span>";
+                        c2 += "<sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
+			if (content[content.length-1] == '\n') last2_has_line_end = 1;
+
+                        s2 += c2;
+
+                        var c1 = "<sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
+                        s1 += c1;
+
+                        if (s1_arr.length == 0) { s1_arr.push(c1); s2_arr.push(c2); }
+                        else {s1_arr[s1_arr.length-1] += c1; s2_arr[s2_arr.length-1] += c2; }
+                        idx += 1;
+                }
+                if (tp == -1) {
+                        var color = 'lightgreen';
+                        if (idx_arr[i] < 0) color = 'yellow';
+                        var c1 = "<span style='background-color:"+color+";'>" + content + "</span>";
+                        c1 += "<sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
+			if (content[content.length-1] == '\n') last1_has_line_end = 1;
+                        s1 += c1;
+
+                        var c2 = "<sup style='color:red'>["+Math.abs(idx_arr[i])+"]</sup>";
+                        s2 += c2;
+
+                        if (s2_arr.length == 0) { s2_arr.push(c2); s1_arr.push(c1); }
+                        else {s2_arr[s2_arr.length-1] += c2; s1_arr[s1_arr.length-1] += c1; }
+
+                        idx += 1;
+                }
+            }
+            //pre1.innerHTML = s1;
+            //pre2.innerHTML = s2;
+            var h = "<table border=1><tr><th>first<th>second";
+            for (var i in s1_arr) {
+                    s1_arr[i] = s1_arr[i].replace(/(<sup style='color:red'>\[[0-9]+\]<\/sup>)(\s*\1)+/g, '$1');
+                    s2_arr[i] = s2_arr[i].replace(/(<sup style='color:red'>\[[0-9]+\]<\/sup>)(\s*\1)+/g, '$1');
+                    h += "<tr><td><pre class=pre_1>" + s1_arr[i] + "</pre><td><pre class=pre_1>" + s2_arr[i] +"</pre>"; 
+            }
+            h += "</table>";
+            show_div.innerHTML = h;
         }
     </script>
 </body>
