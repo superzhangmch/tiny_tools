@@ -31,6 +31,7 @@
 	  white-space: nowrap;
 	}
     </style>
+    <script src="https://unpkg.com/json5@2/dist/index.min.js"></script>
 </head>
 <body>
     <h1>JSON View</h1>
@@ -257,10 +258,15 @@
 			newHtml += "<div style='border: 2px solid black;'><span style='font-size:9px; color:'>" + singleLineInput.slice(0, pos) + "<span style='color:red; font-weight:bold;'>[可能错在这里]</span>" + singleLineInput.slice(pos) + "</span></div><br>"
 		}
 
-		const jsonObj = fix_and_return_json(singleLineInput, input, pos);
+		var jsonObj = fix_and_return_json(singleLineInput, input, pos);
 		if (jsonObj === null) {
-			outputDiv.innerHTML = newHtml
-			return
+			try {
+				jsonObj = JSON5.parse(singleLineInput); // 后来才发现这个lib，所以把它放这里了. 早发现，则代码不用整体这么写
+				 console.log(jsonObj)
+			} catch(e) {
+				outputDiv.innerHTML = newHtml;
+				return
+			}
 		}
 		var json_fixed = JSON.stringify(jsonObj);
 		var formattedHTML = formatValue(jsonObj, "ROOT");
