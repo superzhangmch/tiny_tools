@@ -114,25 +114,43 @@ function process_article(text) {
     for (var w in m_word_ori) {
 	var w1 = w.toLowerCase();
 
-	var wc = "";
+	var wc = ""; 
 	var wc1 = "";
 
 	if (wc.length == 0 && m_word_freq[w1]) { wc = w1;}
-
+ 
 	const arr_w = getWordForms(w1).words;
+	//console.log(arr_w)
 	var wc1_freq = 100000000;
+	var wc1_ref = -1;
 	if (m_word_freq[w1]) wc1_freq = m_word_freq[w1];
+	if (m_word_source[w1]) wc1_ref = m_word_source[w1][0];
 	for (var i in arr_w) {
 		var cur_w = arr_w[i];
 		if (cur_w == w1) continue;
-		if (m_word_freq[cur_w]) {
+
+		/// fix
+		// ref_cnt first, then word_freq
+		var ref_c = -1;
+		if (m_word_source[cur_w]) {
+	        	var ref_arr = m_word_source[cur_w];
+	        	ref_c = ref_arr[0];
+		}
+		if (ref_c < wc1_ref) {
+			continue;
+		} else if (ref_c > wc1_ref) {
+			wc1 = arr_w[i];
+			wc1_freq = m_word_freq[wc1];
+			wc1_ref = ref_c;
+		} else if (m_word_freq[cur_w]) {
 			if (m_word_freq[cur_w] < wc1_freq) {
 				wc1 = arr_w[i];
 				wc1_freq = m_word_freq[wc1];
+				wc1_ref = ref_c;
 			}
 		}
 	}
-
+	    
 	if (wc.length == 0 && wc1.length == 0) continue;
 
 	if (wc.length > 0) {
