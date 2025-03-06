@@ -37,39 +37,63 @@
     <h1>JSON View</h1>
     <textarea id="jsonInput" placeholder="Enter JSON here..."></textarea>
     <button onclick="formatJSON()">Format JSON</button>
+    [<input type="file" id="fileInput">
+    <button onclick="loadFile()">加载文件</button>]
     <div id="output"></div>
 
     <script>
+      	function loadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const textarea = document.getElementById('jsonInput');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('请选择一个文件');
+                return;
+            }
+
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                textarea.value = e.target.result;
+            };
+
+            reader.onerror = function(e) {
+                alert('文件读取出错');
+            };
+
+            reader.readAsText(file);
+        }
 	function trans(s) {
 	    return s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
 	function generateCombinations(n, m) {
 	    const result = [];
 	    const combination = [];
-	
+
 	    function backtrack(nRemaining, mRemaining) {
 	        if (nRemaining === 0 && mRemaining === 0) {
 	            result.push(combination.join(''));
 	            return;
 	        }
-	
+
 	        if (nRemaining > 0) {
 	            combination.push(']');
 	            backtrack(nRemaining - 1, mRemaining);
 	            combination.pop();
 	        }
-	
+
 	        if (mRemaining > 0) {
 	            combination.push('}');
 	            backtrack(nRemaining, mRemaining - 1);
 	            combination.pop();
 	        }
 	    }
-	
+
 	    backtrack(n, m);
 	    return result;
 	}
-   
+
 	function json_fix_kv(arr) {
 		return arr.map(item => {
 			const regex = /^\s*(['"]?[a-zA-Z0-9_]+['"]?)\s*:\s*(['"]?[^'":,\[\]\{\}]+['"]?)\s*(,?)\s*$/;
@@ -139,13 +163,13 @@
 	        data += '"';
 	    }
 	    try { return JSON.parse(data); } catch (e) {}
-	
+
 	    // Balance brackets and braces
 	    if (openBraces == closeBraces && openBrackets > closeBrackets) {
 	        data += ']'.repeat(openBrackets - closeBrackets);
 	        try { return JSON.parse(data); } catch (e) {}
 	        data = data.replace(/,\s*([\]}])/g, '$1'); try { return JSON.parse(data); } catch (e) {}
-	    }   
+	    }
 	    if (openBrackets == closeBrackets && openBraces > closeBraces) {
 	        var data1 = data + '}'.repeat(openBraces - closeBraces);
 	        var data2 = data + ':"add_to_fix_json"' + '}'.repeat(openBraces - closeBraces);
@@ -166,7 +190,7 @@
 	        const combinations = generateCombinations(openBrackets - closeBrackets, openBraces - closeBraces );
 	        for (var idx in combinations) {
 	            var comb = combinations[idx];
-	            const lastChar = comb.charAt(comb.length - 1); 
+	            const lastChar = comb.charAt(comb.length - 1);
 	            if (start_letter == '[' && lastChar != ']') continue;
 	            if (start_letter == '{' && lastChar != '}') continue;
 
@@ -182,9 +206,9 @@
 	                var data3 = data + '"add_to_fix_json"' + comb;
 	                try { return JSON.parse(data3); } catch (e) {}
 	                data3 = data3.replace(/,\s*([\]}])/g, '$1'); try { return JSON.parse(data3); } catch (e) {}
-	            }   
-	        }   
-	    }   
+	            }
+	        }
+	    }
 	    // 遍历：多一个字符，少一个字符的情况
 	    const regex = /[,"\[\]{}:]/g;
 	    const matches = [...data_ori.matchAll(regex)]
@@ -246,7 +270,7 @@
 	        const formattedHTML = formatValue(jsonObj, "ROOT");
 	        outputDiv.appendChild(formattedHTML);
 	    } catch (e) {
-		
+
 		var err_msg = e.message;
 		var pos = null;
 		var positionMatch = err_msg.match(/position (\d+)/);
@@ -314,7 +338,7 @@ function hide_show(td_idx)
 {
     // 通过ID找到目标td元素
     var td = document.getElementById('td_' + td_idx);
-    
+
     // 检查td是否存在
     if (!td) {
 	console.log('TD with id td_' + td_idx + ' not found.');
@@ -323,7 +347,7 @@ function hide_show(td_idx)
 
     // 找到td所在的tr
     var tr = td.closest('tr');
-    
+
     // 检查tr是否存在
     if (!tr) {
 	console.log('TR for td_' + td_idx + ' not found.');
@@ -337,7 +361,7 @@ function hide_show(td_idx)
 
 	// 查找带有特定ID的<a>标签
 	var anchor = document.getElementById('a_' + td_idx);
-	
+
 	// 检查anchor是否存在
 	if (!anchor) {
 	    console.log('Anchor with id a_' + td_idx + ' not found.');
@@ -370,7 +394,7 @@ function hide_show(td_idx)
 		td_idx += 1;
 	        keyCell.style.backgroundColor = 'lightgreen';
 
-		
+
 		if (key == '_base64前_' || key == '_原始_') {
 			keyCell.style.color = 'gray';        // 设置字体颜色为灰色
 			keyCell.style.fontStyle = 'italic';  // 设置字体样式为斜体
