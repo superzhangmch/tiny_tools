@@ -47,6 +47,20 @@
     <div id="output"></div>
 
     <script>
+function replaceKeywords(input) {
+  return input.replace(/\b(True|False|None)\b/g, function(match) {
+    switch (match) {
+      case 'True':
+        return 'true';
+      case 'False':
+        return 'false';
+      case 'None':
+        return 'none';
+      default:
+        return match;
+    }
+  });
+}
       	function loadFile() {
             const fileInput = document.getElementById('fileInput');
             const textarea = document.getElementById('jsonInput');
@@ -293,8 +307,14 @@
 				jsonObj = JSON5.parse(singleLineInput); // 后来才发现这个lib，所以把它放这里了. 早发现，则代码不用整体这么写
 				 console.log(jsonObj)
 			} catch(e) {
-				outputDiv.innerHTML = newHtml;
-				return
+				try {
+					var singleLineInput1 = replaceKeywords(singleLineInput);
+					jsonObj = JSON5.parse(singleLineInput1); // 后来才发现这个lib，所以把它放这里了. 早发现，则代码不用整体这么写
+				 	console.log(jsonObj)
+				} catch(e) {
+				    outputDiv.innerHTML = newHtml;
+				    return
+				}
 			}
 		}
 		var json_fixed = JSON.stringify(jsonObj);
