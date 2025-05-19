@@ -1,0 +1,87 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Canvas 点与框绘制</title>
+  <style>
+    canvas { border: 1px solid black; }
+    #controls { margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<h2>加载图片并获取点击坐标 / 绘制点或框的坐标</h2>
+
+<input type="file" id="imgLoader" accept="image/*"><br><br>
+
+<canvas id="canvas"></canvas>
+
+<div id="controls">
+  <p>点击图中点获取坐标：<input type="text" id="clickCoords" readonly></p>
+
+  <p>输入坐标绘制位置（格式：x1,y1 或 x1,y1,x2,y2）：<input type="text" id="drawInput">
+  <button onclick="drawShape()">画图</button></p>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const imgLoader = document.getElementById('imgLoader');
+const clickCoords = document.getElementById('clickCoords');
+const drawInput = document.getElementById('drawInput');
+
+let img = new Image();
+
+// 加载本地图片并绘制到 canvas
+imgLoader.addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    img.onload = function() {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+    }
+    img.src = evt.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// 获取点击坐标并显示
+canvas.addEventListener('click', function(e) {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.round(e.clientX - rect.left);
+  const y = Math.round(e.clientY - rect.top);
+  clickCoords.value = `${x},${y}`;
+});
+
+// 画点或框
+function drawShape() {
+  const input = drawInput.value.trim();
+  const parts = input.split(',').map(p => parseInt(p));
+  if (parts.length === 2) {
+    const [x, y] = parts;
+    // 画点
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = 'red';
+    ctx.fill();
+  } else if (parts.length === 4) {
+    const [x1, y1, x2, y2] = parts;
+    const width = x2 - x1;
+    const height = y2 - y1;
+    ctx.strokeStyle = 'blue';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x1, y1, width, height);
+  } else {
+    alert("请输入合法的格式：x,y 或 x1,y1,x2,y2");
+  }
+}
+</script>
+
+</body>
+</html>
+
