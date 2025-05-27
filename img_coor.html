@@ -1,11 +1,10 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Canvas 点与框绘制</title>
   <style>
-    canvas { border: 1px solid black; }
+    canvas { border: 1px solid black; cursor: crosshair; }
     #controls { margin-top: 10px; }
   </style>
 </head>
@@ -14,11 +13,13 @@
 <h2>加载图片并获取点击坐标 / 绘制点或框的坐标</h2>
 
 <input type="file" id="imgLoader" accept="image/*"><br><br>
+<p>图片分辨率：<span id="imgSize">未加载</span></p>
 
 <canvas id="canvas"></canvas>
 
 <div id="controls">
-  <p>点击图中点获取坐标：<input type="text" id="clickCoords" readonly></p>
+  <p>点击图中点获取坐标(x,y)：<input type="text" id="clickCoords" readonly></p>
+  <p>拖动框选坐标(起点,终点)=(x1,y1,x2,y2)：<input type="text" id="dragCoords" readonly></p>
 
   <p>输入坐标绘制位置（格式：x1,y1 或 x1,y1,x2,y2）：<input type="text" id="drawInput">
   <button onclick="drawShape()">画图</button></p>
@@ -29,9 +30,17 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const imgLoader = document.getElementById('imgLoader');
 const clickCoords = document.getElementById('clickCoords');
+const dragCoords = document.getElementById('dragCoords');
 const drawInput = document.getElementById('drawInput');
+const imgSize = document.getElementById('imgSize');
 
 let img = new Image();
+let isDragging = false;
+let startX = 0, startY = 0;
+let currentX = 0, currentY = 0;
+
+// 画布临时保存原始图像
+let imageBackup = null;
 
 // 加载本地图片并绘制到 canvas
 imgLoader.addEventListener('change', function(e) {
@@ -44,6 +53,7 @@ imgLoader.addEventListener('change', function(e) {
       canvas.width = img.width;
       canvas.height = img.height;
       ctx.drawImage(img, 0, 0);
+      imgSize.textContent = `${img.width} × ${img.height}`;
     }
     img.src = evt.target.result;
   };
@@ -52,19 +62,61 @@ imgLoader.addEventListener('change', function(e) {
 
 // 获取点击坐标并显示
 canvas.addEventListener('click', function(e) {
+  if (isDragging) return;  // 拖动中不处理点击
   const rect = canvas.getBoundingClientRect();
   const x = Math.round(e.clientX - rect.left);
   const y = Math.round(e.clientY - rect.top);
   clickCoords.value = `${x},${y}`;
 });
 
-// 画点或框
+// 拖动开始
+canvas.addEventListener('mousedown', function(e) {
+  const rect = canvas.getBoundingClientRect();
+  startX = Math.round(e.clientX - rect.left);
+  startY = Math.round(e.clientY - rect.top);
+  isDragging = true;
+  imageBackup = ctx.getImageData(0, 0, canvas.width, canvas.height);
+});
+
+// 拖动中
+canvas.addEventListener('mousemove', function(e) {
+  if (!isDragging) return;
+
+  const rect = canvas.getBoundingClientRect();
+  currentX = Math.round(e.clientX - rect.left);
+  currentY = Math.round(e.clientY - rect.top);
+
+  // 恢复背景图像
+  ctx.putImageData(imageBackup, 0, 0);
+
+  // 画虚线框
+  const x = Math.min(startX, currentX);
+  const y = Math.min(startY, currentY);
+  const w = Math.abs(currentX - startX);
+  const h = Math.abs(currentY - startY);
+  ctx.setLineDash([5, 5]);
+  ctx.strokeStyle = 'green';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]);  // 恢复线型
+});
+
+// 拖动结束
+canvas.addEventListener('mouseup', function(e) {
+  if (!isDragging) return;
+  isDragging = false;
+
+  const rect = canvas.getBoundingClientRect();
+  const endX = Math.round(e.clientX - rect.left);
+  const endY = Math.round(e.clientY - rect.top);
+  dragCoords.value = `${startX},${startY},${endX},${endY}`;
+});
+
 function drawShape() {
   const input = drawInput.value.trim();
   const parts = input.split(',').map(p => parseInt(p));
   if (parts.length === 2) {
     const [x, y] = parts;
-    // 画点
     ctx.beginPath();
     ctx.arc(x, y, 4, 0, Math.PI * 2);
     ctx.fillStyle = 'red';
@@ -84,4 +136,3 @@ function drawShape() {
 
 </body>
 </html>
-
