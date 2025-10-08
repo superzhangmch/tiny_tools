@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>英语朗读</title>
+<style>
+body {
+  font-family: sans-serif;
+  max-width: 800px;
+  margin: 30px auto;
+  line-height: 1.6;
+}
+textarea {
+  width: 100%;
+  height: 120px;
+  font-size: 16px;
+  padding: 10px;
+}
+button {
+  margin-top: 10px;
+  margin-bottom: 20px;
+  font-size: 16px;
+  cursor: pointer;
+}
+.line {
+  margin-bottom: 10px;
+  background: #f8f8f8;
+  padding: 8px;
+  border-radius: 6px;
+}
+.word {
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+.word:hover {
+  background: #dbe9ff;
+}
+.controls {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+</style>
+</head>
+<body>
+
+<h2>英语朗读</h2>
+
+<textarea id="input" placeholder="输入英文，每行一句（支持含 [注释]）..."></textarea>
+<div class="controls">
+  <label>语速：
+    <input type="range" id="speed" min="0.3" max="1.5" step="0.1" value="0.8">
+  </label>
+  <span id="speedValue">0.8x</span>
+  <button id="render">渲染</button>
+</div>
+
+<div id="output"></div>
+
+<script>
+function cleanText(text) {
+  // 删除 [ ] 中的内容
+  return text.replace(/\[.*?\]/g, '').trim();
+}
+
+function speak(text, rate) {
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = "en-US";
+  utter.rate = rate; // 控制语速
+  speechSynthesis.speak(utter);
+}
+
+document.getElementById("speed").addEventListener("input", e => {
+  document.getElementById("speedValue").innerText = e.target.value + "x";
+});
+
+document.getElementById("render").onclick = function() {
+  const input = document.getElementById("input").value.trim();
+  const output = document.getElementById("output");
+  const rate = parseFloat(document.getElementById("speed").value);
+  output.innerHTML = ""; // 清空旧内容
+
+  const lines = input.split("\n").filter(line => line.trim() !== "");
+
+  lines.forEach(line => {
+    const cleaned = cleanText(line);
+    if (!cleaned) return;
+
+    const div = document.createElement("div");
+    div.className = "line";
+
+    const button = document.createElement("button");
+    button.textContent = "🔊 整行朗读";
+    button.onclick = () => speak(cleaned, rate);
+
+    const wordsDiv = document.createElement("div");
+    cleaned.split(/\s+/).forEach(word => {
+      const span = document.createElement("span");
+      span.textContent = word + " ";
+      span.className = "word";
+      span.onclick = () => speak(word, rate);
+      wordsDiv.appendChild(span);
+    });
+
+    div.appendChild(button);
+    div.appendChild(wordsDiv);
+    output.appendChild(div);
+  });
+};
+</script>
+
+</body>
+</html>
+
