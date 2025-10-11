@@ -403,24 +403,60 @@
             return `[${formatMillisecondsForExport(totalMilliseconds)}]`;
         }
 
+        function fallbackCopyToClipboard(text) {
+            const helper = document.createElement('textarea');
+            helper.value = text;
+            helper.setAttribute('readonly', '');
+            helper.style.position = 'absolute';
+            helper.style.left = '-9999px';
+            document.body.appendChild(helper);
+            helper.select();
+
+            let success = false;
+            try {
+                success = document.execCommand('copy');
+            } catch (error) {
+                success = false;
+            }
+
+            document.body.removeChild(helper);
+
+            window.alert(success ? '已复制到剪贴板' : '复制失败，请手动复制。');
+        }
+
         function exportLyrics() {
             ensureLabels();
             const lines = textarea.value.split('\n');
-            const exportedLines = lines.map((line, index) => {
+            const exportedLines = [];
+
+            lines.forEach((line, index) => {
                 const { timestamp, lyric } = parseLine(line, index);
+                if (!timestamp) {
+                    return;
+                }
+
                 const normalizedTimestamp = normalizeTimestampForExport(timestamp);
-                return lyric ? `${normalizedTimestamp} ${lyric}` : normalizedTimestamp;
+                exportedLines.push(lyric ? `${normalizedTimestamp} ${lyric}` : normalizedTimestamp);
             });
 
-            const blob = new Blob([exportedLines.join('\n')], { type: 'text/plain;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'lyrics_with_timestamps.txt';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            const textToCopy = exportedLines.join('\n');
+
+            if (!textToCopy.trim()) {
+                window.alert('没有可复制的时间戳行。');
+                return;
+            }
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textToCopy)
+                    .then(() => {
+                        window.alert('已复制到剪贴板');
+                    })
+                    .catch(() => {
+                        fallbackCopyToClipboard(textToCopy);
+                    });
+            } else {
+                fallbackCopyToClipboard(textToCopy);
+            }
         }
 
         audioFileInput.addEventListener('change', (event) => {
