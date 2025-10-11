@@ -46,19 +46,52 @@
             background: #ffffff;
         }
 
-        .play-toggle {
-            background: #2563eb;
-            color: #ffffff;
+        .control-button {
             border: none;
             border-radius: 999px;
             padding: 10px 20px;
-            font-size: 16px;
+            font-size: 15px;
             cursor: pointer;
-            transition: background 0.2s ease-in-out;
+            transition: background 0.2s ease-in-out, color 0.2s ease-in-out;
+        }
+
+        .control-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .play-toggle {
+            background: #2563eb;
+            color: #ffffff;
         }
 
         .play-toggle:hover {
             background: #1d4ed8;
+        }
+
+        .edit-toggle {
+            background: #f59e0b;
+            color: #1f2937;
+        }
+
+        .edit-toggle.active {
+            background: #d97706;
+            color: #ffffff;
+        }
+
+        .edit-toggle:hover {
+            background: #f97316;
+            color: #ffffff;
+        }
+
+        .export-button {
+            background: #10b981;
+            color: #0f172a;
+        }
+
+        .export-button:hover {
+            background: #0d9b6e;
+            color: #ffffff;
         }
 
         textarea {
@@ -73,6 +106,11 @@
             line-height: 1.6;
             background: #f9fafb;
             box-sizing: border-box;
+        }
+
+        textarea[readonly] {
+            background: #eef2f7;
+            cursor: not-allowed;
         }
 
         textarea:focus {
@@ -159,13 +197,16 @@
         <div class="controls">
             <label for="audioFile">选择音频：</label>
             <input type="file" id="audioFile" accept="audio/*">
-            <button id="playToggle" class="play-toggle" type="button">播放</button>
+            <button id="playToggle" class="control-button play-toggle" type="button">播放</button>
+            <button id="editToggle" class="control-button edit-toggle" type="button" aria-pressed="false">开启编辑</button>
+            <button id="exportButton" class="control-button export-button" type="button">导出</button>
         </div>
         <audio id="audio" controls preload="metadata"></audio>
         <div class="hint">
             <p>在下面的文本框中，每行一句歌词，系统会自动为每一行配上 <code>0-9</code> 以及 <code>a-z</code> 的标号。</p>
             <p>播放音频时，按对应标号的按键即可为该行歌词添加时间戳（格式 <code>[hh:mm:ss.xxx]</code>）。如果该行已经有时间戳，则会被新的时间戳覆盖。</p>
-            <p>按空格或点击“播放”按钮可以切换播放/暂停。</p>
+            <p>点击“开启编辑”按钮后即可自由输入或修改歌词，再次点击按钮则锁定文本防止误触快捷键。</p>
+            <p>按空格或点击“播放”按钮可以切换播放/暂停，点击“导出”可下载移除标号后的歌词时间轴。</p>
         </div>
         <details class="guide">
             <summary>如何体验 / 自测功能？</summary>
@@ -173,13 +214,13 @@
                 <li><strong>打开页面：</strong>下载或克隆仓库后，双击本文件即可在浏览器中直接打开，无需搭建服务器。</li>
                 <li><strong>加载音频：</strong>点击“选择音频”按钮，挑选一段本地音频文件，确认下方播放器出现波形/时间轴。</li>
                 <li><strong>尝试播放：</strong>点击“播放”按钮或敲击空格键，验证音频能够开始播放；再次操作应暂停。</li>
-                <li><strong>输入歌词：</strong>在文本框的任意一行填入歌词，注意行首会保持对应的编号（会自动补齐或纠正）。</li>
+                <li><strong>输入歌词：</strong>点击“开启编辑”按钮后，在文本框的任意一行填入歌词，行首编号会自动保持正确顺序。</li>
                 <li><strong>打点记时：</strong>播放过程中，按下该行的编号键（如 <code>h</code>），检查该行是否出现当前时间的 <code>[hh:mm:ss.xxx]</code> 时间戳；重复按键应覆盖为最新时间。</li>
-                <li><strong>复查结果：</strong>暂停播放，滚动查看各行时间戳是否符合预期，可手动修改文本或刷新页面重新开始。</li>
+                <li><strong>复查结果：</strong>暂停播放，滚动查看各行时间戳是否符合预期，必要时重新开启编辑调整，再使用“导出”按钮生成结果。</li>
             </ol>
             <p>如果浏览器禁止自动播放，首次选择音频后可能需要手动点击播放按钮一次。</p>
         </details>
-        <textarea id="lyrics"></textarea>
+        <textarea id="lyrics" readonly></textarea>
     </div>
 
     <script>
@@ -188,6 +229,10 @@
         const audio = document.getElementById('audio');
         const audioFileInput = document.getElementById('audioFile');
         const playToggleButton = document.getElementById('playToggle');
+        const editToggleButton = document.getElementById('editToggle');
+        const exportButton = document.getElementById('exportButton');
+
+        let isEditing = false;
 
         function initializeLyrics() {
             const initialLines = labels.map(label => `${label} `);
@@ -205,6 +250,42 @@
             return `${padded(hrs, 2)}:${padded(mins, 2)}:${padded(secs, 2)}.${padded(millis, 3)}`;
         }
 
+        function parseLine(line, index) {
+            const label = labels[index];
+            let working = (line || '').trimStart();
+            let timestamp = '';
+
+            const leadingTimestampMatch = working.match(/^\[[^\]]*\]/);
+            if (leadingTimestampMatch) {
+                timestamp = leadingTimestampMatch[0];
+                working = working.slice(timestamp.length).trimStart();
+            }
+
+            if (label) {
+                if (working.toLowerCase().startsWith(label)) {
+                    working = working.slice(label.length).trimStart();
+                } else {
+                    const fallbackMatch = working.match(/^[0-9a-z](?=\s)/i);
+                    if (fallbackMatch) {
+                        working = working.slice(1).trimStart();
+                    }
+                }
+            }
+
+            if (!timestamp) {
+                const afterLabelTimestampMatch = working.match(/^\[[^\]]*\]/);
+                if (afterLabelTimestampMatch) {
+                    timestamp = afterLabelTimestampMatch[0];
+                    working = working.slice(timestamp.length).trimStart();
+                }
+            }
+
+            return {
+                timestamp,
+                lyric: working
+            };
+        }
+
         function ensureLabels() {
             const lines = textarea.value.split('\n');
             const newLines = lines.map((line, index) => {
@@ -213,18 +294,16 @@
                     return line;
                 }
 
-                const timestampMatch = line.match(/^\[[^\]]*\]\s*/);
-                const timestamp = timestampMatch ? timestampMatch[0] : '';
-                const withoutTimestamp = line.slice(timestamp.length).trimStart();
-
-                let rest = withoutTimestamp;
-                if (rest.toLowerCase().startsWith(label)) {
-                    rest = rest.slice(label.length).trimStart();
-                } else {
-                    rest = rest.replace(/^[0-9a-z]\s*/, '').trimStart();
+                const { timestamp, lyric } = parseLine(line, index);
+                const segments = [label];
+                if (timestamp) {
+                    segments.push(timestamp);
                 }
-
-                return `${timestamp}${label}${rest ? ' ' + rest : ''}`;
+                if (lyric) {
+                    segments.push(lyric);
+                }
+                const composed = segments.join(' ');
+                return timestamp || lyric ? composed : `${composed} `;
             });
 
             if (newLines.length < labels.length) {
@@ -239,12 +318,23 @@
         function updateLineWithTimestamp(labelChar, timestamp) {
             const lines = textarea.value.split('\n');
             const index = labels.indexOf(labelChar);
-            if (index === -1 || index >= lines.length) {
+            if (index === -1) {
                 return;
             }
-            const line = lines[index];
-            const withoutTimestamp = line.replace(/^\[[^\]]*\]\s*/, '').trimStart();
-            lines[index] = `[${timestamp}] ${withoutTimestamp}`;
+
+            if (index >= lines.length) {
+                for (let i = lines.length; i <= index; i++) {
+                    lines[i] = `${labels[i]} `;
+                }
+            }
+
+            const { lyric } = parseLine(lines[index], index);
+            const segments = [labelChar, `[${timestamp}]`];
+            if (lyric) {
+                segments.push(lyric);
+            }
+
+            lines[index] = segments.join(' ');
             textarea.value = lines.join('\n');
         }
 
@@ -254,6 +344,83 @@
             } else {
                 audio.pause();
             }
+        }
+
+        function setEditingMode(enabled) {
+            isEditing = enabled;
+            textarea.readOnly = !enabled;
+            editToggleButton.textContent = enabled ? '关闭编辑' : '开启编辑';
+            editToggleButton.classList.toggle('active', enabled);
+            editToggleButton.setAttribute('aria-pressed', enabled.toString());
+
+            if (enabled) {
+                textarea.focus();
+            } else {
+                ensureLabels();
+                textarea.blur();
+            }
+        }
+
+        function formatMillisecondsForExport(totalMilliseconds) {
+            let remaining = totalMilliseconds;
+            let hrs = Math.floor(remaining / 3600000);
+            remaining -= hrs * 3600000;
+            let mins = Math.floor(remaining / 60000);
+            remaining -= mins * 60000;
+            let secs = Math.floor(remaining / 1000);
+            remaining -= secs * 1000;
+            let hundredths = Math.round(remaining / 10);
+
+            if (hundredths === 100) {
+                hundredths = 0;
+                secs += 1;
+            }
+            if (secs === 60) {
+                secs = 0;
+                mins += 1;
+            }
+            if (mins === 60) {
+                mins = 0;
+                hrs += 1;
+            }
+
+            const padded = (num, len) => num.toString().padStart(len, '0');
+            return `${padded(hrs, 2)}:${padded(mins, 2)}:${padded(secs, 2)}.${padded(hundredths, 2)}`;
+        }
+
+        function normalizeTimestampForExport(timestamp) {
+            if (!timestamp) {
+                return '[--:--:--.--]';
+            }
+
+            const match = timestamp.match(/^\[(\d{2}):(\d{2}):(\d{2})\.(\d{1,3})\]$/);
+            if (!match) {
+                return timestamp;
+            }
+
+            const [, hrs, mins, secs, fraction] = match;
+            const totalMilliseconds = (((parseInt(hrs, 10) * 60) + parseInt(mins, 10)) * 60 + parseInt(secs, 10)) * 1000 + parseInt(fraction.padEnd(3, '0'), 10);
+            return `[${formatMillisecondsForExport(totalMilliseconds)}]`;
+        }
+
+        function exportLyrics() {
+            ensureLabels();
+            const lines = textarea.value.split('\n');
+            const exportedLines = lines.map((line, index) => {
+                const { timestamp, lyric } = parseLine(line, index);
+                const normalizedTimestamp = normalizeTimestampForExport(timestamp);
+                return lyric ? `${normalizedTimestamp} ${lyric}` : normalizedTimestamp;
+            });
+
+            const blob = new Blob([exportedLines.join('\n')], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'lyrics_with_timestamps.txt';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
         }
 
         audioFileInput.addEventListener('change', (event) => {
@@ -272,6 +439,14 @@
             togglePlayPause();
         });
 
+        editToggleButton.addEventListener('click', () => {
+            setEditingMode(!isEditing);
+        });
+
+        exportButton.addEventListener('click', () => {
+            exportLyrics();
+        });
+
         audio.addEventListener('play', () => {
             playToggleButton.textContent = '暂停';
         });
@@ -285,6 +460,10 @@
 
             if (key === ' ' || event.code === 'Space') {
                 const activeElement = document.activeElement;
+                if (activeElement === textarea && isEditing) {
+                    return;
+                }
+
                 if (activeElement && (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT')) {
                     event.preventDefault();
                 }
@@ -296,10 +475,11 @@
                 return;
             }
 
-            if (document.activeElement === textarea) {
-                event.preventDefault();
+            if (isEditing && document.activeElement === textarea) {
+                return;
             }
 
+            event.preventDefault();
             const timestamp = formatTime(audio.currentTime || 0);
             updateLineWithTimestamp(key, timestamp);
         });
@@ -309,6 +489,7 @@
         });
 
         initializeLyrics();
+        setEditingMode(false);
     </script>
 </body>
 </html>
