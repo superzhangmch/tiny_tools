@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>年度个人所得税计算器（含五险一金，常规扣除）</title>
+  <style>
+    body { font-family: sans-serif; background: #f4f7fa; color: #222; margin: 40px; }
+    h1 { color: #0a5; }
+    .box { background: white; border-radius: 8px; padding: 20px; max-width: 600px; box-shadow: 0 0 8px rgba(0,0,0,0.1); }
+    label { display: block; margin-top: 10px; }
+    input { padding: 8px; width: 100%; margin-top: 4px; }
+    button { margin-top: 16px; padding: 10px 16px; background: #0a5; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    .result { margin-top: 20px; background: #eef; padding: 10px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>年度个人所得税计算器（含五险一金）</h1>
+  <div class="box">
+    <label>全年税前收入（元）</label>
+    <input type="number" id="income" placeholder="如 200000" />
+
+    <label>社保缴费基数（月）（元）;即月薪。但是有上限</label>
+    <input type="number" id="base" placeholder="如 10000" />
+
+    <label>住房公积金比例（%）</label>
+    <input type="number" id="fundRate" value="12" />
+
+    <label>缴费月数</label>
+    <input type="number" id="months" value="12" />
+
+    <button onclick="calcTax()">计算</button>
+
+    <div class="result" id="output"></div>
+  </div>
+
+  <script>
+    function calcTax() {
+      const income = Number(document.getElementById('income').value || 0);
+      const base = Number(document.getElementById('base').value || 0);
+      const fundRate = Number(document.getElementById('fundRate').value || 0) / 100;
+      const months = Number(document.getElementById('months').value || 12);
+
+      // 常规五险一金个人部分比例（常见城市）：养老8%，医疗2%，失业0.5%，公积金按输入，假设12%
+      const pension = 0.08;
+      const medical = 0.02;
+      const unemp = 0.005;
+
+      const totalRate = pension + medical + unemp + fundRate;
+      const sihf = base * totalRate * months; // 年度个人缴纳五险一金
+
+      const threshold = 60000; // 起征点
+      const taxable = Math.max(0, income - threshold - sihf);
+
+      // 税率表
+      const brackets = [
+        { up: 36000, rate: 0.03, quick: 0 },
+        { up: 144000, rate: 0.1, quick: 2520 },
+        { up: 300000, rate: 0.2, quick: 16920 },
+        { up: 420000, rate: 0.25, quick: 31920 },
+        { up: 660000, rate: 0.3, quick: 52920 },
+        { up: 960000, rate: 0.35, quick: 85920 },
+        { up: Infinity, rate: 0.45, quick: 181920 },
+      ];
+
+      let rate = 0, quick = 0;
+      for (const b of brackets) {
+        if (taxable <= b.up) { rate = b.rate; quick = b.quick; break; }
+      }
+      const tax = Math.max(0, taxable * rate - quick);
+      const afterTax = income - tax;
+
+      document.getElementById('output').innerHTML = `
+        <p>个人五险一金扣除：<strong>${sihf.toFixed(2)}</strong> 元</p>
+        <p>应纳税所得额：<strong>${taxable.toFixed(2)}</strong> 元</p>
+        <p>全年应缴个税：<strong>${tax.toFixed(2)}</strong> 元</p>
+        <p>税后收入：<strong>${afterTax.toFixed(2)}</strong> 元</p>
+      `;
+    }
+  </script>
+</body>
+</html>
