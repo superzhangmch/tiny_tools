@@ -43,6 +43,7 @@
     <textarea id="jsonInput" placeholder="Enter JSON here..."></textarea>
     <button onclick="formatJSON()">Format JSON</button>
     [<input type="file" id="fileInput">
+    行号: <input type="number" id="lineNumber" placeholder="留空加载全文" min="1" style="width: 100px;">
     <button onclick="loadFile()">加载文件</button>]
     <div id="output"></div>
 
@@ -64,6 +65,7 @@ function replaceKeywords(input) {
       	function loadFile() {
             const fileInput = document.getElementById('fileInput');
             const textarea = document.getElementById('jsonInput');
+            const lineNumberInput = document.getElementById('lineNumber');
             const file = fileInput.files[0];
 
             if (!file) {
@@ -71,10 +73,25 @@ function replaceKeywords(input) {
                 return;
             }
 
+            const lineNumber = parseInt(lineNumberInput.value);
             const reader = new FileReader();
 
             reader.onload = function(e) {
-                textarea.value = e.target.result;
+                const content = e.target.result;
+
+                // 如果指定了行号，则只读取该行
+                if (lineNumber && lineNumber > 0) {
+                    const lines = content.split('\n');
+                    if (lineNumber > lines.length) {
+                        alert(`文件只有 ${lines.length} 行，无法读取第 ${lineNumber} 行`);
+                        return;
+                    }
+                    // 行号从1开始，数组索引从0开始
+                    textarea.value = lines[lineNumber - 1];
+                } else {
+                    // 没有指定行号，读取整个文件
+                    textarea.value = content;
+                }
             };
 
             reader.onerror = function(e) {
@@ -278,6 +295,8 @@ function replaceKeywords(input) {
 	    const singleLineInput = input.replace(/\n/g, '').replace(/\t/g, '        ').trim(); // 拼接成单行
 	    const outputDiv = document.getElementById('output');
 	    outputDiv.innerHTML = ''; // Clear previous output
+	    td_idx = 0; // 重置计数器
+	    arr_table_idx = 0; // 重置数组表格计数器
 	    //console.log(singleLineInput)
 	    if (!singleLineInput) {
 	        outputDiv.innerHTML = 'please input a json data'; // Clear previous output
@@ -409,6 +428,65 @@ function hide_show(td_idx)
     }
 }
 	var td_idx = 0;
+	var arr_table_idx = 0;
+
+	function navigateArray(tableId, direction) {
+	    const table = document.getElementById(tableId);
+	    if (!table) return;
+
+	    const rows = table.rows;
+	    if (rows.length <= 1) return; // 只有表头，没有数据行
+
+	    // 找到当前可见的行（滚动位置最接近的）
+	    let currentRow = 1; // 默认第一个数据行
+	    const viewportTop = window.scrollY;
+	    const viewportMiddle = viewportTop + window.innerHeight / 2;
+
+	    let minDistance = Infinity;
+	    for (let i = 1; i < rows.length; i++) {
+	        const rowTop = rows[i].getBoundingClientRect().top + window.scrollY;
+	        const distance = Math.abs(rowTop - viewportMiddle);
+	        if (distance < minDistance) {
+	            minDistance = distance;
+	            currentRow = i;
+	        }
+	    }
+
+	    let targetRow;
+	    switch(direction) {
+	        case 'first':
+	            targetRow = 1;
+	            break;
+	        case 'prev':
+	            targetRow = Math.max(1, currentRow - 1);
+	            break;
+	        case 'next':
+	            targetRow = Math.min(rows.length - 1, currentRow + 1);
+	            break;
+	        case 'last':
+	            targetRow = rows.length - 1;
+	            break;
+	    }
+
+	    if (targetRow && rows[targetRow]) {
+	        // 手动计算目标位置，只调整垂直滚动
+	        const targetTop = rows[targetRow].getBoundingClientRect().top + window.scrollY;
+	        const windowHeight = window.innerHeight;
+	        const targetScroll = targetTop - windowHeight / 2;
+
+	        window.scrollTo({
+	            top: targetScroll,
+	            behavior: 'smooth'
+	        });
+
+	        // 高亮显示目标行
+	        rows[targetRow].style.backgroundColor = 'yellow';
+	        setTimeout(() => {
+	            rows[targetRow].style.backgroundColor = '';
+	        }, 800);
+	    }
+	}
+
 	function formatDict(dict, path) {
 	    const table = document.createElement('table');
 	    for (const [key, val] of Object.entries(dict)) {
@@ -456,6 +534,10 @@ function hide_show(td_idx)
 	    } else {
 		var is_string_arr = arr.every(item => typeof item === 'string' && item.length > 50 && doesNotStartWithBraceOrBracket(item));
 		const table = document.createElement('table');
+		const currentArrTableId = 'arr_table_' + arr_table_idx;
+		table.id = currentArrTableId;
+		arr_table_idx += 1;
+
 		var row = table.insertRow();
 		var keyCell = row.insertCell();
 		keyCell.innerHTML = '#';
@@ -469,7 +551,11 @@ function hide_show(td_idx)
 			var cur_path =  path+("["+ii+"]");
 			const row = table.insertRow();
 			const keyCell = row.insertCell();
-			keyCell.innerHTML = "<a href='javascript:show_path(\"td_"+td_idx+"\")'>#" + ii + "</a> <a id='a_"+td_idx+"' href='javascript:hide_show(\""+td_idx+"\")'>-</a>" + "<span id='td_"+td_idx+"' style='color:red;font-size:14px;display:none'><br>"+cur_path+"</span>";
+			keyCell.innerHTML = "<a href='javascript:show_path(\"td_"+td_idx+"\")'>#" + ii + "</a> <a id='a_"+td_idx+"' href='javascript:hide_show(\""+td_idx+"\")'>-</a>" + "<span id='td_"+td_idx+"' style='color:red;font-size:14px;display:none'><br>"+cur_path+"</span>" +
+			    "<br><a href='javascript:navigateArray(\"" + currentArrTableId + "\", \"prev\")' style='font-size:14px;text-decoration:none;' title='上一个'>&lt;</a> " +
+			    "<a href='javascript:navigateArray(\"" + currentArrTableId + "\", \"next\")' style='font-size:14px;text-decoration:none;' title='下一个'>&gt;</a>" +
+			    "<br><a href='javascript:navigateArray(\"" + currentArrTableId + "\", \"first\")' style='font-size:14px;text-decoration:none;' title='第一个'>|&lt;</a> " +
+			    "<a href='javascript:navigateArray(\"" + currentArrTableId + "\", \"last\")' style='font-size:14px;text-decoration:none;' title='最后一个'>&gt;|</a>";
 			keyCell.className = 'arr_idx';
 			td_idx += 1;
 
