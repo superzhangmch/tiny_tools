@@ -37,11 +37,13 @@
 	}
     </style>
     <script src="https://unpkg.com/json5@2/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
     <h1>JSON View</h1>
     <textarea id="jsonInput" placeholder="Enter JSON here..."></textarea>
     <button onclick="formatJSON()">Format JSON</button>
+    <button id="briefBtn" onclick="toggleBriefMode()">Brief Show</button>
     [<input type="file" id="fileInput">
     行号: <input type="number" id="lineNumber" placeholder="留空加载全文" min="1" style="width: 100px;">
     <button onclick="loadFile()">加载文件</button>]
@@ -429,6 +431,15 @@ function hide_show(td_idx)
 }
 	var td_idx = 0;
 	var arr_table_idx = 0;
+	var isBriefMode = false;
+
+	function toggleBriefMode() {
+	    isBriefMode = !isBriefMode;
+	    const btn = document.getElementById('briefBtn');
+	    btn.textContent = isBriefMode ? 'Normal Show' : 'Brief Show';
+	    btn.style.backgroundColor = isBriefMode ? 'lightblue' : '';
+	    formatJSON();
+	}
 
 	function navigateArray(tableId, direction) {
 	    const table = document.getElementById(tableId);
@@ -490,6 +501,12 @@ function hide_show(td_idx)
 	function formatDict(dict, path) {
 	    const table = document.createElement('table');
 	    for (const [key, val] of Object.entries(dict)) {
+	        // Brief 模式：跳过 null 值和 _原始_ 字段
+	        if (isBriefMode) {
+	            if (val === null) continue;
+	            if (key === '_原始_') continue;
+	        }
+
 	        cur_path = path + "[\"" + trans(key) + "\"]"
 	        const row = table.insertRow();
 	        const keyCell = row.insertCell();
@@ -524,6 +541,26 @@ function hide_show(td_idx)
 	        }
 	        const firstChar = str.charAt(0); // 或者使用 str[0]
 	        return firstChar !== '{' && firstChar !== '[';
+	}
+
+	function isMarkdown(str) {
+	    // 检测是否为 markdown：多行且包含 markdown 特征
+	    if (typeof str !== 'string') return false;
+
+	    const lines = str.split('\n');
+	    if (lines.length < 2) return false; // 至少两行
+
+	    // 检查是否有行包含 markdown 特征
+	    return lines.some(line => {
+	        const trimmed = line.trim();
+	        return trimmed.startsWith('#') ||           // 标题
+	               trimmed.startsWith('**') ||          // 加粗
+	               trimmed.startsWith('* ') ||          // 列表
+	               trimmed.startsWith('- ') ||          // 列表
+	               trimmed.startsWith('+ ') ||          // 列表
+	               trimmed.startsWith('> ') ||          // 引用
+	               trimmed.startsWith('```');           // 代码块
+	    });
 	}
 
 	function formatArray(arr, path) {
@@ -623,25 +660,85 @@ function hide_show(td_idx)
 	    } catch {
 	    }
 
+	    // 检测是否为 HTML
+	    const trimmedStr = str.trim();
+	    const isHtml = trimmedStr.toLowerCase().startsWith('<!doctype html>') &&
+	                   trimmedStr.toLowerCase().endsWith('</html>');
+
+	    // 如果是 HTML 且在 Brief 模式下，使用 iframe 渲染
+	    if (isHtml && isBriefMode) {
+	        // 从 HTML 中匹配所有 width:XXpx 和 height:XXpx
+	        const widthMatches = str.match(/width:\s*(\d+)px/gi) || [];
+	        const heightMatches = str.match(/height:\s*(\d+)px/gi) || [];
+
+	        // 提取数字并找到最大值
+	        let maxWidth = 600;
+	        let maxHeight = 600;
+
+	        widthMatches.forEach(match => {
+	            const value = parseInt(match.match(/(\d+)/)[1]);
+	            if (value > maxWidth) maxWidth = value;
+	        });
+
+	        heightMatches.forEach(match => {
+	            const value = parseInt(match.match(/(\d+)/)[1]);
+	            if (value > maxHeight) maxHeight = value;
+	        });
+
+	        const iframe = document.createElement('iframe');
+	        iframe.style.width = maxWidth + 'px';
+	        iframe.style.height = maxHeight + 'px';
+	        iframe.style.border = '2px solid #999';
+	        iframe.style.backgroundColor = 'white';
+	        iframe.style.display = 'block';
+	        iframe.srcdoc = str;
+	        return iframe;
+	    }
+
+	    // 检测是否为 markdown 并渲染（但不处理 HTML）
+	    if (!isHtml && isMarkdown(str)) {
+	        const mdDiv = document.createElement('div');
+	        mdDiv.style.border = '1px solid #ddd';
+	        mdDiv.style.padding = '10px';
+	        mdDiv.style.backgroundColor = '#f9f9f9';
+	        try {
+	            mdDiv.innerHTML = marked.parse(str);
+	        } catch (e) {
+	            mdDiv.textContent = str; // 如果渲染失败，显示原始文本
+	        }
+
+	        if (!isBriefMode) {
+	            if (de_base64) {
+	                mdDiv.innerHTML += "<br><span class=ori_txt>__原始内容__: " + trans(de_base64) + "</span>";
+	            } else if (de_uri) {
+	                mdDiv.innerHTML += "<br><span class=ori_txt>__原始内容__: " + trans(de_uri) + "</span>";
+	            }
+	        }
+	        return mdDiv;
+	    }
+
 	    if (str.includes('\n') || str.includes('\\n')) {
 	            const pre = document.createElement('pre');
 	            pre.innerHTML = trans(str.replace(/\\n/g, '\n').replace(/\n/g, '\n').replace(/\\t/g, '\t'));
 
 	            // pre.textContent = str;
-		    if (de_base64) {
-		        pre.innerHTML += "\n<br><span class=ori_txt>__原始内容__: " + trans(de_base64) + "</span>";
-		    } else if (de_uri) {
-		        pre.innerHTML += "\n<br><span class=ori_txt>__原始内容__: " + trans(de_uri) + "<span>";
+		    if (!isBriefMode) {
+		        if (de_base64) {
+		            pre.innerHTML += "\n<br><span class=ori_txt>__原始内容__: " + trans(de_base64) + "</span>";
+		        } else if (de_uri) {
+		            pre.innerHTML += "\n<br><span class=ori_txt>__原始内容__: " + trans(de_uri) + "<span>";
+		        }
 		    }
 	            return pre;
 	   } else {
-		    if (de_base64) {
+		    if (!isBriefMode) {
+		        if (de_base64) {
 	                return document.createTextNode(str + "<br>__原始内容__: " + de_base64);
-		    } else if (de_uri) {
+		        } else if (de_uri) {
 	                return document.createTextNode(str + "<br>__原始内容__: " + de_uri);
-		    } else {
-	                return document.createTextNode(str);
+		        }
 		    }
+	            return document.createTextNode(str);
 	   }
 	}
     </script>
