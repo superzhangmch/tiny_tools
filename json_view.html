@@ -35,6 +35,27 @@
 	  background-color: lightyellow;
 	  white-space: nowrap;
 	}
+	.scroll-buttons {
+	  position: fixed;
+	  bottom: 20px;
+	  left: 20px;
+	  display: flex;
+	  flex-direction: column;
+	  gap: 10px;
+	  z-index: 1000;
+	}
+	.scroll-buttons button {
+	  padding: 10px 15px;
+	  font-size: 14px;
+	  cursor: pointer;
+	  border: 1px solid #ccc;
+	  border-radius: 5px;
+	  background-color: #f0f0f0;
+	  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+	}
+	.scroll-buttons button:hover {
+	  background-color: #e0e0e0;
+	}
     </style>
     <script src="https://unpkg.com/json5@2/dist/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -48,6 +69,11 @@
     行号: <input type="number" id="lineNumber" placeholder="留空加载全文" min="1" style="width: 100px;">
     <button onclick="loadFile()">加载文件</button>]
     <div id="output"></div>
+
+    <div class="scroll-buttons">
+        <button onclick="scrollToTop()">↑ Top</button>
+        <button onclick="scrollToBottom()">↓ Bottom</button>
+    </div>
 
     <script>
 function replaceKeywords(input) {
@@ -696,7 +722,8 @@ function hide_show(td_idx)
 	    }
 
 	    // 检测是否为 markdown 并渲染（但不处理 HTML）
-	    if (!isHtml && isMarkdown(str)) {
+	    // 只在 Brief 模式下才渲染 markdown
+	    if (isBriefMode && !isHtml && isMarkdown(str)) {
 	        const mdDiv = document.createElement('div');
 	        mdDiv.style.border = '1px solid #ddd';
 	        mdDiv.style.padding = '10px';
@@ -705,14 +732,6 @@ function hide_show(td_idx)
 	            mdDiv.innerHTML = marked.parse(str);
 	        } catch (e) {
 	            mdDiv.textContent = str; // 如果渲染失败，显示原始文本
-	        }
-
-	        if (!isBriefMode) {
-	            if (de_base64) {
-	                mdDiv.innerHTML += "<br><span class=ori_txt>__原始内容__: " + trans(de_base64) + "</span>";
-	            } else if (de_uri) {
-	                mdDiv.innerHTML += "<br><span class=ori_txt>__原始内容__: " + trans(de_uri) + "</span>";
-	            }
 	        }
 	        return mdDiv;
 	    }
@@ -741,6 +760,159 @@ function hide_show(td_idx)
 	            return document.createTextNode(str);
 	   }
 	}
+
+	function scrollToTop() {
+	    window.scrollTo({
+	        top: 0,
+	        behavior: 'smooth'
+	    });
+	}
+
+	function scrollToBottom() {
+	    window.scrollTo({
+	        top: document.body.scrollHeight,
+	        behavior: 'smooth'
+	    });
+	}
+
+	// 获取光标位置的元素
+	function getElementAtCursor() {
+	    // 获取当前选中的元素或焦点元素
+	    let element = document.activeElement;
+
+	    // 如果是body或没有焦点，尝试使用鼠标位置
+	    if (!element || element === document.body) {
+	        return null;
+	    }
+
+	    return element;
+	}
+
+	// 跳转到光标所在td的最下面
+	function jumpToTdBottom() {
+	    // 先尝试获取焦点元素
+	    let element = document.activeElement;
+
+	    // 如果没有焦点或焦点在body上，尝试查找鼠标悬停的元素
+	    if (!element || element === document.body) {
+	        // 使用最近一次记录的鼠标位置
+	        if (window.lastMouseEvent) {
+	            element = document.elementFromPoint(window.lastMouseEvent.clientX, window.lastMouseEvent.clientY);
+	        }
+	    }
+
+	    if (!element) {
+	        console.log('无法获取当前元素');
+	        return;
+	    }
+
+	    // 查找最近的td元素
+	    let td = element.closest('td');
+
+	    if (!td) {
+	        console.log('当前位置不在 td 元素内');
+	        return;
+	    }
+
+	    // 获取td的底部位置
+	    const tdRect = td.getBoundingClientRect();
+	    const tdBottom = tdRect.bottom + window.scrollY;
+
+	    // 滚动到td的底部，让底部显示在视窗中间
+	    const windowHeight = window.innerHeight;
+	    const targetScroll = tdBottom - windowHeight / 2;
+
+	    window.scrollTo({
+	        top: targetScroll,
+	        behavior: 'smooth'
+	    });
+
+	    // 高亮显示该td
+	    const originalBg = td.style.backgroundColor;
+	    td.style.backgroundColor = 'yellow';
+	    setTimeout(() => {
+	        td.style.backgroundColor = originalBg;
+	    }, 800);
+
+	    console.log('已跳转到 td 底部');
+	}
+
+	// 跳转到光标所在td的最上面
+	function jumpToTdTop() {
+	    // 先尝试获取焦点元素
+	    let element = document.activeElement;
+
+	    // 如果没有焦点或焦点在body上，尝试查找鼠标悬停的元素
+	    if (!element || element === document.body) {
+	        // 使用最近一次记录的鼠标位置
+	        if (window.lastMouseEvent) {
+	            element = document.elementFromPoint(window.lastMouseEvent.clientX, window.lastMouseEvent.clientY);
+	        }
+	    }
+
+	    if (!element) {
+	        console.log('无法获取当前元素');
+	        return;
+	    }
+
+	    // 查找最近的td元素
+	    let td = element.closest('td');
+
+	    if (!td) {
+	        console.log('当前位置不在 td 元素内');
+	        return;
+	    }
+
+	    // 获取td的顶部位置
+	    const tdRect = td.getBoundingClientRect();
+	    const tdTop = tdRect.top + window.scrollY;
+
+	    // 滚动到td的顶部，让顶部显示在视窗中间
+	    const windowHeight = window.innerHeight;
+	    const targetScroll = tdTop - windowHeight / 2;
+
+	    window.scrollTo({
+	        top: targetScroll,
+	        behavior: 'smooth'
+	    });
+
+	    // 高亮显示该td
+	    const originalBg = td.style.backgroundColor;
+	    td.style.backgroundColor = 'yellow';
+	    setTimeout(() => {
+	        td.style.backgroundColor = originalBg;
+	    }, 800);
+
+	    console.log('已跳转到 td 顶部');
+	}
+
+	// 记录鼠标位置
+	document.addEventListener('mousemove', function(e) {
+	    window.lastMouseEvent = e;
+	});
+
+	// 监听键盘事件
+	document.addEventListener('keydown', function(e) {
+	    // 如果焦点在输入框内，不触发
+	    const activeElement = document.activeElement;
+	    if (activeElement.tagName === 'INPUT' ||
+	        activeElement.tagName === 'TEXTAREA' ||
+	        activeElement.isContentEditable) {
+	        return;
+	    }
+
+	    // 按 j 键跳转到td底部
+	    if (e.key === 'j' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+	        e.preventDefault();
+	        jumpToTdBottom();
+	    }
+
+	    // 按 J 键（Shift+j）跳转到td顶部
+	    if (e.key === 'J' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+	        e.preventDefault();
+	        jumpToTdTop();
+	    }
+	});
     </script>
 </body>
 </html>
