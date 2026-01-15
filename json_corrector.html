@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSON Corrector with Auto-Fix</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 30px;
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .input-section, .output-section {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #555;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: block;
+            margin: 0 auto;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .output {
+            background: #f8f9fa;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            padding: 12px;
+            min-height: 200px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .error {
+            background: #fee;
+            border-color: #fcc;
+            color: #c33;
+        }
+
+        .success {
+            background: #efe;
+            border-color: #cfc;
+            color: #363;
+        }
+
+        .warnings {
+            background: #fff9e6;
+            border: 2px solid #ffd54f;
+            border-radius: 5px;
+            padding: 12px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .warnings.show {
+            display: block;
+        }
+
+        .warnings h4 {
+            color: #f57c00;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .warnings ul {
+            margin-left: 20px;
+            color: #666;
+            font-size: 13px;
+        }
+
+        .warnings li {
+            margin-bottom: 4px;
+        }
+
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-left: 4px solid #2196f3;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .info h3 {
+            color: #1976d2;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .info ul {
+            margin-left: 20px;
+            color: #555;
+            font-size: 13px;
+        }
+
+        .info li {
+            margin-bottom: 4px;
+        }
+
+        .examples {
+            background: #fff3e0;
+            padding: 15px;
+            border-left: 4px solid #ff9800;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .examples h3 {
+            color: #f57c00;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .examples pre {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 8px 0;
+            font-size: 12px;
+            overflow-x: auto;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .examples pre:hover {
+            background: #f5f5f5;
+        }
+
+        .shortcut {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #4caf50;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>JSON Corrector<span class="badge">AUTO-FIX</span></h1>
+
+        <div class="input-section">
+            <label for="input">Input (Malformed JSON):</label>
+            <textarea id="input" placeholder='Enter JSON-like text with errors...'></textarea>
+        </div>
+
+        <button onclick="correctJSON()">Correct JSON</button>
+        <div class="shortcut">Keyboard shortcut: Ctrl/Cmd + Enter</div>
+
+        <div id="warnings" class="warnings">
+            <h4>Validation Warnings:</h4>
+            <ul id="warnings-list"></ul>
+        </div>
+
+        <div class="output-section">
+            <label for="output">Output:</label>
+            <div id="output" class="output">Click "Correct JSON" to see the result...</div>
+        </div>
+
+        <div class="info">
+            <h3>Supported Corrections:</h3>
+            <ul>
+                <li>NULL, Null, None, none → null</li>
+                <li>TRUE, True → true, FALSE, False → false</li>
+                <li>Single quote strings → double quote strings</li>
+                <li>Trailing commas in arrays and objects</li>
+                <li>Unquoted object keys</li>
+                <li><strong>NEW:</strong> Auto-fixes unterminated strings</li>
+                <li><strong>NEW:</strong> Auto-closes unmatched braces {}</li>
+                <li><strong>NEW:</strong> Auto-closes unmatched brackets []</li>
+                <li><strong>NEW:</strong> Fixes mismatched brackets</li>
+            </ul>
+        </div>
+
+        <div class="examples">
+            <h3>Click an example to try it:</h3>
+            <pre onclick="loadExample(this.textContent)">{name: 'John', age: 30, active: True, data: None}</pre>
+            <pre onclick="loadExample(this.textContent)">{key: &quot;value}</pre>
+            <pre onclick="loadExample(this.textContent)">[1, 2, 3, [4, 5</pre>
+            <pre onclick="loadExample(this.textContent)">{user: {name: &quot;John, age: 30, tags: [&quot;tag1&quot;, &quot;tag2&quot;}</pre>
+        </div>
+    </div>
+
+    <script>
+        class JSONLexer {
+            constructor(input, options = {}) {
+                this.input = input;
+                this.pos = 0;
+                this.line = 1;
+                this.column = 1;
+                this.autoFix = options.autoFix !== false;
+                this.warnings = [];
+            }
+
+            currentChar() {
+                return this.pos < this.input.length ? this.input[this.pos] : null;
+            }
+
+            peek(offset = 1) {
+                const peekPos = this.pos + offset;
+                return peekPos < this.input.length ? this.input[peekPos] : null;
+            }
+
+            advance() {
+                if (this.currentChar() === '\n') {
+                    this.line++;
+                    this.column = 1;
+                } else {
+                    this.column++;
+                }
+                this.pos++;
+            }
+
+            skipWhitespace() {
+                while (this.currentChar() && /\s/.test(this.currentChar())) {
+                    this.advance();
+                }
+            }
+
+            readString(quote) {
+                const startPos = { line: this.line, column: this.column };
+                let value = '';
+                this.advance();
+
+                while (this.currentChar() && this.currentChar() !== quote) {
+                    if (this.currentChar() === '\\') {
+                        this.advance();
+                        if (this.currentChar()) {
+                            const escapeChar = this.currentChar();
+                            switch (escapeChar) {
+                                case 'n': value += '\n'; break;
+                                case 't': value += '\t'; break;
+                                case 'r': value += '\r'; break;
+                                case '\\': value += '\\'; break;
+                                case '"': value += '"'; break;
+                                case "'": value += "'"; break;
+                                case '/': value += '/'; break;
+                                case 'b': value += '\b'; break;
+                                case 'f': value += '\f'; break;
+                                default: value += escapeChar;
+                            }
+                            this.advance();
+                        }
+                    } else {
+                        const char = this.currentChar();
+                        if (this.autoFix && (char === ',' || char === '}' || char === ']' || char === ':')) {
+                            this.warnings.push({
+                                type: 'auto-fix',
+                                message: `Auto-closed unterminated string at line ${startPos.line}, column ${startPos.column}`,
+                                line: startPos.line,
+                                column: startPos.column
+                            });
+                            return { type: 'STRING', value, line: startPos.line, column: startPos.column };
+                        }
+
+                        value += this.currentChar();
+                        this.advance();
+                    }
+                }
+
+                if (this.currentChar() !== quote) {
+                    if (this.autoFix) {
+                        this.warnings.push({
+                            type: 'auto-fix',
+                            message: `Auto-closed unterminated string at line ${startPos.line}, column ${startPos.column}`,
+                            line: startPos.line,
+                            column: startPos.column
+                        });
+                        return { type: 'STRING', value, line: startPos.line, column: startPos.column };
+                    } else {
+                        throw new Error(`Unterminated string at line ${startPos.line}, column ${startPos.column}`);
+                    }
+                }
+
+                this.advance();
+                return { type: 'STRING', value, line: startPos.line, column: startPos.column };
+            }
+
+            readNumber() {
+                const startPos = { line: this.line, column: this.column };
+                let value = '';
+
+                if (this.currentChar() === '-') {
+                    value += this.currentChar();
+                    this.advance();
+                }
+
+                if (this.currentChar() === '0') {
+                    value += this.currentChar();
+                    this.advance();
+                } else {
+                    while (this.currentChar() && /[0-9]/.test(this.currentChar())) {
+                        value += this.currentChar();
+                        this.advance();
+                    }
+                }
+
+                if (this.currentChar() === '.') {
+                    value += this.currentChar();
+                    this.advance();
+                    while (this.currentChar() && /[0-9]/.test(this.currentChar())) {
+                        value += this.currentChar();
+                        this.advance();
+                    }
+                }
+
+                if (this.currentChar() && /[eE]/.test(this.currentChar())) {
+                    value += this.currentChar();
+                    this.advance();
+                    if (this.currentChar() && /[+-]/.test(this.currentChar())) {
+                        value += this.currentChar();
+                        this.advance();
+                    }
+                    while (this.currentChar() && /[0-9]/.test(this.currentChar())) {
+                        value += this.currentChar();
+                        this.advance();
+                    }
+                }
+
+                return { type: 'NUMBER', value: parseFloat(value), line: startPos.line, column: startPos.column };
+            }
+
+            readIdentifier() {
+                const startPos = { line: this.line, column: this.column };
+                let value = '';
+
+                while (this.currentChar() && /[a-zA-Z0-9_]/.test(this.currentChar())) {
+                    value += this.currentChar();
+                    this.advance();
+                }
+
+                const lower = value.toLowerCase();
+                if (lower === 'true') {
+                    return { type: 'TRUE', value: true, line: startPos.line, column: startPos.column };
+                } else if (lower === 'false') {
+                    return { type: 'FALSE', value: false, line: startPos.line, column: startPos.column };
+                } else if (lower === 'null' || lower === 'none') {
+                    return { type: 'NULL', value: null, line: startPos.line, column: startPos.column };
+                }
+
+                return { type: 'IDENTIFIER', value, line: startPos.line, column: startPos.column };
+            }
+
+            nextToken() {
+                this.skipWhitespace();
+
+                if (!this.currentChar()) {
+                    return { type: 'EOF', line: this.line, column: this.column };
+                }
+
+                const char = this.currentChar();
+                const startPos = { line: this.line, column: this.column };
+
+                if (char === '"' || char === "'") {
+                    return this.readString(char);
+                }
+
+                if (char === '-' || /[0-9]/.test(char)) {
+                    return this.readNumber();
+                }
+
+                if (/[a-zA-Z_]/.test(char)) {
+                    return this.readIdentifier();
+                }
+
+                this.advance();
+
+                switch (char) {
+                    case '{': return { type: 'LBRACE', line: startPos.line, column: startPos.column };
+                    case '}': return { type: 'RBRACE', line: startPos.line, column: startPos.column };
+                    case '[': return { type: 'LBRACKET', line: startPos.line, column: startPos.column };
+                    case ']': return { type: 'RBRACKET', line: startPos.line, column: startPos.column };
+                    case ':': return { type: 'COLON', line: startPos.line, column: startPos.column };
+                    case ',': return { type: 'COMMA', line: startPos.line, column: startPos.column };
+                    default:
+                        if (this.autoFix) {
+                            this.warnings.push({
+                                type: 'auto-fix',
+                                message: `Skipped unexpected character '${char}' at line ${startPos.line}, column ${startPos.column}`,
+                                line: startPos.line,
+                                column: startPos.column
+                            });
+                            return this.nextToken();
+                        } else {
+                            throw new Error(`Unexpected character '${char}' at line ${startPos.line}, column ${startPos.column}`);
+                        }
+                }
+            }
+
+            tokenize() {
+                const tokens = [];
+                let token;
+
+                do {
+                    token = this.nextToken();
+                    tokens.push(token);
+                } while (token.type !== 'EOF');
+
+                return tokens;
+            }
+
+            getWarnings() {
+                return this.warnings;
+            }
+        }
+
+        class JSONParser {
+            constructor(tokens, options = {}) {
+                this.tokens = tokens;
+                this.pos = 0;
+                this.autoFix = options.autoFix !== false;
+                this.warnings = options.warnings || [];
+                this.bracketStack = [];
+            }
+
+            currentToken() {
+                return this.tokens[this.pos];
+            }
+
+            advance() {
+                this.pos++;
+            }
+
+            expect(type) {
+                const token = this.currentToken();
+                if (token.type !== type) {
+                    if (this.autoFix) {
+                        this.warnings.push({
+                            type: 'auto-fix',
+                            message: `Expected ${type} but got ${token.type} at line ${token.line}, column ${token.column}`,
+                            line: token.line,
+                            column: token.column
+                        });
+                        return token;
+                    } else {
+                        throw new Error(`Expected ${type} but got ${token.type} at line ${token.line}, column ${token.column}`);
+                    }
+                }
+                this.advance();
+                return token;
+            }
+
+            parseValue() {
+                const token = this.currentToken();
+
+                if (token.type === 'EOF') {
+                    if (this.autoFix) {
+                        this.warnings.push({
+                            type: 'auto-fix',
+                            message: `Unexpected EOF at line ${token.line}, column ${token.column}, returning null`,
+                            line: token.line,
+                            column: token.column
+                        });
+                        return null;
+                    }
+                }
+
+                switch (token.type) {
+                    case 'STRING':
+                        this.advance();
+                        return token.value;
+
+                    case 'NUMBER':
+                        this.advance();
+                        return token.value;
+
+                    case 'TRUE':
+                        this.advance();
+                        return true;
+
+                    case 'FALSE':
+                        this.advance();
+                        return false;
+
+                    case 'NULL':
+                        this.advance();
+                        return null;
+
+                    case 'LBRACE':
+                        return this.parseObject();
+
+                    case 'LBRACKET':
+                        return this.parseArray();
+
+                    default:
+                        if (this.autoFix) {
+                            this.warnings.push({
+                                type: 'auto-fix',
+                                message: `Unexpected token ${token.type} at line ${token.line}, column ${token.column}, skipping`,
+                                line: token.line,
+                                column: token.column
+                            });
+                            this.advance();
+                            return this.parseValue();
+                        } else {
+                            throw new Error(`Unexpected token ${token.type} at line ${token.line}, column ${token.column}`);
+                        }
+                }
+            }
+
+            parseObject() {
+                const startToken = this.currentToken();
+                this.expect('LBRACE');
+                this.bracketStack.push({ type: 'LBRACE', token: startToken });
+                const obj = {};
+
+                while (this.currentToken().type !== 'RBRACE' && this.currentToken().type !== 'EOF') {
+                    const keyToken = this.currentToken();
+                    let key;
+
+                    if (keyToken.type === 'STRING') {
+                        key = keyToken.value;
+                        this.advance();
+                    } else if (keyToken.type === 'IDENTIFIER') {
+                        key = keyToken.value;
+                        this.advance();
+                    } else if (keyToken.type === 'RBRACKET') {
+                        if (this.autoFix) {
+                            this.warnings.push({
+                                type: 'auto-fix',
+                                message: `Found closing bracket ']' instead of '}' at line ${keyToken.line}, column ${keyToken.column}`,
+                                line: keyToken.line,
+                                column: keyToken.column
+                            });
+                            this.advance();
+                            this.bracketStack.pop();
+                            return obj;
+                        }
+                        throw new Error(`Expected object key but got ${keyToken.type} at line ${keyToken.line}, column ${keyToken.column}`);
+                    } else {
+                        if (this.autoFix) {
+                            this.warnings.push({
+                                type: 'auto-fix',
+                                message: `Expected object key at line ${keyToken.line}, column ${keyToken.column}, skipping`,
+                                line: keyToken.line,
+                                column: keyToken.column
+                            });
+                            this.advance();
+                            continue;
+                        }
+                        throw new Error(`Expected object key (string or identifier) at line ${keyToken.line}, column ${keyToken.column}`);
+                    }
+
+                    if (this.currentToken().type !== 'COLON') {
+                        if (this.autoFix) {
+                            this.warnings.push({
+                                type: 'auto-fix',
+                                message: `Missing colon after key '${key}' at line ${this.currentToken().line}, column ${this.currentToken().column}`,
+                                line: this.currentToken().line,
+                                column: this.currentToken().column
+                            });
+                        } else {
+                            this.expect('COLON');
+                        }
+                    } else {
+                        this.advance();
+                    }
+
+                    const value = this.parseValue();
+                    obj[key] = value;
+
+                    if (this.currentToken().type === 'COMMA') {
+                        this.advance();
+                        if (this.currentToken().type === 'RBRACE') {
+                            break;
+                        }
+                    } else if (this.currentToken().type !== 'RBRACE' && this.currentToken().type !== 'EOF') {
+                        if (this.autoFix) {
+                            this.warnings.push({
+                                type: 'auto-fix',
+                                message: `Missing comma after value at line ${this.currentToken().line}, column ${this.currentToken().column}`,
+                                line: this.currentToken().line,
+                                column: this.currentToken().column
+                            });
+                        } else {
+                            const token = this.currentToken();
+                            throw new Error(`Expected comma or } at line ${token.line}, column ${token.column}`);
+                        }
+                    }
+                }
+
+                if (this.currentToken().type === 'EOF' && this.autoFix) {
+                    this.warnings.push({
+                        type: 'auto-fix',
+                        message: `Auto-closed object (missing '}') started at line ${startToken.line}, column ${startToken.column}`,
+                        line: startToken.line,
+                        column: startToken.column
+                    });
+                    this.bracketStack.pop();
+                    return obj;
+                }
+
+                this.expect('RBRACE');
+                this.bracketStack.pop();
+                return obj;
+            }
+
+            parseArray() {
+                const startToken = this.currentToken();
+                this.expect('LBRACKET');
+                this.bracketStack.push({ type: 'LBRACKET', token: startToken });
+                const arr = [];
+
+                while (this.currentToken().type !== 'RBRACKET' && this.currentToken().type !== 'EOF') {
+                    if (this.currentToken().type === 'RBRACE') {
+                        if (this.autoFix) {
+                            this.warnings.push({
+                                type: 'auto-fix',
+                                message: `Found closing brace '}' instead of ']' at line ${this.currentToken().line}, column ${this.currentToken().column}`,
+                                line: this.currentToken().line,
+                                column: this.currentToken().column
+                            });
+                            this.advance();
+                            this.bracketStack.pop();
+                            return arr;
+                        }
+                    }
+
+                    arr.push(this.parseValue());
+
+                    if (this.currentToken().type === 'COMMA') {
+                        this.advance();
+                        if (this.currentToken().type === 'RBRACKET') {
+                            break;
+                        }
+                    } else if (this.currentToken().type !== 'RBRACKET' && this.currentToken().type !== 'EOF') {
+                        if (this.autoFix) {
+                            this.warnings.push({
+                                type: 'auto-fix',
+                                message: `Missing comma after value at line ${this.currentToken().line}, column ${this.currentToken().column}`,
+                                line: this.currentToken().line,
+                                column: this.currentToken().column
+                            });
+                        } else {
+                            const token = this.currentToken();
+                            throw new Error(`Expected comma or ] at line ${token.line}, column ${token.column}`);
+                        }
+                    }
+                }
+
+                if (this.currentToken().type === 'EOF' && this.autoFix) {
+                    this.warnings.push({
+                        type: 'auto-fix',
+                        message: `Auto-closed array (missing ']') started at line ${startToken.line}, column ${startToken.column}`,
+                        line: startToken.line,
+                        column: startToken.column
+                    });
+                    this.bracketStack.pop();
+                    return arr;
+                }
+
+                this.expect('RBRACKET');
+                this.bracketStack.pop();
+                return arr;
+            }
+
+            parse() {
+                const value = this.parseValue();
+
+                if (this.currentToken().type !== 'EOF') {
+                    if (this.autoFix) {
+                        this.warnings.push({
+                            type: 'auto-fix',
+                            message: `Ignored extra content after JSON at line ${this.currentToken().line}, column ${this.currentToken().column}`,
+                            line: this.currentToken().line,
+                            column: this.currentToken().column
+                        });
+                    } else {
+                        const token = this.currentToken();
+                        throw new Error(`Unexpected content after JSON at line ${token.line}, column ${token.column}`);
+                    }
+                }
+
+                return value;
+            }
+
+            getWarnings() {
+                return this.warnings;
+            }
+        }
+
+        function validateTokens(originalStr, fixedStr) {
+            // Replace structural chars with spaces
+            const charsToReplace = /[\[\]{}'":\t\n\\,]/g;
+
+            const oriCleaned = originalStr.replace(charsToReplace, ' ');
+            const fixedCleaned = fixedStr.replace(charsToReplace, ' ');
+
+            // Get arrays of words
+            const arr_ori = oriCleaned.split(' ').filter(w => w.trim().length > 0);
+            const arr_fixed = fixedCleaned.split(' ').filter(w => w.trim().length > 0);
+
+            // Words that are expected to be converted
+            const convertedWords = ['None', 'NONE', 'none', 'TRUE', 'True', 'FALSE', 'False', 'NULL', 'Null', 'null'];
+
+            // Build a map of original words (excluding converted ones)
+            const oriWords = new Map();
+            arr_ori.forEach(word => {
+                if (!convertedWords.includes(word)) {
+                    oriWords.set(word, (oriWords.get(word) || 0) + 1);
+                }
+            });
+
+            // Build a map of fixed words (excluding converted boolean/null keywords)
+            const fixedWords = new Map();
+            arr_fixed.forEach(word => {
+                // Skip converted boolean/null keywords
+                if (word === 'true' || word === 'false' || word === 'null') {
+                    return;
+                }
+                fixedWords.set(word, (fixedWords.get(word) || 0) + 1);
+            });
+
+            // Check for unexpected words (in fixed but not in original)
+            const unexpectedWords = [];
+            fixedWords.forEach((count, word) => {
+                if (!oriWords.has(word)) {
+                    unexpectedWords.push(word);
+                }
+            });
+
+            // Check for missing words (in original but not in fixed)
+            const missingWords = [];
+            oriWords.forEach((count, word) => {
+                if (!fixedWords.has(word)) {
+                    missingWords.push(word);
+                }
+            });
+
+            return {
+                valid: unexpectedWords.length === 0 && missingWords.length === 0,
+                unexpectedWords: [...new Set(unexpectedWords)], // unique words
+                missingWords: [...new Set(missingWords)], // unique words
+                oriCount: arr_ori.length,
+                fixedCount: arr_fixed.length
+            };
+        }
+
+        function correctJSON() {
+            const input = document.getElementById('input').value;
+            const output = document.getElementById('output');
+            const warningsDiv = document.getElementById('warnings');
+            const warningsList = document.getElementById('warnings-list');
+
+            if (!input.trim()) {
+                output.textContent = 'Please enter some JSON to correct.';
+                output.className = 'output';
+                warningsDiv.classList.remove('show');
+                return;
+            }
+
+            try {
+                const lexer = new JSONLexer(input, { autoFix: true });
+                const tokens = lexer.tokenize();
+                const lexerWarnings = lexer.getWarnings();
+
+                const parser = new JSONParser(tokens, { autoFix: true, warnings: lexerWarnings });
+                const result = parser.parse();
+                const allWarnings = parser.getWarnings();
+
+                const correctedJSON = JSON.stringify(result, null, 2);
+                output.textContent = correctedJSON;
+                output.className = 'output success';
+
+                // Validate tokens
+                const validation = validateTokens(input, correctedJSON);
+                if (!validation.valid) {
+                    const issues = [];
+                    if (validation.unexpectedWords.length > 0) {
+                        issues.push(`Unexpected words: ${validation.unexpectedWords.join(', ')}`);
+                    }
+                    if (validation.missingWords.length > 0) {
+                        issues.push(`Missing words: ${validation.missingWords.join(', ')}`);
+                    }
+                    allWarnings.push({
+                        type: 'validation',
+                        message: `⚠️ VALIDATION WARNING - ${issues.join(' | ')} (Result is still displayed above)`
+                    });
+                }
+
+                // Display only validation warnings (not auto-fix details)
+                const validationWarnings = allWarnings.filter(w => w.type === 'validation');
+                if (validationWarnings.length > 0) {
+                    warningsList.innerHTML = '';
+                    validationWarnings.forEach(warning => {
+                        const li = document.createElement('li');
+                        li.textContent = warning.message;
+                        li.style.color = '#d32f2f';
+                        li.style.fontWeight = 'bold';
+                        warningsList.appendChild(li);
+                    });
+                    warningsDiv.classList.add('show');
+                } else {
+                    warningsDiv.classList.remove('show');
+                }
+            } catch (error) {
+                output.textContent = 'Error: ' + error.message;
+                output.className = 'output error';
+                warningsDiv.classList.remove('show');
+            }
+        }
+
+        function loadExample(text) {
+            document.getElementById('input').value = text;
+            correctJSON();
+        }
+
+        document.getElementById('input').addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                correctJSON();
+            }
+        });
+    </script>
+</body>
+</html>
