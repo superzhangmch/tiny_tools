@@ -242,6 +242,7 @@
                 <li>Single quote strings → double quote strings</li>
                 <li>Trailing commas in arrays and objects</li>
                 <li>Unquoted object keys</li>
+                <li><strong>NEW:</strong> Ignores line comments: <code>//</code> and <code>#</code></li>
                 <li><strong>NEW:</strong> Auto-fixes unterminated strings</li>
                 <li><strong>NEW:</strong> Auto-closes unmatched braces {}</li>
                 <li><strong>NEW:</strong> Auto-closes unmatched brackets []</li>
@@ -255,6 +256,9 @@
             <pre onclick="loadExample(this.textContent)">{key: &quot;value}</pre>
             <pre onclick="loadExample(this.textContent)">[1, 2, 3, [4, 5</pre>
             <pre onclick="loadExample(this.textContent)">{user: {name: &quot;John, age: 30, tags: [&quot;tag1&quot;, &quot;tag2&quot;}</pre>
+            <pre onclick="loadExample(this.textContent)">{a: 1, // hello
+ b: TRUE # hi
+}</pre>
         </div>
     </div>
 
@@ -292,6 +296,30 @@
                 while (this.currentChar() && /\s/.test(this.currentChar())) {
                     this.advance();
                 }
+            }
+
+            skipWhitespaceAndComments() {
+                let skipped = false;
+
+                do {
+                    skipped = false;
+                    this.skipWhitespace();
+
+                    if (this.currentChar() === '/' && this.peek() === '/') {
+                        while (this.currentChar() && this.currentChar() !== '\n') {
+                            this.advance();
+                        }
+                        skipped = true;
+                        continue;
+                    }
+
+                    if (this.currentChar() === '#') {
+                        while (this.currentChar() && this.currentChar() !== '\n') {
+                            this.advance();
+                        }
+                        skipped = true;
+                    }
+                } while (skipped);
             }
 
             readString(quote) {
@@ -419,7 +447,7 @@
             }
 
             nextToken() {
-                this.skipWhitespace();
+                this.skipWhitespaceAndComments();
 
                 if (!this.currentChar()) {
                     return { type: 'EOF', line: this.line, column: this.column };
@@ -756,12 +784,74 @@
             }
         }
 
+        function stripLineComments(input) {
+            let result = '';
+            let inString = false;
+            let quoteChar = null;
+            let escaped = false;
+
+            for (let i = 0; i < input.length; i++) {
+                const char = input[i];
+                const next = i + 1 < input.length ? input[i + 1] : null;
+
+                if (inString) {
+                    result += char;
+                    if (escaped) {
+                        escaped = false;
+                        continue;
+                    }
+                    if (char === '\\') {
+                        escaped = true;
+                        continue;
+                    }
+                    if (char === quoteChar) {
+                        inString = false;
+                        quoteChar = null;
+                    }
+                    continue;
+                }
+
+                if (char === '"' || char === "'") {
+                    inString = true;
+                    quoteChar = char;
+                    result += char;
+                    continue;
+                }
+
+                if (char === '/' && next === '/') {
+                    while (i < input.length && input[i] !== '\n') {
+                        i++;
+                    }
+                    if (i < input.length && input[i] === '\n') {
+                        result += '\n';
+                    }
+                    continue;
+                }
+
+                if (char === '#') {
+                    while (i < input.length && input[i] !== '\n') {
+                        i++;
+                    }
+                    if (i < input.length && input[i] === '\n') {
+                        result += '\n';
+                    }
+                    continue;
+                }
+
+                result += char;
+            }
+
+            return result;
+        }
+
         function validateTokens(originalStr, fixedStr) {
             // Replace structural chars with spaces
             const charsToReplace = /[\[\]{}'":\t\n\\,]/g;
 
-            const oriCleaned = originalStr.replace(charsToReplace, ' ');
-            const fixedCleaned = fixedStr.replace(charsToReplace, ' ');
+            const cleanedOriginal = stripLineComments(originalStr);
+            const cleanedFixed = stripLineComments(fixedStr);
+            const oriCleaned = cleanedOriginal.replace(charsToReplace, ' ');
+            const fixedCleaned = cleanedFixed.replace(charsToReplace, ' ');
 
             // Get arrays of words
             const arr_ori = oriCleaned.split(' ').filter(w => w.trim().length > 0);
