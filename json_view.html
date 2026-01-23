@@ -535,7 +535,9 @@ function hide_show(td_idx)
 
 	        cur_path = path + "[\"" + trans(key) + "\"]"
 	        const row = table.insertRow();
-	        const keyCell = row.insertCell();
+        const keyCell = row.insertCell();
+        keyCell.setAttribute('translate', 'no');
+        keyCell.classList.add('notranslate');
 		keyCell.innerHTML = "<a href='javascript:show_path(\"td_"+td_idx+"\")'>" + trans(key) + "</a> <a id='a_"+td_idx+"' href='javascript:hide_show(\""+td_idx+"\")'>-</a>" + "<span id='td_"+td_idx+"' style='color:red;font-size:14px;display:none'><br>"+cur_path+"</span>";
 		td_idx += 1;
 	        keyCell.style.backgroundColor = 'lightgreen';
@@ -603,6 +605,8 @@ function hide_show(td_idx)
 
 		var row = table.insertRow();
 		var keyCell = row.insertCell();
+		keyCell.setAttribute('translate', 'no');
+		keyCell.classList.add('notranslate');
 		keyCell.innerHTML = '#';
 		keyCell.className = 'arr_idx';
 		var valueCell = row.insertCell();
@@ -614,6 +618,8 @@ function hide_show(td_idx)
 			var cur_path =  path+("["+ii+"]");
 			const row = table.insertRow();
 			const keyCell = row.insertCell();
+			keyCell.setAttribute('translate', 'no');
+			keyCell.classList.add('notranslate');
 			keyCell.innerHTML = "<a href='javascript:show_path(\"td_"+td_idx+"\")'>#" + ii + "</a> <a id='a_"+td_idx+"' href='javascript:hide_show(\""+td_idx+"\")'>-</a>" + "<span id='td_"+td_idx+"' style='color:red;font-size:14px;display:none'><br>"+cur_path+"</span>" +
 			    "<br><a href='javascript:navigateArray(\"" + currentArrTableId + "\", \"prev\")' style='font-size:14px;text-decoration:none;' title='上一个'>&lt;</a> " +
 			    "<a href='javascript:navigateArray(\"" + currentArrTableId + "\", \"next\")' style='font-size:14px;text-decoration:none;' title='下一个'>&gt;</a>" +
