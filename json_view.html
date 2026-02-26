@@ -384,6 +384,12 @@ function replaceKeywords(input) {
 	        return formatDict(value, path);
 	    } else if (typeof value === 'string') {
 	        return formatString(value, path);
+	    } else if (typeof value === 'boolean' || value === null) {
+	        const span = document.createElement('span');
+	        span.setAttribute('translate', 'no');
+	        span.classList.add('notranslate');
+	        span.textContent = String(value);
+	        return span;
 	    } else {
 	        return document.createTextNode(String(value));
 	    }
