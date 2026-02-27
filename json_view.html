@@ -56,6 +56,10 @@
 	.scroll-buttons button:hover {
 	  background-color: #e0e0e0;
 	}
+	.highlight {
+	  background-color: yellow;
+	  font-weight: bold;
+	}
     </style>
     <script src="https://unpkg.com/json5@2/dist/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -68,6 +72,7 @@
     [<input type="file" id="fileInput">
     行号: <input type="number" id="lineNumber" placeholder="留空加载全文" min="1" style="width: 100px;">
     <button onclick="loadFile()">加载文件</button>]
+    Highlight: <input type="text" id="highlightInput" placeholder="regexp pattern" style="width: 200px;" oninput="applyHighlight()">
     <div id="output"></div>
 
     <div class="scroll-buttons">
@@ -750,7 +755,9 @@ function hide_show(td_idx)
 
 	    if (str.includes('\n') || str.includes('\\n')) {
 	            const pre = document.createElement('pre');
-	            pre.innerHTML = trans(str.replace(/\\n/g, '\n').replace(/\n/g, '\n').replace(/\\t/g, '\t'));
+	            var html = trans(str.replace(/\\n/g, '\n').replace(/\n/g, '\n').replace(/\\t/g, '\t'));
+	            html = wrapContentTags(html);
+	            pre.innerHTML = html;
 
 	            // pre.textContent = str;
 		    if (!isBriefMode) {
@@ -762,12 +769,28 @@ function hide_show(td_idx)
 		    }
 	            return pre;
 	   } else {
+	            var hasContentTag = str.includes('<content>') && str.includes('</content>');
 		    if (!isBriefMode) {
 		        if (de_base64) {
+		            if (hasContentTag) {
+		                const span = document.createElement('span');
+		                span.innerHTML = wrapContentTags(trans(str)) + "<br>__原始内容__: " + trans(de_base64);
+		                return span;
+		            }
 	                return document.createTextNode(str + "<br>__原始内容__: " + de_base64);
 		        } else if (de_uri) {
+		            if (hasContentTag) {
+		                const span = document.createElement('span');
+		                span.innerHTML = wrapContentTags(trans(str)) + "<br>__原始内容__: " + trans(de_uri);
+		                return span;
+		            }
 	                return document.createTextNode(str + "<br>__原始内容__: " + de_uri);
 		        }
+		    }
+		    if (hasContentTag) {
+		        const span = document.createElement('span');
+		        span.innerHTML = wrapContentTags(trans(str));
+		        return span;
 		    }
 	            return document.createTextNode(str);
 	   }
@@ -902,6 +925,82 @@ function hide_show(td_idx)
 	document.addEventListener('mousemove', function(e) {
 	    window.lastMouseEvent = e;
 	});
+
+	function wrapContentTags(html) {
+	    return html.replace(/&lt;content&gt;([\s\S]*?)&lt;\/content&gt;/g,
+	        '<pre style="border:1px solid #999; padding:8px; margin:4px 0; background:#f9f9f9;">&lt;content&gt;$1&lt;/content&gt;</pre>');
+	}
+
+	function applyHighlight() {
+	    removeHighlight();
+	    const pattern = document.getElementById('highlightInput').value.trim();
+	    if (!pattern) return;
+
+	    try {
+	        // Add \b at the start of each alternation branch
+	        const wrappedPattern = pattern.split('|').map(function(branch) {
+	            const trimmed = branch.trimStart();
+	            const leadingSpace = branch.slice(0, branch.length - trimmed.length);
+	            if (/^\w/.test(trimmed)) {
+	                return leadingSpace + '\\b' + trimmed;
+	            }
+	            return branch;
+	        }).join('|');
+	        const regex = new RegExp(wrappedPattern, 'g');
+	        const output = document.getElementById('output');
+	        highlightTextNodes(output, regex);
+	    } catch(e) {
+	        // invalid regex, ignore
+	    }
+	}
+
+	function removeHighlight() {
+	    const output = document.getElementById('output');
+	    const highlights = output.querySelectorAll('.highlight');
+	    highlights.forEach(function(span) {
+	        const parent = span.parentNode;
+	        // Remove the <br> after the span if it exists
+	        if (span.nextSibling && span.nextSibling.tagName === 'BR') {
+	            parent.removeChild(span.nextSibling);
+	        }
+	        parent.replaceChild(document.createTextNode(span.textContent), span);
+	        parent.normalize();
+	    });
+	}
+
+	function highlightTextNodes(node, regex) {
+	    if (node.nodeType === Node.TEXT_NODE) {
+	        const text = node.textContent;
+	        if (!regex.test(text)) return;
+	        regex.lastIndex = 0;
+
+	        const fragment = document.createDocumentFragment();
+	        let lastIndex = 0;
+	        let match;
+
+	        while ((match = regex.exec(text)) !== null) {
+	            if (match.index > lastIndex) {
+	                fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+	            }
+	            const span = document.createElement('span');
+	            span.className = 'highlight';
+	            span.textContent = match[0];
+	            fragment.appendChild(span);
+	            fragment.appendChild(document.createElement('br'));
+	            lastIndex = regex.lastIndex;
+	            if (match[0].length === 0) regex.lastIndex++;
+	        }
+
+	        if (lastIndex < text.length) {
+	            fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+	        }
+
+	        node.parentNode.replaceChild(fragment, node);
+	    } else {
+	        const children = Array.from(node.childNodes);
+	        children.forEach(function(child) { highlightTextNodes(child, regex); });
+	    }
+	}
 
 	// 监听键盘事件
 	document.addEventListener('keydown', function(e) {
