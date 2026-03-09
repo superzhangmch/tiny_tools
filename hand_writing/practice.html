@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chinese Character Stroke Practice</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Microsoft YaHei", sans-serif;
+  background: #f5f0eb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  min-height: 100vh;
+}
+h1 { font-size: 22px; color: #333; margin-bottom: 16px; }
+
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.input-row label { font-size: 15px; font-weight: 500; color: #555; }
+.input-row input[type=text] {
+  font-size: 28px;
+  width: 480px;
+  text-align: center;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  padding: 4px 8px;
+  letter-spacing: 6px;
+}
+.input-row .btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 500;
+  background: #e74c3c;
+  color: #fff;
+}
+.input-row .btn:hover { opacity: 0.85; }
+
+.grid-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.cell-label {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  height: 28px;
+}
+.canvas-wrap {
+  position: relative;
+  border: 2px solid #c0392b;
+  background: #fff;
+}
+.canvas-wrap canvas { display: block; cursor: crosshair; }
+.canvas-wrap.active { border-color: #2980b9; box-shadow: 0 0 0 3px rgba(41,128,185,0.25); }
+.canvas-wrap.done-ok { border-color: #27ae60; }
+.canvas-wrap.done-bad { border-color: #e74c3c; }
+
+.cell-result {
+  min-height: 22px;
+  font-size: 12px;
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 150px;
+}
+.sn {
+  display: inline-block;
+  width: 18px; height: 18px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+}
+.sn.ok { background: #27ae60; }
+.sn.wrong { background: #e74c3c; }
+.sn.pending { background: #ccc; }
+.sn.active-stroke { background: #2980b9; }
+
+.cell-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+.cell-actions button {
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  color: #666;
+  line-height: 16px;
+}
+.cell-actions button:hover { background: #eee; border-color: #999; }
+</style>
+</head>
+<body>
+
+<h1>Stroke Practice</h1>
+
+<div class="input-row">
+  <label>Characters:</label>
+  <input type="text" id="charInput" maxlength="16" placeholder="">
+  <button class="btn" id="btnClear">Clear All</button>
+</div>
+
+<div class="grid-row" id="gridRow"></div>
+
+<script src="strokes.js"></script>
+<script src="stroke-core.js"></script>
+<script>
+// ============================================================
+// Config
+// ============================================================
+const CELL_COUNT = 16;
+const CSIZE = 150; // canvas pixel size
+const PEN_WIDTH = 3;
+
+// ============================================================
+// Cell state
+// ============================================================
+const cells = []; // { gridCtx, writeCtx, writeCanvas, strokes, char, expected }
+
+function createCells() {
+  const row = document.getElementById('gridRow');
+  row.innerHTML = '';
+  cells.length = 0;
+  for (let i = 0; i < CELL_COUNT; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+
+    const label = document.createElement('div');
+    label.className = 'cell-label';
+    label.id = `label-${i}`;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'canvas-wrap';
+    wrap.id = `wrap-${i}`;
+
+    const gridC = document.createElement('canvas');
+    gridC.width = CSIZE; gridC.height = CSIZE;
+    const writeC = document.createElement('canvas');
+    writeC.width = CSIZE; writeC.height = CSIZE;
+    writeC.style.cssText = 'position:absolute;top:0;left:0;';
+
+    wrap.appendChild(gridC);
+    wrap.appendChild(writeC);
+
+    const actions = document.createElement('div');
+    actions.className = 'cell-actions';
+    const undoBtn = document.createElement('button');
+    undoBtn.textContent = 'Undo';
+    undoBtn.addEventListener('click', () => undoCell(i));
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = 'Clear';
+    clearBtn.addEventListener('click', () => clearCell(i));
+    actions.appendChild(undoBtn);
+    actions.appendChild(clearBtn);
+
+    const result = document.createElement('div');
+    result.className = 'cell-result';
+    result.id = `result-${i}`;
+
+    cell.appendChild(label);
+    cell.appendChild(wrap);
+    cell.appendChild(actions);
+    cell.appendChild(result);
+    row.appendChild(cell);
+
+    const gCtx = gridC.getContext('2d');
+    const wCtx = writeC.getContext('2d');
+    drawMiGrid(gCtx);
+
+    cells.push({ gridCtx: gCtx, writeCtx: wCtx, writeCanvas: writeC, strokes: [], char: '', expected: '' });
+
+    // Events
+    writeC.addEventListener('mousedown', e => onStart(i, e));
+    writeC.addEventListener('mousemove', e => onMove(i, e));
+    writeC.addEventListener('mouseup', e => onEnd(i, e));
+    writeC.addEventListener('mouseleave', e => onEnd(i, e));
+    writeC.addEventListener('touchstart', e => onStart(i, e), { passive: false });
+    writeC.addEventListener('touchmove', e => onMove(i, e), { passive: false });
+    writeC.addEventListener('touchend', e => onEnd(i, e), { passive: false });
+    writeC.addEventListener('touchcancel', e => onEnd(i, e), { passive: false });
+  }
+}
+
+function drawMiGrid(ctx) {
+  ctx.clearRect(0, 0, CSIZE, CSIZE);
+  ctx.strokeStyle = '#ccc';
+  ctx.lineWidth = 0.5;
+  ctx.setLineDash([5, 4]);
+  // horizontal
+  ctx.beginPath(); ctx.moveTo(0, CSIZE/2); ctx.lineTo(CSIZE, CSIZE/2); ctx.stroke();
+  // vertical
+  ctx.beginPath(); ctx.moveTo(CSIZE/2, 0); ctx.lineTo(CSIZE/2, CSIZE); ctx.stroke();
+  // diagonals
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(CSIZE, CSIZE); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(CSIZE, 0); ctx.lineTo(0, CSIZE); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ============================================================
+// Drawing
+// ============================================================
+let activeCell = -1;
+let currentPoints = [];
+let isDrawing = false;
+
+function getPos(canvas, e) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = CSIZE / rect.width, sy = CSIZE / rect.height;
+  if (e.touches) return { x: (e.touches[0].clientX - rect.left) * sx, y: (e.touches[0].clientY - rect.top) * sy, t: Date.now() };
+  return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy, t: Date.now() };
+}
+
+function onStart(ci, e) {
+  e.preventDefault();
+  const c = cells[ci];
+  // Skip if this cell is fully done and correct
+  if (c.expected && isComplete(ci) && isAllCorrect(ci)) return;
+  activeCell = ci;
+  isDrawing = true;
+  const p = getPos(c.writeCanvas, e);
+  currentPoints = [p];
+  c.writeCtx.lineWidth = PEN_WIDTH;
+  c.writeCtx.lineCap = 'round';
+  c.writeCtx.lineJoin = 'round';
+  c.writeCtx.strokeStyle = '#222';
+  c.writeCtx.beginPath();
+  c.writeCtx.moveTo(p.x, p.y);
+}
+
+function onMove(ci, e) {
+  if (!isDrawing || activeCell !== ci) return;
+  e.preventDefault();
+  const c = cells[ci];
+  const p = getPos(c.writeCanvas, e);
+  currentPoints.push(p);
+  c.writeCtx.lineTo(p.x, p.y);
+  c.writeCtx.stroke();
+  c.writeCtx.beginPath();
+  c.writeCtx.moveTo(p.x, p.y);
+}
+
+function onEnd(ci, e) {
+  if (!isDrawing || activeCell !== ci) return;
+  e.preventDefault();
+  isDrawing = false;
+  activeCell = -1;
+  const c = cells[ci];
+
+  if (currentPoints.length < 2) {
+    const p = currentPoints[0];
+    c.writeCtx.beginPath();
+    c.writeCtx.arc(p.x, p.y, PEN_WIDTH / 2, 0, Math.PI * 2);
+    c.writeCtx.fillStyle = '#222';
+    c.writeCtx.fill();
+  }
+
+  const result = analyzeStroke(currentPoints);
+  c.strokes.push({ points: [...currentPoints], ...result });
+  currentPoints = [];
+  redrawCell(ci);
+  updateCellResult(ci);
+}
+
+// ============================================================
+// Cell rendering
+// ============================================================
+function getExpected(ci) {
+  return cells[ci].expected || '';
+}
+
+function getStrokeMatch(ci, si) {
+  const exp = getExpected(ci);
+  if (!exp || si >= exp.length) return { exp: null, got: null, ok: false };
+  const expNum = parseInt(exp[si]);
+  const got = strokeToNumber(cells[ci].strokes[si], expNum);
+  return { exp: expNum, got, ok: got === expNum };
+}
+
+function isComplete(ci) {
+  const exp = getExpected(ci);
+  return exp && cells[ci].strokes.length >= exp.length;
+}
+
+function isAllCorrect(ci) {
+  const exp = getExpected(ci);
+  if (!exp) return false;
+  if (cells[ci].strokes.length !== exp.length) return false;
+  for (let i = 0; i < exp.length; i++) {
+    if (!getStrokeMatch(ci, i).ok) return false;
+  }
+  return true;
+}
+
+function redrawCell(ci) {
+  const c = cells[ci];
+  const ctx = c.writeCtx;
+  ctx.clearRect(0, 0, CSIZE, CSIZE);
+
+  for (let si = 0; si < c.strokes.length; si++) {
+    const s = c.strokes[si];
+    const match = getStrokeMatch(ci, si);
+
+    // Draw ink
+    ctx.lineWidth = PEN_WIDTH;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#222';
+
+    if (s.points.length < 2) {
+      const p = s.points[0];
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, PEN_WIDTH / 2, 0, Math.PI * 2);
+      ctx.fillStyle = '#222';
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(s.points[0].x, s.points[0].y);
+      for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+      ctx.stroke();
+    }
+
+    // Only show fitted overlay + red dots for wrong strokes
+    if (!match.ok && match.exp !== null) {
+      // Red dots
+      ctx.save();
+      ctx.fillStyle = 'rgba(231, 76, 60, 0.55)';
+      const step = Math.max(1, Math.floor(s.points.length / 12));
+      for (let i = 0; i < s.points.length; i += step) {
+        ctx.beginPath();
+        ctx.arc(s.points[i].x, s.points[i].y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Update border
+  const wrap = document.getElementById(`wrap-${ci}`);
+  wrap.className = 'canvas-wrap';
+  const exp = getExpected(ci);
+  if (exp) {
+    if (isComplete(ci)) {
+      wrap.classList.add(isAllCorrect(ci) ? 'done-ok' : 'done-bad');
+    }
+  }
+}
+
+function updateCellResult(ci) {
+  const el = document.getElementById(`result-${ci}`);
+  const exp = getExpected(ci);
+  if (!exp) { el.innerHTML = ''; return; }
+
+  let html = '';
+  for (let i = 0; i < exp.length; i++) {
+    const expNum = parseInt(exp[i]);
+    if (i < cells[ci].strokes.length) {
+      const match = getStrokeMatch(ci, i);
+      const cls = match.ok ? 'ok' : 'wrong';
+      const label = STROKE_NAMES[match.got] || '?';
+      html += `<span class="sn ${cls}" title="${STROKE_NAMES[expNum]}→${label}">${label}</span>`;
+    } else if (i === cells[ci].strokes.length) {
+      // Next expected stroke
+      html += `<span class="sn active-stroke" title="Next: ${STROKE_NAMES[expNum]}">${STROKE_NAMES[expNum]}</span>`;
+    } else {
+      html += `<span class="sn pending" title="${STROKE_NAMES[expNum]}">${STROKE_NAMES[expNum]}</span>`;
+    }
+  }
+  // Extra strokes
+  for (let i = exp.length; i < cells[ci].strokes.length; i++) {
+    const got = strokeToNumber(cells[ci].strokes[i]);
+    html += `<span class="sn wrong" title="Extra">${STROKE_NAMES[got] || '?'}</span>`;
+  }
+  el.innerHTML = html;
+}
+
+// ============================================================
+// Per-cell undo / clear
+// ============================================================
+function clearCell(ci) {
+  cells[ci].strokes = [];
+  redrawCell(ci);
+  updateCellResult(ci);
+}
+
+function undoCell(ci) {
+  if (cells[ci].strokes.length === 0) return;
+  cells[ci].strokes.pop();
+  redrawCell(ci);
+  updateCellResult(ci);
+}
+
+// ============================================================
+// Input handling
+// ============================================================
+const charInput = document.getElementById('charInput');
+
+function applyChars() {
+  const chars = charInput.value;
+  for (let i = 0; i < CELL_COUNT; i++) {
+    const ch = chars[i] || '';
+    const label = document.getElementById(`label-${i}`);
+    label.textContent = ch;
+    cells[i].char = ch;
+    cells[i].expected = (ch && typeof hz_stroks !== 'undefined' && hz_stroks[ch]) || '';
+    cells[i].strokes = [];
+    redrawCell(i);
+    updateCellResult(i);
+  }
+}
+
+charInput.addEventListener('input', applyChars);
+
+document.getElementById('btnClear').addEventListener('click', () => {
+  for (let i = 0; i < CELL_COUNT; i++) clearCell(i);
+});
+
+// Double-click a cell to clear just that cell
+document.getElementById('gridRow').addEventListener('dblclick', (e) => {
+  const canvas = e.target.closest('.canvas-wrap');
+  if (!canvas) return;
+  const idx = Array.from(document.querySelectorAll('.canvas-wrap')).indexOf(canvas);
+  if (idx >= 0 && idx < CELL_COUNT) clearCell(idx);
+});
+
+// ============================================================
+// Init
+// ============================================================
+createCells();
+</script>
+</body>
+</html>
