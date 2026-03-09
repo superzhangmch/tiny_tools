@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chinese Character Stroke Writer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Microsoft YaHei", sans-serif;
+  background: #f5f0eb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 20px;
+  min-height: 100vh;
+}
+h1 { font-size: 22px; color: #333; margin-bottom: 20px; }
+
+.container {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.canvas-wrap {
+  position: relative;
+  border: 3px solid #c0392b;
+  background: #fff;
+}
+canvas { display: block; cursor: crosshair; }
+
+.panel {
+  width: 320px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.panel h2 { font-size: 16px; color: #555; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+
+.stroke-sequence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+  min-height: 36px;
+  padding: 8px;
+  background: #fafafa;
+  border-radius: 4px;
+  border: 1px solid #eee;
+}
+.stroke-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+}
+.stroke-tag.line { background: #2980b9; }
+.stroke-tag.multiline { background: #16a085; }
+.stroke-tag.arc { background: #e67e22; }
+.stroke-tag.curve { background: #8e44ad; }
+
+.stroke-detail {
+  font-size: 13px;
+  color: #666;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 8px;
+  background: #fafafa;
+  border-radius: 4px;
+  border: 1px solid #eee;
+  line-height: 1.6;
+}
+.stroke-detail .entry { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px dashed #e0e0e0; }
+.stroke-detail .entry:last-child { border-bottom: none; margin-bottom: 0; }
+
+.btn-row { display: flex; gap: 10px; margin-top: 12px; }
+.btn {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-clear { background: #e74c3c; color: #fff; }
+.btn-undo { background: #7f8c8d; color: #fff; }
+
+.char-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.char-input-row label { font-size: 14px; font-weight: 500; color: #555; }
+.char-input-row input {
+  width: 50px;
+  font-size: 24px;
+  text-align: center;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  padding: 2px;
+}
+.verify-result {
+  font-size: 13px;
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  min-height: 20px;
+  line-height: 1.8;
+}
+.verify-result .stroke-num {
+  display: inline-block;
+  width: 22px; height: 22px;
+  line-height: 22px;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 2px;
+}
+.verify-result .stroke-num.ok { background: #27ae60; }
+.verify-result .stroke-num.wrong { background: #e74c3c; }
+.verify-result .stroke-num.pending { background: #bbb; }
+
+.settings { margin-top: 12px; }
+.settings label { font-size: 13px; color: #666; display: flex; align-items: center; gap: 8px; }
+.settings input[type=range] { flex: 1; }
+</style>
+</head>
+<body>
+
+<h1>Chinese Character Stroke Writer</h1>
+
+<div class="container">
+  <div class="canvas-wrap">
+    <canvas id="gridCanvas" width="500" height="500"></canvas>
+    <canvas id="writeCanvas" width="500" height="500" style="position:absolute;top:0;left:0;"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="char-input-row">
+      <label>Character</label>
+      <input type="text" id="charInput" maxlength="1" placeholder="e.g. 三">
+      <span id="charExpected" style="color:#888;font-size:13px;"></span>
+    </div>
+    <div id="verifyResult" class="verify-result"></div>
+
+    <h2>Stroke Sequence</h2>
+    <div class="stroke-sequence" id="strokeSeq"></div>
+
+    <h2>Stroke Details</h2>
+    <div class="stroke-detail" id="strokeDetail">
+      <span style="color:#aaa;">Write on the canvas to see stroke analysis...</span>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-undo" id="btnUndo">Undo</button>
+      <button class="btn btn-clear" id="btnClear">Clear</button>
+    </div>
+    <textarea id="pointsOutput" rows="4" style="width:100%;margin-top:10px;font-size:11px;font-family:monospace;resize:vertical;border:1px solid #ddd;border-radius:4px;padding:6px;color:#555;" readonly placeholder="Sampled points will appear here..."></textarea>
+
+    <div class="settings">
+      <label>Pen Width
+        <input type="range" id="penWidth" min="2" max="10" value="4">
+      </label>
+    </div>
+  </div>
+</div>
+
+<script src="strokes.js"></script>
+<script src="stroke-core.js"></script>
+<script>
+const SIZE = 500;
+const gridCanvas = document.getElementById('gridCanvas');
+const writeCanvas = document.getElementById('writeCanvas');
+const gridCtx = gridCanvas.getContext('2d');
+const writeCtx = writeCanvas.getContext('2d');
+const strokeSeqEl = document.getElementById('strokeSeq');
+const strokeDetailEl = document.getElementById('strokeDetail');
+const penWidthInput = document.getElementById('penWidth');
+
+// --- State ---
+// Each stroke: { points, kind, data }
+//   kind: 'line' | 'multiline' | 'curve'
+//   line data:      { start, angle, length }
+//   multiline data: { segments: [{ start, angle, length }] }
+//   curve data:     { start, end }
+let strokes = [];
+let currentPoints = [];
+let isDrawing = false;
+
+// --- Draw the rice grid (米字格) ---
+function drawGrid() {
+  const ctx = gridCtx;
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  ctx.strokeStyle = '#ccc';
+  ctx.lineWidth = 1;
+
+  // outer border is handled by CSS
+
+  // dashed style
+  ctx.setLineDash([8, 6]);
+
+  // horizontal center line
+  ctx.beginPath();
+  ctx.moveTo(0, SIZE / 2);
+  ctx.lineTo(SIZE, SIZE / 2);
+  ctx.stroke();
+
+  // vertical center line
+  ctx.beginPath();
+  ctx.moveTo(SIZE / 2, 0);
+  ctx.lineTo(SIZE / 2, SIZE);
+  ctx.stroke();
+
+  // diagonal top-left to bottom-right
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(SIZE, SIZE);
+  ctx.stroke();
+
+  // diagonal top-right to bottom-left
+  ctx.beginPath();
+  ctx.moveTo(SIZE, 0);
+  ctx.lineTo(0, SIZE);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
+}
+drawGrid();
+
+// --- Drawing ---
+function getPenWidth() { return parseInt(penWidthInput.value); }
+
+function getPos(e) {
+  const rect = writeCanvas.getBoundingClientRect();
+  const scaleX = SIZE / rect.width;
+  const scaleY = SIZE / rect.height;
+  if (e.touches) {
+    return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY, t: Date.now() };
+  }
+  return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY, t: Date.now() };
+}
+
+function startStroke(e) {
+  e.preventDefault();
+  isDrawing = true;
+  const p = getPos(e);
+  currentPoints = [p];
+  writeCtx.lineWidth = getPenWidth();
+  writeCtx.lineCap = 'round';
+  writeCtx.lineJoin = 'round';
+  writeCtx.strokeStyle = '#222';
+  writeCtx.beginPath();
+  writeCtx.moveTo(p.x, p.y);
+}
+
+function moveStroke(e) {
+  if (!isDrawing) return;
+  e.preventDefault();
+  const p = getPos(e);
+  currentPoints.push(p);
+  writeCtx.lineTo(p.x, p.y);
+  writeCtx.stroke();
+  writeCtx.beginPath();
+  writeCtx.moveTo(p.x, p.y);
+}
+
+function endStroke(e) {
+  if (!isDrawing) return;
+  e.preventDefault();
+  isDrawing = false;
+  if (currentPoints.length < 2) {
+    // single tap = dot
+    const p = currentPoints[0];
+    writeCtx.beginPath();
+    writeCtx.arc(p.x, p.y, getPenWidth() / 2, 0, Math.PI * 2);
+    writeCtx.fillStyle = '#222';
+    writeCtx.fill();
+  }
+
+  const result = analyzeStroke(currentPoints);
+  strokes.push({ points: [...currentPoints], ...result });
+  currentPoints = [];
+  redrawStrokes();
+  updateUI();
+}
+
+// ============================================================
+// UI
+// ============================================================
+
+// Format clock angle as human-readable direction hint
+function angleName(deg) {
+  // 0=up, 45=upper-right, 90=right, 135=lower-right, 180=down, etc.
+  const dirs = ['12h', '1-2h', '3h', '4-5h', '6h', '7-8h', '9h', '10-11h'];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+function formatSeg(seg) {
+  return `(${seg.start.x}, ${seg.start.y}) ${seg.angle}&deg; [${angleName(seg.angle)}] len=${seg.length}`;
+}
+
+const KIND_LABELS = { line: 'Line', multiline: 'Multiline', arc: 'Arc', curve: 'Curve' };
+
+// ============================================================
+// Character verification
+// ============================================================
+const charInputEl = document.getElementById('charInput');
+const charExpectedEl = document.getElementById('charExpected');
+const verifyResultEl = document.getElementById('verifyResult');
+
+function getExpectedStrokes() {
+  const ch = charInputEl.value.trim();
+  if (!ch || typeof hz_stroks === 'undefined') return null;
+  return hz_stroks[ch] || null;
+}
+
+charInputEl.addEventListener('input', () => {
+  const expected = getExpectedStrokes();
+  if (expected) {
+    const display = expected.split('').map(n => STROKE_NAMES[n] || n).join(' ');
+    charExpectedEl.textContent = `Expected: ${display} (${expected})`;
+  } else if (charInputEl.value.trim()) {
+    charExpectedEl.textContent = 'Character not found';
+  } else {
+    charExpectedEl.textContent = '';
+  }
+  updateVerification();
+});
+
+function updateVerification() {
+  const expected = getExpectedStrokes();
+  if (!expected) {
+    verifyResultEl.innerHTML = '';
+    return;
+  }
+
+  const written = strokes.map((s, i) => {
+    const exp = i < expected.length ? parseInt(expected[i]) : undefined;
+    return strokeToNumber(s, exp);
+  });
+  const totalExpected = expected.length;
+
+  let html = '<strong>Verification:</strong> ';
+  for (let i = 0; i < totalExpected; i++) {
+    const exp = parseInt(expected[i]);
+    if (i < written.length) {
+      const got = written[i];
+      const ok = got === exp;
+      const cls = ok ? 'ok' : 'wrong';
+      const title = ok
+        ? `#${i+1} ${STROKE_NAMES[exp]}: correct`
+        : `#${i+1} expected ${STROKE_NAMES[exp]}(${exp}), got ${STROKE_NAMES[got]}(${got})`;
+      html += `<span class="stroke-num ${cls}" title="${title}">${got}</span>`;
+    } else {
+      html += `<span class="stroke-num pending" title="#${i+1} ${STROKE_NAMES[exp]}(${exp})">${exp}</span>`;
+    }
+  }
+  // Extra strokes beyond expected
+  for (let i = totalExpected; i < written.length; i++) {
+    html += `<span class="stroke-num wrong" title="Extra stroke">${written[i]}</span>`;
+  }
+
+  const allDone = written.length === totalExpected;
+  const allCorrect = allDone && written.every((w, i) => w === parseInt(expected[i]));
+  if (allCorrect) {
+    html += ' <span style="color:#27ae60;font-weight:600;">Correct!</span>';
+  } else if (allDone) {
+    html += ' <span style="color:#e74c3c;font-weight:600;">Mismatch</span>';
+  } else {
+    html += ` <span style="color:#888;">${written.length}/${totalExpected}</span>`;
+  }
+
+  verifyResultEl.innerHTML = html;
+}
+
+function updateUI() {
+  // Sequence tags
+  strokeSeqEl.innerHTML = strokes.map((s, i) => {
+    const label = KIND_LABELS[s.kind];
+    const expectedStr = getExpectedStrokes();
+    const exp = expectedStr && i < expectedStr.length ? parseInt(expectedStr[i]) : undefined;
+    const num = strokeToNumber(s, exp);
+    let detail = '';
+    if (s.kind === 'line') detail = `${s.data.angle}&deg;`;
+    if (s.kind === 'multiline') detail = `${s.data.segments.length} segs`;
+    if (s.kind === 'arc') detail = `r=${s.data.radius} ${s.data.direction}`;
+    return `<span class="stroke-tag ${s.kind}" title="Stroke ${i + 1}">${STROKE_NAMES[num]}(${num}) ${label} ${detail}</span>`;
+  }).join('');
+
+  // Detail list
+  if (strokes.length === 0) {
+    strokeDetailEl.innerHTML = '<span style="color:#aaa;">Write on the canvas to see stroke analysis...</span>';
+    return;
+  }
+
+  strokeDetailEl.innerHTML = strokes.map((s, i) => {
+    let info = '';
+    if (s.kind === 'line') {
+      info = formatSeg(s.data);
+    } else if (s.kind === 'multiline') {
+      info = s.data.segments.map((seg, j) =>
+        `Seg${j + 1}: ${formatSeg(seg)}`
+      ).join('<br>');
+    } else if (s.kind === 'arc') {
+      const d = s.data;
+      info = `Center: (${d.center.x}, ${d.center.y}) R=${d.radius}px<br>`
+           + `Start: ${d.startAngle}&deg; [${angleName(d.startAngle)}] `
+           + `Sweep: ${d.sweepDeg}&deg; ${d.direction}`;
+    } else {
+      info = `Start: (${s.data.start.x}, ${s.data.start.y}) &rarr; End: (${s.data.end.x}, ${s.data.end.y})`;
+    }
+    const dbg = s.debug ? `<br><span style="color:#aaa;font-size:11px;">debug: ${JSON.stringify(s.debug, (k,v) => typeof v==='number' ? +v.toFixed(3) : v)}</span>` : '';
+    return `<div class="entry">
+      <strong>#${i + 1} ${KIND_LABELS[s.kind]}</strong><br>
+      ${info}${dbg}
+    </div>`;
+  }).join('');
+
+  strokeDetailEl.scrollTop = strokeDetailEl.scrollHeight;
+
+  // Update points textarea
+  const ta = document.getElementById('pointsOutput');
+  if (strokes.length === 0) { ta.value = ''; return; }
+  const exported = strokes.map((s, i) => {
+    const step = Math.max(1, Math.floor(s.points.length / 40));
+    const sampled = [];
+    for (let j = 0; j < s.points.length; j += step) {
+      sampled.push([Math.round(s.points[j].x), Math.round(s.points[j].y)]);
+    }
+    const last = s.points[s.points.length - 1];
+    const lp = [Math.round(last.x), Math.round(last.y)];
+    if (sampled[sampled.length-1][0]!==lp[0]||sampled[sampled.length-1][1]!==lp[1]) sampled.push(lp);
+    return {s:i+1,k:s.kind,p:sampled};
+  });
+  ta.value = JSON.stringify(exported);
+
+  updateVerification();
+}
+
+// --- Compute which strokes are wrong ---
+function getWrongStrokes() {
+  const expectedStr = getExpectedStrokes();
+  if (!expectedStr) return {};
+  const wrong = {};
+  for (let i = 0; i < strokes.length; i++) {
+    if (i >= expectedStr.length) {
+      wrong[i] = true; // extra stroke
+    } else {
+      const exp = parseInt(expectedStr[i]);
+      const got = strokeToNumber(strokes[i], exp);
+      if (got !== exp) wrong[i] = true;
+    }
+  }
+  return wrong;
+}
+
+// --- Redraw all strokes + fitted overlays + error markers ---
+function redrawStrokes() {
+  writeCtx.clearRect(0, 0, SIZE, SIZE);
+  const wrongMap = getWrongStrokes();
+
+  for (let si = 0; si < strokes.length; si++) {
+    const s = strokes[si];
+    // Draw original ink
+    writeCtx.lineWidth = getPenWidth();
+    writeCtx.lineCap = 'round';
+    writeCtx.lineJoin = 'round';
+    writeCtx.strokeStyle = '#222';
+
+    if (s.points.length < 2) {
+      const p = s.points[0];
+      writeCtx.beginPath();
+      writeCtx.arc(p.x, p.y, getPenWidth() / 2, 0, Math.PI * 2);
+      writeCtx.fillStyle = '#222';
+      writeCtx.fill();
+    } else {
+      writeCtx.beginPath();
+      writeCtx.moveTo(s.points[0].x, s.points[0].y);
+      for (let i = 1; i < s.points.length; i++) {
+        writeCtx.lineTo(s.points[i].x, s.points[i].y);
+      }
+      writeCtx.stroke();
+    }
+
+    // Draw fitted overlay
+    drawFittedOverlay(s);
+
+    // Draw red warning dots on wrong strokes
+    if (wrongMap[si]) {
+      drawWrongMarkers(s);
+    }
+  }
+}
+
+function drawWrongMarkers(s) {
+  const ctx = writeCtx;
+  ctx.save();
+  ctx.fillStyle = 'rgba(231, 76, 60, 0.6)';
+  // Draw dots along the stroke at intervals
+  const step = Math.max(1, Math.floor(s.points.length / 15));
+  for (let i = 0; i < s.points.length; i += step) {
+    const p = s.points[i];
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+const OVERLAY_COLORS = { line: '#2980b9', multiline: '#16a085', arc: '#e67e22', curve: '#8e44ad' };
+
+function drawFittedOverlay(s) {
+  const ctx = writeCtx;
+  const color = OVERLAY_COLORS[s.kind] || '#999';
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  if (s.kind === 'line') {
+    // Draw fitted straight line from start to end
+    const d = s.data;
+    // Recover end from start + angle + length
+    // clockAngle: 0=up, CW. Convert back: mathRad = (clockDeg - 90) * PI/180
+    const rad = (d.angle - 90) * Math.PI / 180;
+    const ex = d.start.x + Math.cos(rad) * d.length;
+    const ey = d.start.y + Math.sin(rad) * d.length;
+    ctx.beginPath();
+    ctx.moveTo(d.start.x, d.start.y);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+    // Draw start dot
+    drawDot(ctx, d.start.x, d.start.y, color);
+
+  } else if (s.kind === 'multiline') {
+    // Draw fitted polyline through segment start/end points
+    const segs = s.data.segments;
+    ctx.beginPath();
+    ctx.moveTo(segs[0].start.x, segs[0].start.y);
+    for (const seg of segs) {
+      const rad = (seg.angle - 90) * Math.PI / 180;
+      const ex = seg.start.x + Math.cos(rad) * seg.length;
+      const ey = seg.start.y + Math.sin(rad) * seg.length;
+      ctx.lineTo(ex, ey);
+    }
+    ctx.stroke();
+    // Draw corner dots
+    drawDot(ctx, segs[0].start.x, segs[0].start.y, color);
+    for (const seg of segs) {
+      const rad = (seg.angle - 90) * Math.PI / 180;
+      const ex = seg.start.x + Math.cos(rad) * seg.length;
+      const ey = seg.start.y + Math.sin(rad) * seg.length;
+      drawDot(ctx, ex, ey, color);
+    }
+
+  } else if (s.kind === 'arc') {
+    // Draw fitted arc
+    const d = s.data;
+    // Convert clock angles back to math radians (canvas)
+    // clockDeg → mathRad: mathRad = (clockDeg - 90) * PI / 180
+    const startRad = (d.startAngle - 90) * Math.PI / 180;
+    const sweepRad = d.sweepDeg * Math.PI / 180;
+    const endRad = startRad + sweepRad;
+    // ctx.arc uses math angle, counterclockwise = false means CW
+    const anticlockwise = d.direction === 'CCW';
+    ctx.beginPath();
+    ctx.arc(d.center.x, d.center.y, d.radius, startRad, endRad, anticlockwise);
+    ctx.stroke();
+    // Draw center cross
+    drawCross(ctx, d.center.x, d.center.y, color);
+  }
+
+  ctx.restore();
+}
+
+function drawDot(ctx, x, y, color) {
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCross(ctx, x, y, color) {
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x - 5, y); ctx.lineTo(x + 5, y);
+  ctx.moveTo(x, y - 5); ctx.lineTo(x, y + 5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// --- Buttons ---
+document.getElementById('btnClear').addEventListener('click', () => {
+  strokes = [];
+  writeCtx.clearRect(0, 0, SIZE, SIZE);
+  updateUI();
+});
+
+document.getElementById('btnUndo').addEventListener('click', () => {
+  if (strokes.length === 0) return;
+  strokes.pop();
+  redrawStrokes();
+  updateUI();
+});
+
+
+// --- Events ---
+writeCanvas.addEventListener('mousedown', startStroke);
+writeCanvas.addEventListener('mousemove', moveStroke);
+writeCanvas.addEventListener('mouseup', endStroke);
+writeCanvas.addEventListener('mouseleave', endStroke);
+
+writeCanvas.addEventListener('touchstart', startStroke, { passive: false });
+writeCanvas.addEventListener('touchmove', moveStroke, { passive: false });
+writeCanvas.addEventListener('touchend', endStroke, { passive: false });
+writeCanvas.addEventListener('touchcancel', endStroke, { passive: false });
+</script>
+</body>
+</html>
