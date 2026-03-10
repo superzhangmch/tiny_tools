@@ -794,12 +794,38 @@ function setupDrawing(drawCanvas, drawCtx, penSize, onStrokeEnd) {
   drawCanvas.addEventListener('touchmove', e => { e.preventDefault(); drawCanvas.dispatchEvent(new MouseEvent('mousemove', mouseFromTouch(e))); }, { passive: false });
   drawCanvas.addEventListener('touchend', e => { e.preventDefault(); endStroke(); }, { passive: false });
 
+  function redrawAllStrokes() {
+    drawCtx.clearRect(0, 0, canvasW, canvasH);
+    drawCtx.beginPath(); // reset any stale path state
+    for (const stroke of allStrokes) {
+      if (stroke.length < 2) continue;
+      drawCtx.lineWidth = penSize();
+      drawCtx.lineCap = 'round';
+      drawCtx.lineJoin = 'round';
+      drawCtx.strokeStyle = '#222';
+      drawCtx.beginPath();
+      drawCtx.moveTo(stroke[0].x, stroke[0].y);
+      for (let i = 1; i < stroke.length; i++) {
+        drawCtx.lineTo(stroke[i].x, stroke[i].y);
+      }
+      drawCtx.stroke();
+    }
+  }
+
   return {
     getStrokes: () => allStrokes,
     clearStrokes: () => {
       allStrokes = [];
       currentStroke = null;
       drawCtx.clearRect(0, 0, canvasW, canvasH);
+    },
+    undoStroke: () => {
+      console.log('undoStroke called, allStrokes.length:', allStrokes.length);
+      if (allStrokes.length === 0) return;
+      allStrokes.pop();
+      console.log('after pop, allStrokes.length:', allStrokes.length);
+      redrawAllStrokes();
+      if (onStrokeEnd) onStrokeEnd(allStrokes);
     },
   };
 }

@@ -91,6 +91,14 @@ h1 { font-size: 24px; color: #333; margin-bottom: 12px; }
   color: #888;
   margin-left: auto;
 }
+.btn-word-undo {
+  padding: 4px 12px;
+  border: none; border-radius: 4px;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; color: #fff;
+  background: #8e44ad;
+}
+.btn-word-undo:hover { opacity: 0.85; }
 .btn-word-clear {
   padding: 4px 12px;
   border: none; border-radius: 4px;
@@ -254,6 +262,11 @@ function buildCards(entries) {
     resultEl.className = 'word-result';
     header.appendChild(resultEl);
 
+    const undoBtn = document.createElement('button');
+    undoBtn.className = 'btn-word-undo';
+    undoBtn.textContent = 'Undo';
+    header.appendChild(undoBtn);
+
     const clearBtn = document.createElement('button');
     clearBtn.className = 'btn-word-clear';
     clearBtn.textContent = 'Clear';
@@ -314,6 +327,13 @@ function buildCards(entries) {
     // Drawing with auto-recognize on stroke end
     const drawingHandle = setupDrawing(drawCvs, drawCtx, () => parseInt(penSizeEl.value), async (strokes) => {
       if (!session) return;
+      if (strokes.length === 0) {
+        renderFeedback(fbRow, '');
+        statusIcon.textContent = '';
+        canvasWrap.className = 'canvas-wrap';
+        hint.textContent = '';
+        return;
+      }
       const result = await recognizeLetters(strokes, drawCvs, drawCtx, CANVAS_W, CANVAS_H, session, inputName, outputName);
       const comparison = compareWords(result.word, targetChars);
       renderFeedback(fbRow, result.word.toLowerCase());
@@ -326,7 +346,7 @@ function buildCards(entries) {
         statusIcon.textContent = '\u2705';
         canvasWrap.className = 'canvas-wrap correct';
         hint.textContent = 'Correct!';
-      } else if (result.word) {
+      } else {
         statusIcon.textContent = '';
         canvasWrap.className = 'canvas-wrap';
         hint.textContent = '';
@@ -334,6 +354,12 @@ function buildCards(entries) {
     });
 
     cardState.drawing = drawingHandle;
+
+    undoBtn.addEventListener('click', () => {
+      console.log('undo clicked, strokes:', drawingHandle.getStrokes().length);
+      drawingHandle.undoStroke();
+      console.log('after undo, strokes:', drawingHandle.getStrokes().length);
+    });
 
     clearBtn.addEventListener('click', () => {
       drawingHandle.clearStrokes();
