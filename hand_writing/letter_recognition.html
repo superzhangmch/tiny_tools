@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Handwriting Letter Recognition</title>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
+<script src="stroke-core.js"></script>
+<script src="recognition-core.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  background: #f5f0eb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  min-height: 100vh;
+}
+h1 { font-size: 24px; color: #333; margin-bottom: 8px; }
+.subtitle { font-size: 13px; color: #888; margin-bottom: 16px; }
+
+.toolbar {
+  display: flex; gap: 10px; align-items: center; margin-bottom: 12px;
+}
+.toolbar button {
+  padding: 8px 18px;
+  border: none; border-radius: 6px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; color: #fff;
+}
+.toolbar .btn-recognize { background: #2980b9; }
+.toolbar .btn-clear { background: #e74c3c; }
+.toolbar button:hover { opacity: 0.85; }
+.toolbar .pen-size {
+  display: flex; align-items: center; gap: 4px; font-size: 13px; color: #555;
+}
+.toolbar .pen-size input { width: 60px; }
+
+.canvas-area {
+  position: relative;
+  border: 2px solid #888;
+  border-radius: 4px;
+  background: #fff;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.result-area {
+  margin-top: 16px;
+  min-height: 60px;
+  text-align: center;
+}
+.result-word {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: #2c3e50;
+  margin-bottom: 8px;
+}
+.result-detail {
+  font-size: 13px;
+  color: #888;
+}
+
+.segments-preview {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.seg-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.seg-box canvas {
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #000;
+}
+.seg-box .seg-label {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2980b9;
+}
+.seg-box .seg-conf {
+  font-size: 10px;
+  color: #999;
+}
+
+.status {
+  margin-top: 12px;
+  font-size: 13px;
+  color: #888;
+}
+.status.error { color: #e74c3c; }
+.status.ok { color: #27ae60; }
+
+.guide-lines {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+}
+.debug-overlay {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+}
+
+.debug-area {
+  margin-top: 16px;
+  width: 800px;
+}
+.debug-area textarea {
+  width: 100%;
+  height: 200px;
+  font-family: monospace;
+  font-size: 12px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 8px;
+  resize: vertical;
+}
+.debug-area summary {
+  font-size: 13px;
+  color: #888;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+</style>
+</head>
+<body>
+
+<h1>Handwriting Recognition</h1>
+<p class="subtitle">Write a word in print style (separated letters), then click Recognize</p>
+
+<div class="toolbar">
+  <button class="btn-recognize" id="btnRecognize">Recognize</button>
+  <button class="btn-clear" id="btnClear">Clear</button>
+  <div class="pen-size">
+    <label>Pen:</label>
+    <input type="range" id="penSize" min="2" max="12" value="6">
+  </div>
+  <button id="btnMode" style="background:#8e44ad;padding:8px 14px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;color:#fff;">Mode: Single</button>
+</div>
+
+<div class="canvas-area" id="canvasArea">
+  <canvas id="drawCanvas" width="800" height="200"></canvas>
+  <canvas id="guideCanvas" width="800" height="200" class="guide-lines"></canvas>
+  <canvas id="debugCanvas" width="800" height="200" class="debug-overlay"></canvas>
+</div>
+
+<div class="result-area">
+  <div class="result-word" id="resultWord"></div>
+  <div class="result-detail" id="resultDetail"></div>
+  <div class="segments-preview" id="segPreview"></div>
+</div>
+
+<div class="status" id="status">Loading model...</div>
+
+<details class="debug-area" open>
+  <summary>Debug Info <button id="btnCopyDebug" style="font-size:11px;padding:2px 8px;margin-left:8px;cursor:pointer;">Copy</button></summary>
+  <textarea id="debugText" readonly></textarea>
+</details>
+
+<script>
+// ============================================================
+// Config
+// ============================================================
+const CANVAS_W = 800, CANVAS_H = 200;
+const STROKE_COLORS = ['#e74c3c', '#2ecc71', '#3498db', '#f39c12', '#9b59b6', '#1abc9c'];
+
+// ============================================================
+// DOM refs
+// ============================================================
+const drawCanvas = document.getElementById('drawCanvas');
+const drawCtx = drawCanvas.getContext('2d');
+const guideCanvas = document.getElementById('guideCanvas');
+const guideCtx = guideCanvas.getContext('2d');
+const debugCanvas = document.getElementById('debugCanvas');
+const debugCtx = debugCanvas.getContext('2d');
+const debugTextEl = document.getElementById('debugText');
+const penSizeEl = document.getElementById('penSize');
+
+// ============================================================
+// Drawing setup using shared helper
+// ============================================================
+const drawing = setupDrawing(drawCanvas, drawCtx, () => parseInt(penSizeEl.value));
+
+drawGuideLines(guideCtx, CANVAS_W, CANVAS_H, true);
+
+function clearAll() {
+  drawing.clearStrokes();
+  debugCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  debugTextEl.value = '';
+  document.getElementById('resultWord').textContent = '';
+  document.getElementById('resultDetail').textContent = '';
+  document.getElementById('segPreview').innerHTML = '';
+}
+document.getElementById('btnClear').addEventListener('click', clearAll);
+
+// ============================================================
+// Debug drawing helpers
+// ============================================================
+function drawFittedStroke(analysis, rawPts, colorIdx) {
+  const color = STROKE_COLORS[colorIdx % STROKE_COLORS.length];
+  debugCtx.strokeStyle = color;
+  debugCtx.lineWidth = 2;
+  debugCtx.setLineDash([]);
+
+  if (analysis.kind === 'line') {
+    const s = rawPts[0], e = rawPts[rawPts.length - 1];
+    debugCtx.beginPath(); debugCtx.moveTo(s.x, s.y); debugCtx.lineTo(e.x, e.y); debugCtx.stroke();
+  } else if (analysis.kind === 'multiline') {
+    const segs = analysis.data.segments;
+    debugCtx.beginPath();
+    debugCtx.moveTo(segs[0].start.x, segs[0].start.y);
+    for (const seg of segs) {
+      const endX = seg.start.x + seg.length * Math.sin(seg.angle * Math.PI / 180);
+      const endY = seg.start.y - seg.length * Math.cos(seg.angle * Math.PI / 180);
+      debugCtx.lineTo(endX, endY);
+    }
+    debugCtx.stroke();
+  } else if (analysis.kind === 'arc') {
+    const d = analysis.data;
+    const startRad = (d.startAngle - 90) * Math.PI / 180;
+    const sweepRad = d.sweepDeg * Math.PI / 180;
+    debugCtx.beginPath();
+    debugCtx.arc(d.center.x, d.center.y, d.radius, startRad, startRad + sweepRad, d.direction === 'CCW');
+    debugCtx.stroke();
+    debugCtx.fillStyle = color;
+    debugCtx.fillRect(d.center.x - 2, d.center.y - 2, 4, 4);
+  } else {
+    debugCtx.setLineDash([4, 4]);
+    debugCtx.beginPath(); debugCtx.moveTo(rawPts[0].x, rawPts[0].y); debugCtx.lineTo(rawPts[rawPts.length - 1].x, rawPts[rawPts.length - 1].y); debugCtx.stroke();
+    debugCtx.setLineDash([]);
+  }
+
+  if (analysis.kind !== 'line') {
+    debugCtx.fillStyle = color;
+    debugCtx.font = '10px monospace';
+    debugCtx.fillText(analysis.kind, rawPts[0].x, rawPts[0].y - 4);
+  }
+}
+
+function drawLetterBBox(bbox, label, color) {
+  debugCtx.strokeStyle = color;
+  debugCtx.lineWidth = 1;
+  debugCtx.setLineDash([3, 3]);
+  debugCtx.strokeRect(bbox.x1, bbox.y1, bbox.x2 - bbox.x1, bbox.y2 - bbox.y1);
+  debugCtx.setLineDash([]);
+  debugCtx.fillStyle = color;
+  debugCtx.font = 'bold 12px monospace';
+  debugCtx.fillText(label, bbox.x1, bbox.y1 - 4);
+}
+
+function drawTail(tailPts, hasTail, angle) {
+  if (tailPts.length < 2) return;
+  if (hasTail) return;
+  const first = tailPts[0], last = tailPts[tailPts.length - 1];
+  debugCtx.strokeStyle = '#00cc00';
+  debugCtx.lineWidth = 3;
+  debugCtx.setLineDash([]);
+  debugCtx.beginPath(); debugCtx.moveTo(first.x, first.y); debugCtx.lineTo(last.x, last.y); debugCtx.stroke();
+  debugCtx.fillStyle = '#00cc00';
+  debugCtx.font = 'bold 11px monospace';
+  debugCtx.fillText(`${angle}°`, last.x + 4, last.y);
+}
+
+// ============================================================
+// Model loading
+// ============================================================
+let session = null;
+let inputName = 'input', outputName = 'output';
+const statusEl = document.getElementById('status');
+
+async function loadModel() {
+  try {
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
+    session = await ort.InferenceSession.create(MODEL_URL, { executionProviders: ['wasm'] });
+    inputName = session.inputNames[0];
+    outputName = session.outputNames[0];
+    statusEl.textContent = 'Model loaded. Write a word and click Recognize.';
+    statusEl.className = 'status ok';
+  } catch (e) {
+    statusEl.textContent = 'Failed to load model: ' + e.message;
+    statusEl.className = 'status error';
+  }
+}
+
+let seqSession = null;
+let useSequenceMode = false;
+
+async function loadSeqModel() {
+  try {
+    seqSession = await ort.InferenceSession.create(SEQ_MODEL_URL, { executionProviders: ['wasm'] });
+  } catch (e) {
+    console.warn('Sequence model not available:', e.message);
+  }
+}
+
+document.getElementById('btnMode').addEventListener('click', () => {
+  if (!seqSession) { alert('Sequence model not loaded'); return; }
+  useSequenceMode = !useSequenceMode;
+  document.getElementById('btnMode').textContent = useSequenceMode ? 'Mode: Sequence' : 'Mode: Single';
+});
+
+// ============================================================
+// Sequence mode recognition
+// ============================================================
+function getInkBBox() {
+  const imgData = drawCtx.getImageData(0, 0, CANVAS_W, CANVAS_H);
+  const d = imgData.data;
+  let x1 = CANVAS_W, y1 = CANVAS_H, x2 = 0, y2 = 0;
+  for (let y = 0; y < CANVAS_H; y++) {
+    for (let x = 0; x < CANVAS_W; x++) {
+      const idx = (y * CANVAS_W + x) * 4;
+      if (d[idx + 3] > 30) {
+        if (x < x1) x1 = x; if (x > x2) x2 = x;
+        if (y < y1) y1 = y; if (y > y2) y2 = y;
+      }
+    }
+  }
+  if (x2 < x1) return null;
+  return { x1, y1, x2, y2 };
+}
+
+function prepareSequenceInput(inkBBox) {
+  const pad = 10;
+  const x1 = Math.max(0, inkBBox.x1 - pad);
+  const x2 = Math.min(CANVAS_W - 1, inkBBox.x2 + pad);
+  const sw = x2 - x1 + 1;
+
+  const cropCanvas = document.createElement('canvas');
+  cropCanvas.width = sw; cropCanvas.height = CANVAS_H;
+  const cropCtx = cropCanvas.getContext('2d');
+  cropCtx.drawImage(drawCanvas, x1, 0, sw, CANVAS_H, 0, 0, sw, CANVAS_H);
+
+  const scale = SEQ_IMG_HEIGHT / CANVAS_H;
+  let targetW = Math.round(sw * scale);
+  targetW = Math.ceil(targetW / 4) * 4;
+  targetW = Math.max(targetW, 16);
+
+  const outCanvas = document.createElement('canvas');
+  outCanvas.width = targetW; outCanvas.height = SEQ_IMG_HEIGHT;
+  const outCtx = outCanvas.getContext('2d');
+  outCtx.drawImage(cropCanvas, 0, 0, sw, CANVAS_H, 0, 0, targetW, SEQ_IMG_HEIGHT);
+
+  const outData = outCtx.getImageData(0, 0, targetW, SEQ_IMG_HEIGHT);
+  const pixels = new Float32Array(SEQ_IMG_HEIGHT * targetW);
+  for (let i = 0; i < SEQ_IMG_HEIGHT * targetW; i++) {
+    const idx = i * 4;
+    const a = outData.data[idx + 3];
+    if (a < 30) { pixels[i] = 0; }
+    else {
+      const lum = (outData.data[idx] + outData.data[idx + 1] + outData.data[idx + 2]) / 3;
+      pixels[i] = (255 - lum) / 255.0;
+    }
+  }
+  return { pixels, width: targetW, canvas: outCanvas };
+}
+
+async function recognizeSequence() {
+  const inkBBox = getInkBBox();
+  if (!inkBBox) {
+    document.getElementById('resultWord').textContent = '(nothing)';
+    return;
+  }
+  const { pixels, width, canvas: previewCanvas } = prepareSequenceInput(inkBBox);
+  const tensor = new ort.Tensor('float32', pixels, [1, 1, SEQ_IMG_HEIGHT, width]);
+  const feeds = {};
+  feeds[seqSession.inputNames[0]] = tensor;
+  const results = await seqSession.run(feeds);
+  const output = results[seqSession.outputNames[0]];
+  const T = output.dims[0];
+  const numClasses = 52;
+  const decoded = ctcGreedyDecode(Array.from(output.data), T, numClasses);
+  const word = decoded.map(i => SEQ_LABEL_MAP[i]).join('');
+
+  let debugLog = '=== Sequence Mode ===\n';
+  debugLog += `Input: ${width}x${SEQ_IMG_HEIGHT}, T=${T}\nDecoded: ${word}\n`;
+
+  document.getElementById('resultWord').textContent = word;
+  document.getElementById('resultDetail').textContent = `(sequence model, ${decoded.length} chars)`;
+  const previewEl = document.getElementById('segPreview');
+  previewEl.innerHTML = '';
+  previewCanvas.style.height = '64px';
+  previewCanvas.style.border = '1px solid #888';
+  previewCanvas.style.background = '#000';
+  previewEl.appendChild(previewCanvas);
+  debugTextEl.value = debugLog;
+  debugCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+}
+
+// ============================================================
+// Single mode recognition (uses shared recognizeLetters)
+// ============================================================
+async function recognize() {
+  if (!session) { statusEl.textContent = 'Model not loaded.'; statusEl.className = 'status error'; return; }
+
+  const allStrokes = drawing.getStrokes();
+  const result = await recognizeLetters(allStrokes, drawCanvas, drawCtx, CANVAS_W, CANVAS_H, session, inputName, outputName);
+
+  if (!result.word) {
+    document.getElementById('resultWord').textContent = '(nothing)';
+    document.getElementById('resultDetail').textContent = '';
+    document.getElementById('segPreview').innerHTML = '';
+    debugTextEl.value = '';
+    return;
+  }
+
+  debugCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+  // Draw debug overlays
+  for (const lr of result.letters) {
+    drawLetterBBox(lr.bbox, lr.ch, '#ff6600');
+  }
+
+  const previewEl = document.getElementById('segPreview');
+  previewEl.innerHTML = '';
+  const details = [];
+
+  for (const lr of result.letters) {
+    details.push(`${lr.ch}(${(lr.prob * 100).toFixed(0)}%)`);
+    const box = document.createElement('div');
+    box.className = 'seg-box';
+    lr.canvas.style.width = '42px';
+    lr.canvas.style.height = '42px';
+    box.appendChild(lr.canvas);
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'seg-label';
+    labelDiv.textContent = lr.ch;
+    box.appendChild(labelDiv);
+    const confDiv = document.createElement('div');
+    confDiv.className = 'seg-conf';
+    confDiv.textContent = (lr.prob * 100).toFixed(0) + '%';
+    box.appendChild(confDiv);
+    previewEl.appendChild(box);
+  }
+
+  document.getElementById('resultWord').textContent = result.word;
+  document.getElementById('resultDetail').textContent = details.join('  ');
+  debugTextEl.value = result.debugLog;
+}
+
+// ============================================================
+// Event bindings
+// ============================================================
+document.getElementById('btnRecognize').addEventListener('click', () => {
+  if (useSequenceMode) recognizeSequence();
+  else recognize();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (useSequenceMode) recognizeSequence();
+    else recognize();
+  }
+});
+
+// ============================================================
+// Init
+// ============================================================
+loadModel();
+loadSeqModel();
+document.getElementById('btnCopyDebug').addEventListener('click', () => {
+  navigator.clipboard.writeText(debugTextEl.value);
+});
+</script>
+</body>
+</html>
