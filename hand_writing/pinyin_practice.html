@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Handwriting Practice</title>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ort.min.js"></script>
+<script src="stroke-core.js"></script>
+<script src="recognition-core.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, "Segoe UI", sans-serif;
+  background: #f5f0eb;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  min-height: 100vh;
+}
+h1 { font-size: 24px; color: #333; margin-bottom: 12px; }
+
+.input-area {
+  display: flex; flex-direction: column; gap: 8px; align-items: center; margin-bottom: 16px;
+  width: 100%; max-width: 600px;
+}
+.input-area textarea {
+  width: 100%;
+  height: 100px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 2px solid #bbb;
+  border-radius: 6px;
+  font-family: monospace;
+  resize: vertical;
+}
+.input-area .btn-row {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
+}
+.input-area button {
+  padding: 8px 18px;
+  border: none; border-radius: 6px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; color: #fff;
+  background: #2980b9;
+}
+.input-area button:hover { opacity: 0.85; }
+.input-area .btn-clear-all { background: #e74c3c; }
+
+.pen-size {
+  display: flex; align-items: center; gap: 4px; font-size: 13px; color: #555;
+}
+.pen-size input { width: 60px; }
+
+.status {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #888;
+}
+.status.error { color: #e74c3c; }
+.status.ok { color: #27ae60; }
+
+.words-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: center;
+  width: 100%;
+  max-width: 900px;
+}
+
+.word-card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 16px;
+  width: 100%;
+}
+
+.word-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.word-status {
+  font-size: 20px;
+}
+.word-result {
+  font-size: 14px;
+  color: #888;
+  margin-left: auto;
+}
+.btn-word-clear {
+  padding: 4px 12px;
+  border: none; border-radius: 4px;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; color: #fff;
+  background: #e74c3c;
+}
+.btn-word-clear:hover { opacity: 0.85; }
+
+.hanzi-label {
+  font-size: 36px;
+  font-weight: 700;
+  color: #2c3e50;
+  margin-bottom: 4px;
+}
+
+.canvas-wrap {
+  position: relative;
+  border: 2px solid #ccc;
+  border-radius: 4px;
+  cursor: crosshair;
+  touch-action: none;
+  background: #fff;
+}
+.canvas-wrap.correct { border-color: #27ae60; }
+.canvas-wrap.wrong { border-color: #e74c3c; }
+.canvas-wrap canvas.guide {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+}
+
+.letter-feedback {
+  margin-top: 8px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #2c3e50;
+  min-height: 30px;
+}
+
+.hint {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 4px;
+}
+</style>
+</head>
+<body>
+
+<h1>Handwriting Practice</h1>
+
+<div class="input-area">
+  <textarea id="wordsInput" placeholder='{"半": "bān", "好": "hǎo", "大": "dà"}'>{
+  "半": "bān",
+  "好": "hǎo",
+  "大": "dà"
+}</textarea>
+  <div class="btn-row">
+    <button id="btnStart">Start</button>
+    <button id="btnClearAll" class="btn-clear-all">Clear All</button>
+    <div class="pen-size">
+      <label>Pen:</label>
+      <input type="range" id="penSize" min="2" max="12" value="6">
+    </div>
+  </div>
+</div>
+
+<div class="status" id="status">Loading model...</div>
+
+<div class="words-container" id="wordsContainer"></div>
+
+<script>
+const CANVAS_W = 500, CANVAS_H = 150;
+const penSizeEl = document.getElementById('penSize');
+const statusEl = document.getElementById('status');
+const containerEl = document.getElementById('wordsContainer');
+
+// ============================================================
+// Model loading (single letter model only)
+// ============================================================
+let session = null;
+let inputName = 'input', outputName = 'output';
+
+async function loadModel() {
+  try {
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
+    session = await ort.InferenceSession.create(MODEL_URL, { executionProviders: ['wasm'] });
+    inputName = session.inputNames[0];
+    outputName = session.outputNames[0];
+    statusEl.textContent = 'Model loaded. Enter words and click Start.';
+    statusEl.className = 'status ok';
+  } catch (e) {
+    statusEl.textContent = 'Failed to load model: ' + e.message;
+    statusEl.className = 'status error';
+  }
+}
+
+// ============================================================
+// Parse word into characters (decomposing toned vowels)
+// ============================================================
+function parseWordChars(word) {
+  const chars = [];
+  for (const ch of word) {
+    if (TONE_DECOMPOSE[ch]) {
+      chars.push({ display: ch, base: TONE_DECOMPOSE[ch].base, tone: TONE_DECOMPOSE[ch].tone });
+    } else if (ch === 'ü') {
+      chars.push({ display: 'ü', base: 'ü', tone: 0 });
+    } else {
+      chars.push({ display: ch, base: ch.toLowerCase(), tone: 0 });
+    }
+  }
+  return chars;
+}
+
+// Compare recognized word against target
+function compareWords(recognized, targetChars) {
+  const results = [];
+  const recChars = [...recognized];
+
+  for (let i = 0; i < targetChars.length; i++) {
+    const target = targetChars[i];
+    if (i < recChars.length) {
+      const got = recChars[i];
+      const match = got === target.display ||
+                    got.toLowerCase() === target.display.toLowerCase();
+      results.push({ expected: target.display, got, match });
+    } else {
+      results.push({ expected: target.display, got: null, match: false });
+    }
+  }
+  for (let i = targetChars.length; i < recChars.length; i++) {
+    results.push({ expected: null, got: recChars[i], match: false });
+  }
+  return results;
+}
+
+// ============================================================
+// Build word cards
+// ============================================================
+let wordCards = [];
+
+function buildCards(entries) {
+  containerEl.innerHTML = '';
+  wordCards = [];
+
+  for (const { hanzi, pinyin } of entries) {
+    const targetChars = parseWordChars(pinyin);
+    const card = document.createElement('div');
+    card.className = 'word-card';
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'word-header';
+
+    const statusIcon = document.createElement('span');
+    statusIcon.className = 'word-status';
+    header.appendChild(statusIcon);
+
+    const resultEl = document.createElement('span');
+    resultEl.className = 'word-result';
+    header.appendChild(resultEl);
+
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'btn-word-clear';
+    clearBtn.textContent = 'Clear';
+    header.appendChild(clearBtn);
+
+    card.appendChild(header);
+
+    // Hanzi label above canvas
+    const hanziLabel = document.createElement('div');
+    hanziLabel.className = 'hanzi-label';
+    hanziLabel.textContent = hanzi;
+    card.appendChild(hanziLabel);
+
+    // Canvas area
+    const canvasWrap = document.createElement('div');
+    canvasWrap.className = 'canvas-wrap';
+    canvasWrap.style.width = CANVAS_W + 'px';
+    canvasWrap.style.height = CANVAS_H + 'px';
+
+    const drawCvs = document.createElement('canvas');
+    drawCvs.width = CANVAS_W;
+    drawCvs.height = CANVAS_H;
+    canvasWrap.appendChild(drawCvs);
+
+    const guideCvs = document.createElement('canvas');
+    guideCvs.width = CANVAS_W;
+    guideCvs.height = CANVAS_H;
+    guideCvs.className = 'guide';
+    canvasWrap.appendChild(guideCvs);
+
+    card.appendChild(canvasWrap);
+
+    // Letter feedback row
+    const fbRow = document.createElement('div');
+    fbRow.className = 'letter-feedback';
+    card.appendChild(fbRow);
+
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    card.appendChild(hint);
+
+    containerEl.appendChild(card);
+
+    // Setup drawing & guides
+    const drawCtx = drawCvs.getContext('2d');
+    const guideCtx = guideCvs.getContext('2d');
+    drawGuideLines(guideCtx, CANVAS_W, CANVAS_H, false);
+
+    // Init feedback
+    renderFeedback(fbRow, '');
+
+    const cardState = {
+      hanzi, pinyin, targetChars, canvasWrap, drawCvs, drawCtx,
+      guideCtx, guideCvs,
+      fbRow, statusIcon, resultEl, hint, drawing: null,
+    };
+
+    // Drawing with auto-recognize on stroke end
+    const drawingHandle = setupDrawing(drawCvs, drawCtx, () => parseInt(penSizeEl.value), async (strokes) => {
+      if (!session) return;
+      const result = await recognizeLetters(strokes, drawCvs, drawCtx, CANVAS_W, CANVAS_H, session, inputName, outputName);
+      const comparison = compareWords(result.word, targetChars);
+      renderFeedback(fbRow, result.word.toLowerCase());
+
+      const allCorrect = comparison.length === targetChars.length &&
+                         comparison.every(c => c.match);
+
+      resultEl.textContent = '';
+      if (allCorrect) {
+        statusIcon.textContent = '\u2705';
+        canvasWrap.className = 'canvas-wrap correct';
+        hint.textContent = 'Correct!';
+      } else if (result.word) {
+        statusIcon.textContent = '';
+        canvasWrap.className = 'canvas-wrap';
+        hint.textContent = '';
+      }
+    });
+
+    cardState.drawing = drawingHandle;
+
+    clearBtn.addEventListener('click', () => {
+      drawingHandle.clearStrokes();
+      drawGuideLines(guideCtx, CANVAS_W, CANVAS_H, false);
+      canvasWrap.className = 'canvas-wrap';
+      statusIcon.textContent = '';
+      resultEl.textContent = '';
+      hint.textContent = '';
+      renderFeedback(fbRow, '');
+    });
+
+    wordCards.push(cardState);
+  }
+}
+
+function renderFeedback(container, recognized) {
+  container.textContent = recognized;
+}
+
+
+// ============================================================
+// Start / Clear All
+// ============================================================
+document.getElementById('btnStart').addEventListener('click', () => {
+  const raw = document.getElementById('wordsInput').value.trim();
+  let obj;
+  try {
+    obj = JSON.parse(raw);
+    if (typeof obj !== 'object' || Array.isArray(obj) || obj === null) throw new Error('not object');
+  } catch (e) {
+    alert('Invalid input. Use JSON object format: {"半": "bān", "好": "hǎo"}');
+    return;
+  }
+  let entries = Object.entries(obj).map(([hanzi, pinyin]) => ({ hanzi, pinyin: String(pinyin) }));
+  entries = entries.filter(e => e.pinyin.length > 0);
+  if (entries.length > 10) {
+    alert('At most 10 words per page. You entered ' + entries.length + '.');
+    entries = entries.slice(0, 10);
+  }
+  if (entries.length === 0) {
+    alert('No valid entries found.');
+    return;
+  }
+  buildCards(entries);
+});
+
+document.getElementById('btnClearAll').addEventListener('click', () => {
+  for (const card of wordCards) {
+    card.drawing.clearStrokes();
+    drawGuideLines(card.guideCtx, CANVAS_W, CANVAS_H, false);
+    card.canvasWrap.className = 'canvas-wrap';
+    card.statusIcon.textContent = '';
+    card.resultEl.textContent = '';
+    card.hint.textContent = '';
+    renderFeedback(card.fbRow, '');
+  }
+});
+
+// ============================================================
+// Init
+// ============================================================
+loadModel();
+</script>
+</body>
+</html>

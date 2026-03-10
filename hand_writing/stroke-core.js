@@ -258,8 +258,28 @@ function analyzeStroke(rawPts) {
   const first = rawPts[0], last = rawPts[rawPts.length - 1];
   const totalLen = dist(first, last);
 
-  // Very short stroke
+  // Very short stroke — but check for closed loop (circle) first
   if (totalLen < 10) {
+    // If there are enough points, try arc fit (closed circle has start≈end)
+    if (rawPts.length > 10) {
+      const circle = fitCircle(rawPts);
+      if (circle && circle.error / circle.r < ARC_ERR_THRESH) {
+        const sweep = arcSweep(rawPts, circle.cx, circle.cy);
+        if (Math.abs(sweep.sweepDeg) >= 120) {
+          return {
+            kind: 'arc',
+            data: {
+              center: { x: Math.round(circle.cx), y: Math.round(circle.cy) },
+              radius: Math.round(circle.r),
+              startAngle: sweep.startClock,
+              sweepDeg: sweep.sweepDeg,
+              direction: sweep.clockwise ? 'CW' : 'CCW',
+            },
+            debug: { circleErr: circle.error, circleR: circle.r, ratio: circle.error / circle.r },
+          };
+        }
+      }
+    }
     return { kind: 'line', data: makeLineSeg(first, last) };
   }
 
