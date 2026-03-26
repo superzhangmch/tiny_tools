@@ -73,6 +73,7 @@
     行号: <input type="number" id="lineNumber" placeholder="留空加载全文" min="1" style="width: 100px;">
     <button onclick="loadFile()">加载文件</button>]
     Highlight: <input type="text" id="highlightInput" placeholder="regexp pattern" style="width: 200px;" oninput="applyHighlight()">
+    Filter Keys: <input type="text" id="keyFilterInput" placeholder="exact key names, split by space/comma/|" style="width: 320px;">
     <div id="output"></div>
 
     <div class="scroll-buttons">
@@ -338,7 +339,12 @@ function replaceKeywords(input) {
 
 	    try {
 	        const jsonObj = JSON.parse(singleLineInput);
-	        const formattedHTML = formatValue(jsonObj, "ROOT");
+	        const filteredJsonObj = applyKeyFilter(jsonObj);
+	        if (filteredJsonObj === null) {
+	            outputDiv.innerHTML = '<div style="color:#666;">No keys matched current filter.</div>';
+	            return;
+	        }
+	        const formattedHTML = formatValue(filteredJsonObj, "ROOT");
 	        outputDiv.appendChild(formattedHTML);
 	    } catch (e) {
 
@@ -369,10 +375,15 @@ function replaceKeywords(input) {
 				}
 			}
 		}
-		var json_fixed = JSON.stringify(jsonObj);
-		var formattedHTML = formatValue(jsonObj, "ROOT");
+		var filteredJsonObj = applyKeyFilter(jsonObj);
+		if (filteredJsonObj === null) {
+		    outputDiv.innerHTML = '<div style="color:#666;">No keys matched current filter.</div>';
+		    return;
+		}
+		var json_fixed = JSON.stringify(filteredJsonObj);
+		var formattedHTML = formatValue(filteredJsonObj, "ROOT");
 	        outputDiv.appendChild(formattedHTML);
-		if ((typeof jsonObj) === 'string') {
+		if ((typeof filteredJsonObj) === 'string') {
 			newHtml +=  "不是 json 是个字符串吧？<pre style='background-color:lightgray'>" + json_fixed.replace("<", "&lt") +"</pre><br>";
 			outputDiv.insertAdjacentHTML('afterbegin', newHtml);
 		} else {
@@ -380,6 +391,52 @@ function replaceKeywords(input) {
 			outputDiv.insertAdjacentHTML('afterbegin', newHtml);
 		}
 	    }
+	}
+
+	function getKeyFilterSet() {
+	    const input = document.getElementById('keyFilterInput').value.trim();
+	    if (!input) return null;
+	    const keys = input.split(/[\s,|;]+/).map(k => k.trim()).filter(Boolean);
+	    if (keys.length === 0) return null;
+	    return new Set(keys);
+	}
+
+	function applyKeyFilter(value) {
+	    const keyFilterSet = getKeyFilterSet();
+	    if (!keyFilterSet) return value;
+	    const filtered = filterValueByKeys(value, keyFilterSet);
+	    return filtered.keep ? filtered.value : null;
+	}
+
+	function filterValueByKeys(value, keyFilterSet) {
+	    if (Array.isArray(value)) {
+	        const nextArr = [];
+	        for (const item of value) {
+	            const filteredItem = filterValueByKeys(item, keyFilterSet);
+	            if (filteredItem.keep) nextArr.push(filteredItem.value);
+	        }
+	        return { keep: nextArr.length > 0, value: nextArr };
+	    }
+
+	    if (typeof value === 'object' && value !== null) {
+	        const nextObj = {};
+	        let keepAny = false;
+	        for (const [key, childVal] of Object.entries(value)) {
+	            if (keyFilterSet.has(key)) {
+	                nextObj[key] = childVal;
+	                keepAny = true;
+	                continue;
+	            }
+	            const filteredChild = filterValueByKeys(childVal, keyFilterSet);
+	            if (filteredChild.keep) {
+	                nextObj[key] = filteredChild.value;
+	                keepAny = true;
+	            }
+	        }
+	        return { keep: keepAny, value: nextObj };
+	    }
+
+	    return { keep: false, value: value };
 	}
 
 	function formatValue(value, path) {
