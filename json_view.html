@@ -74,6 +74,7 @@
     <button onclick="loadFile()">加载文件</button>]
     Highlight: <input type="text" id="highlightInput" placeholder="regexp pattern" style="width: 200px;" oninput="applyHighlight()">
     Filter Keys: <input type="text" id="keyFilterInput" placeholder="exact key names, split by space/comma/|" style="width: 320px;">
+    Exclude Keys: <input type="text" id="keyExcludeInput" placeholder="exact key names, split by space/comma/|" style="width: 320px;">
     <div id="output"></div>
 
     <div class="scroll-buttons">
@@ -401,11 +402,28 @@ function replaceKeywords(input) {
 	    return new Set(keys);
 	}
 
+	function getKeyExcludeSet() {
+	    const input = document.getElementById('keyExcludeInput').value.trim();
+	    if (!input) return null;
+	    const keys = input.split(/[\s,|;]+/).map(k => k.trim()).filter(Boolean);
+	    if (keys.length === 0) return null;
+	    return new Set(keys);
+	}
+
 	function applyKeyFilter(value) {
 	    const keyFilterSet = getKeyFilterSet();
-	    if (!keyFilterSet) return value;
-	    const filtered = filterValueByKeys(value, keyFilterSet);
-	    return filtered.keep ? filtered.value : null;
+	    const keyExcludeSet = getKeyExcludeSet();
+	    let nextValue = value;
+
+	    if (keyFilterSet) {
+	        const filtered = filterValueByKeys(nextValue, keyFilterSet);
+	        nextValue = filtered.keep ? filtered.value : null;
+	    }
+	    if (nextValue === null) return null;
+	    if (keyExcludeSet) {
+	        nextValue = excludeValueByKeys(nextValue, keyExcludeSet);
+	    }
+	    return nextValue;
 	}
 
 	function filterValueByKeys(value, keyFilterSet) {
@@ -437,6 +455,23 @@ function replaceKeywords(input) {
 	    }
 
 	    return { keep: false, value: value };
+	}
+
+	function excludeValueByKeys(value, keyExcludeSet) {
+	    if (Array.isArray(value)) {
+	        return value.map(item => excludeValueByKeys(item, keyExcludeSet));
+	    }
+
+	    if (typeof value === 'object' && value !== null) {
+	        const nextObj = {};
+	        for (const [key, childVal] of Object.entries(value)) {
+	            if (keyExcludeSet.has(key)) continue;
+	            nextObj[key] = excludeValueByKeys(childVal, keyExcludeSet);
+	        }
+	        return nextObj;
+	    }
+
+	    return value;
 	}
 
 	function formatValue(value, path) {
