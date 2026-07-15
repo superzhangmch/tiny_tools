@@ -1,0 +1,423 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>短语动词热力图</title>
+<style>
+  :root{
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e;
+    --muted:#8f8d87; --grid:#e3e2db; --border:rgba(11,11,11,.10);
+    --empty:#f2f3f0; --emptyt:#b7b6ae; --accent:#2f7d4f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:22px;background:var(--page);color:var(--ink);
+    font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;line-height:1.4}
+  h1{font-size:20px;margin:0 0 4px}
+  h2{font-size:15px;margin:22px 0 8px;color:var(--accent)}
+  .sub{color:var(--ink2);font-size:12.5px;margin-bottom:12px;max-width:900px}
+  .legend{display:flex;align-items:center;gap:10px;margin:8px 0 14px;font-size:12px;color:var(--ink2);flex-wrap:wrap}
+  .ramp{display:flex;height:16px;border:1px solid var(--border);border-radius:4px;overflow:hidden}
+  .ramp span{width:20px}
+  .controls{margin-bottom:10px}
+  .controls input{background:#fff;border:1px solid var(--grid);color:var(--ink);
+    padding:7px 11px;border-radius:8px;font-size:14px;width:240px;max-width:100%}
+  .wrap{overflow:auto;max-height:82vh;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+  table{border-collapse:separate;border-spacing:2px;font-size:11px}
+  th,td{padding:5px 6px;vertical-align:top;text-align:left;border-radius:5px}
+  thead th{position:sticky;top:0;z-index:3;background:var(--surface);text-align:center;
+    font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums;min-width:78px}
+  thead th .cs{display:block;font-size:9.5px;color:var(--muted);font-weight:500;margin-top:1px}
+  tbody th{position:sticky;left:0;z-index:2;background:var(--surface);font-weight:700;
+    font-size:13px;text-align:center;min-width:52px;border:1px solid var(--border)}
+  tbody th .rs{display:block;font-size:9.5px;color:var(--muted);font-weight:500}
+  thead th:first-child{position:sticky;left:0;z-index:4;background:var(--surface);border:1px solid var(--border);min-width:52px}
+  td.cell{min-width:78px}
+  .ph{font-weight:700;font-size:11px;display:block}
+  .wn{float:right;font-weight:700;font-variant-numeric:tabular-nums;opacity:.85;font-size:10.5px;margin-left:4px}
+  .mn{display:block;font-size:10px;line-height:1.28;margin-top:1px;opacity:.92}
+  td.empty{background:var(--empty)}
+  .avgcell{background:var(--surface);text-align:center;font-variant-numeric:tabular-nums;border:1px solid var(--border);min-width:46px}
+  .avgcell .num{font-weight:700;font-size:12px}
+  .bar{height:4px;border-radius:3px;background:var(--accent);margin-top:3px}
+  tbody tr:hover th{background:#e9f4ec}
+  code{background:#eef3ea;padding:1px 6px;border-radius:5px;color:#2f6b45;font-size:12px}
+  .tips{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px}
+  .tips li{margin:5px 0;font-size:12.5px}
+  .hide{display:none!important}
+</style>
+</head>
+<body>
+
+<h1>短语动词热力图 <span style="font-size:12px;color:var(--muted);font-weight:400">动词 × 小品词 · 10 分制 · 粉→绿 越绿越常用</span></h1>
+<div class="sub">
+  数据是<b>一行一个短语</b>的扁平结构(见页面底部脚本 <code>DATA</code>);行(动词)、列(小品词)与排序<b>全部由脚本从短语自动推导</b>,增删只需改 <code>DATA</code> 一行。
+  每格显示 <b>短语 + 重要度(1–10)+ 意思</b>;空格=该组合无常用短语。行/列按<b>重要度合计</b>降序。
+</div>
+
+<div class="legend">
+  <span>重要度 1 → 10:</span>
+  <span class="ramp" id="ramp"></span>
+  <span>(粉=低频 · 浅=中 · 绿=极高频)</span>
+</div>
+
+<div class="controls">
+  <input id="filter" type="text" placeholder="筛选动词… 如 make / get / look">
+</div>
+
+<div class="wrap"><table id="matrix"></table></div>
+
+<h2>用法提示</h2>
+<div class="tips">
+<ul>
+  <li><b>及物/不及物</b>:<code>take off your coat</code>/<code>take your coat off</code> 都行,代词必须夹中间——<code>take it off</code>(✗ take off it)。而 <code>look after him</code> 里 after 是介词,宾语只能放后面。</li>
+  <li><b>三词短语价值最高</b>:<code>come up with</code>、<code>put up with</code>、<code>look up to</code>、<code>look forward to</code>、<code>get along with</code>、<code>run out of</code>、<code>get away with</code>、<code>keep up with</code>。</li>
+  <li><b>数据可扩展</b>:想加词就在 <code>DATA</code> 里加一行,如 <code>{v:"stand",c:"out",m:"突出;显眼",w:7}</code>,刷新即出现在矩阵里(自动排序/上色)。</li>
+</ul>
+</div>
+
+<script>
+// ══ 数据:一行一个短语 {v:动词, c:小品词, m:意思, w:重要度1-10} ══
+const DATA = [
+  // take
+  {v:"take",c:"off",m:"起飞;脱下;休假;爆火",w:9},
+  {v:"take",c:"out",m:"取出;外带;带…出去",w:7},
+  {v:"take",c:"over",m:"接管",w:8},
+  {v:"take",c:"in",m:"理解;收留;欺骗;改小",w:6},
+  {v:"take",c:"on",m:"承担;雇佣;呈现",w:6},
+  {v:"take",c:"up",m:"占用;开始(爱好)",w:5},
+  {v:"take",c:"down",m:"记下;拆下;放倒",w:5},
+  {v:"take",c:"back",m:"收回;拿回;使回想",w:6},
+  {v:"take",c:"after",m:"长得像;性情像",w:5},
+  {v:"take",c:"apart",m:"拆开;彻底击败",w:4},
+  {v:"take",c:"to",m:"开始喜欢;养成",w:4},
+  {v:"take",c:"into",m:"考虑(take into account)",w:5},
+  {v:"take",c:"along",m:"带上",w:3},
+  // get
+  {v:"get",c:"up",m:"起床;站起",w:9},
+  {v:"get",c:"on",m:"上车;相处;进展;上年纪",w:8},
+  {v:"get",c:"off",m:"下车;下班;免罚",w:8},
+  {v:"get",c:"out",m:"出去;泄露",w:7},
+  {v:"get",c:"over",m:"克服;从…恢复",w:7},
+  {v:"get",c:"back",m:"回来;取回;报复(get back at)",w:7},
+  {v:"get",c:"away",m:"逃脱;度假;逃罚(get away with)",w:7},
+  {v:"get",c:"into",m:"进入;迷上;卷入",w:7},
+  {v:"get",c:"along",m:"相处;进展",w:7},
+  {v:"get",c:"in",m:"进入;到达;当选",w:6},
+  {v:"get",c:"through",m:"通过;接通;度过难关",w:6},
+  {v:"get",c:"down",m:"使沮丧;着手(get down to);蹲下",w:5},
+  {v:"get",c:"around",m:"走动;绕开;抽空(get around to)",w:5},
+  {v:"get",c:"by",m:"勉强过活",w:5},
+  {v:"get",c:"to",m:"到达;有机会;开始",w:5},
+  // put
+  {v:"put",c:"on",m:"穿上;增重;假装;上演",w:8},
+  {v:"put",c:"off",m:"推迟;使反感",w:7},
+  {v:"put",c:"down",m:"放下;记下;镇压;贬低",w:6},
+  {v:"put",c:"out",m:"熄灭;伸出;发布;使不便",w:6},
+  {v:"put",c:"up",m:"搭建;张贴;留宿;忍受(put up with)",w:6},
+  {v:"put",c:"in",m:"投入;安装;提交",w:5},
+  {v:"put",c:"back",m:"放回;推迟",w:5},
+  {v:"put",c:"away",m:"收好;关押",w:5},
+  {v:"put",c:"into",m:"投入(put into);放进",w:5},
+  {v:"put",c:"forward",m:"提出;把表拨快;提前",w:5},
+  {v:"put",c:"through",m:"接通电话;使经历",w:4},
+  {v:"put",c:"across",m:"讲清楚",w:3},
+  // come
+  {v:"come",c:"on",m:"加油;开始运行",w:8},
+  {v:"come",c:"out",m:"出来;出版;出柜;结果是",w:8},
+  {v:"come",c:"back",m:"回来;复出;回想",w:8},
+  {v:"come",c:"up",m:"出现;被提及;想出(come up with)",w:7},
+  {v:"come",c:"in",m:"进来;起作用",w:7},
+  {v:"come",c:"along",m:"一起来;进展;出现",w:6},
+  {v:"come",c:"across",m:"偶然发现;给人印象",w:6},
+  {v:"come",c:"down",m:"下降;生病(come down with)",w:5},
+  {v:"come",c:"off",m:"脱落;成功",w:5},
+  {v:"come",c:"over",m:"过来;(情绪)袭来",w:5},
+  {v:"come",c:"through",m:"挺过来;兑现",w:5},
+  {v:"come",c:"into",m:"继承;生效",w:5},
+  {v:"come",c:"around",m:"顺便来;回心转意;苏醒",w:5},
+  {v:"come",c:"forward",m:"站出来;主动提供",w:5},
+  {v:"come",c:"with",m:"附带",w:4},
+  {v:"come",c:"about",m:"发生;(船)转向",w:4},
+  {v:"come",c:"to",m:"苏醒;总计;归结为",w:4},
+  {v:"come",c:"away",m:"离开;带走(某种感受)",w:4},
+  // go
+  {v:"go",c:"on",m:"继续;发生",w:9},
+  {v:"go",c:"up",m:"上升;上涨",w:8},
+  {v:"go",c:"down",m:"下降;下沉;被记录",w:8},
+  {v:"go",c:"out",m:"外出社交;熄灭;约会",w:8},
+  {v:"go",c:"back",m:"回去;追溯",w:8},
+  {v:"go",c:"through",m:"经历;仔细检查;用完",w:8},
+  {v:"go",c:"off",m:"(闹钟)响;爆炸;变质;离开",w:7},
+  {v:"go",c:"over",m:"复习;检查;越过",w:7},
+  {v:"go",c:"away",m:"走开;消失",w:7},
+  {v:"go",c:"with",m:"搭配;选择",w:6},
+  {v:"go",c:"for",m:"选择;想要;攻击;适用于",w:6},
+  {v:"go",c:"into",m:"进入;调查;详述",w:6},
+  {v:"go",c:"around",m:"到处走;流传;够分",w:5},
+  {v:"go",c:"after",m:"追求;追赶",w:5},
+  {v:"go",c:"by",m:"(时间)流逝;依据;路过",w:5},
+  {v:"go",c:"in",m:"进去",w:5},
+  {v:"go",c:"along",m:"沿…走;赞同(go along with)",w:4},
+  {v:"go",c:"about",m:"着手;四处走",w:4},
+  // look
+  {v:"look",c:"for",m:"寻找",w:9},
+  {v:"look",c:"at",m:"看;审视",w:8},
+  {v:"look",c:"up",m:"查找;好转;敬仰(look up to)",w:8},
+  {v:"look",c:"after",m:"照顾",w:8},
+  {v:"look",c:"forward",m:"期待(look forward to)",w:8},
+  {v:"look",c:"out",m:"小心",w:7},
+  {v:"look",c:"into",m:"调查;研究",w:7},
+  {v:"look",c:"back",m:"回顾",w:6},
+  {v:"look",c:"over",m:"检查;浏览",w:5},
+  {v:"look",c:"through",m:"浏览;透过…看",w:5},
+  {v:"look",c:"around",m:"环顾;四处看",w:5},
+  {v:"look",c:"down",m:"俯视;看不起(look down on)",w:4},
+  {v:"look",c:"on",m:"旁观",w:4},
+  {v:"look",c:"in",m:"顺便探望",w:3},
+  // turn
+  {v:"turn",c:"on",m:"打开;使兴奋;攻击",w:8},
+  {v:"turn",c:"off",m:"关闭;使反感",w:8},
+  {v:"turn",c:"out",m:"结果是;生产;到场",w:8},
+  {v:"turn",c:"down",m:"调小;拒绝",w:8},
+  {v:"turn",c:"up",m:"调大;出现",w:7},
+  {v:"turn",c:"into",m:"变成",w:7},
+  {v:"turn",c:"around",m:"转身;好转;扭亏",w:6},
+  {v:"turn",c:"over",m:"翻转;移交;营业额",w:6},
+  {v:"turn",c:"in",m:"上交;睡觉",w:5},
+  {v:"turn",c:"back",m:"折回;倒退",w:5},
+  {v:"turn",c:"away",m:"转身走;拒之门外",w:5},
+  {v:"turn",c:"to",m:"求助于;转向",w:5},
+  // bring
+  {v:"bring",c:"up",m:"抚养;提出(话题);呕吐",w:7},
+  {v:"bring",c:"back",m:"带回;恢复;使回想",w:6},
+  {v:"bring",c:"in",m:"引进;赚得",w:5},
+  {v:"bring",c:"out",m:"推出;使显现",w:5},
+  {v:"bring",c:"about",m:"引起;导致(bring about)",w:5},
+  {v:"bring",c:"down",m:"使倒台;降低",w:5},
+  {v:"bring",c:"on",m:"引起;导致",w:4},
+  {v:"bring",c:"along",m:"带上",w:4},
+  {v:"bring",c:"forward",m:"提出;提前",w:4},
+  {v:"bring",c:"into",m:"使进入(bring into play)",w:4},
+  {v:"bring",c:"off",m:"成功办成",w:3},
+  {v:"bring",c:"around",m:"说服;使苏醒",w:3},
+  // give
+  {v:"give",c:"up",m:"放弃",w:9},
+  {v:"give",c:"in",m:"屈服;让步",w:7},
+  {v:"give",c:"away",m:"赠送;泄露;分发",w:7},
+  {v:"give",c:"off",m:"散发(气味/光)",w:6},
+  {v:"give",c:"back",m:"归还;回馈",w:6},
+  {v:"give",c:"out",m:"分发;耗尽;停止运转",w:5},
+  {v:"give",c:"over",m:"移交;停止(英俚)",w:2},
+  // break
+  {v:"break",c:"up",m:"分手;打散;结束",w:8},
+  {v:"break",c:"down",m:"抛锚;崩溃;分解",w:8},
+  {v:"break",c:"out",m:"爆发;逃脱",w:7},
+  {v:"break",c:"into",m:"闯入;突然开始",w:6},
+  {v:"break",c:"through",m:"突破",w:6},
+  {v:"break",c:"in",m:"闯入;打断;磨合",w:5},
+  {v:"break",c:"off",m:"中断;折断",w:5},
+  {v:"break",c:"away",m:"挣脱;脱离",w:5},
+  {v:"break",c:"with",m:"与…决裂",w:3},
+  // run
+  {v:"run",c:"out",m:"用完",w:8},
+  {v:"run",c:"into",m:"撞上;偶遇;遇到困难",w:7},
+  {v:"run",c:"away",m:"逃跑;离家出走",w:7},
+  {v:"run",c:"down",m:"撞倒;贬低;耗尽电量;衰败",w:5},
+  {v:"run",c:"off",m:"逃跑;复印;流走",w:5},
+  {v:"run",c:"over",m:"碾过;超时;溢出",w:5},
+  {v:"run",c:"through",m:"快速浏览;贯穿;排练",w:5},
+  {v:"run",c:"for",m:"竞选",w:5},
+  {v:"run",c:"up",m:"累积(账单)",w:4},
+  {v:"run",c:"on",m:"喋喋不休;继续",w:4},
+  {v:"run",c:"around",m:"到处跑;瞎忙",w:4},
+  {v:"run",c:"after",m:"追赶",w:4},
+  {v:"run",c:"in",m:"磨合",w:3},
+  {v:"run",c:"by",m:"跟…说一下(征求意见)",w:3},
+  // set
+  {v:"set",c:"up",m:"建立;安装;陷害",w:8},
+  {v:"set",c:"off",m:"出发;引发;引爆",w:7},
+  {v:"set",c:"out",m:"出发;着手;陈列",w:6},
+  {v:"set",c:"in",m:"(坏天气/情绪)持续开始",w:5},
+  {v:"set",c:"aside",m:"留出;搁置",w:5},
+  {v:"set",c:"back",m:"使受挫;花费",w:4},
+  {v:"set",c:"about",m:"着手;散布",w:4},
+  {v:"set",c:"down",m:"记下;放下",w:3},
+  // pick
+  {v:"pick",c:"up",m:"捡起;接(人);学会;好转;接收",w:9},
+  {v:"pick",c:"out",m:"挑出;辨认出",w:6},
+  {v:"pick",c:"on",m:"找茬;欺负",w:5},
+  {v:"pick",c:"off",m:"逐个除掉",w:3},
+  {v:"pick",c:"apart",m:"挑剔;拆解",w:3},
+  {v:"pick",c:"over",m:"仔细挑拣",w:2},
+  {v:"pick",c:"through",m:"翻找",w:2},
+  // hold
+  {v:"hold",c:"on",m:"等一下;抓紧;坚持",w:8},
+  {v:"hold",c:"back",m:"抑制;隐瞒;阻碍",w:6},
+  {v:"hold",c:"up",m:"举起;耽搁;抢劫;支撑",w:5},
+  {v:"hold",c:"out",m:"伸出;坚持",w:5},
+  {v:"hold",c:"off",m:"推迟;抵挡",w:5},
+  {v:"hold",c:"onto",m:"抓住;保留",w:5},
+  {v:"hold",c:"down",m:"压制;保住(工作)",w:4},
+  {v:"hold",c:"in",m:"抑制(情绪)",w:3},
+  {v:"hold",c:"over",m:"延期",w:3},
+  {v:"hold",c:"with",m:"赞同(多用否定)",w:2},
+  // call
+  {v:"call",c:"off",m:"取消",w:7},
+  {v:"call",c:"out",m:"喊出;点名批评;召集",w:6},
+  {v:"call",c:"back",m:"回电话;召回",w:6},
+  {v:"call",c:"for",m:"需要;要求;去接",w:6},
+  {v:"call",c:"up",m:"打电话;征召;调出",w:5},
+  {v:"call",c:"on",m:"拜访;号召;点名回答",w:5},
+  {v:"call",c:"in",m:"召来;顺访;打进电话",w:5},
+  {v:"call",c:"around",m:"四处打电话",w:2},
+  // work
+  {v:"work",c:"out",m:"锻炼;算出;解决;进展顺利",w:9},
+  {v:"work",c:"on",m:"从事;致力于;劝说",w:8},
+  {v:"work",c:"with",m:"与…共事;使用",w:7},
+  {v:"work",c:"through",m:"克服;逐一处理",w:5},
+  {v:"work",c:"around",m:"绕过;想办法解决",w:5},
+  {v:"work",c:"up",m:"激起;逐渐形成",w:4},
+  {v:"work",c:"off",m:"消除(压力);还清",w:4},
+  {v:"work",c:"in",m:"插入;加进",w:3},
+  {v:"work",c:"into",m:"揉进;使进入",w:3},
+  {v:"work",c:"away",m:"埋头苦干",w:3},
+  // make
+  {v:"make",c:"up",m:"编造;化妆;和好;弥补;构成",w:8},
+  {v:"make",c:"out",m:"辨认出;理解;声称;亲热",w:6},
+  {v:"make",c:"of",m:"理解(what do you make of…)",w:5},
+  {v:"make",c:"for",m:"走向;导致",w:4},
+  {v:"make",c:"into",m:"把…做成",w:4},
+  {v:"make",c:"off",m:"逃走(make off with 偷走)",w:3},
+  {v:"make",c:"over",m:"改造;移交",w:3},
+  // keep
+  {v:"keep",c:"up",m:"保持;跟上(keep up with)",w:7},
+  {v:"keep",c:"on",m:"继续",w:6},
+  {v:"keep",c:"out",m:"不进入;挡在外",w:5},
+  {v:"keep",c:"to",m:"遵守;坚持;局限于",w:5},
+  {v:"keep",c:"off",m:"远离;不谈",w:4},
+  {v:"keep",c:"down",m:"压低;控制;不吐",w:4},
+  {v:"keep",c:"away",m:"远离",w:4},
+  {v:"keep",c:"back",m:"隐瞒;留下",w:3},
+  {v:"keep",c:"in",m:"抑制;留校",w:3},
+  {v:"keep",c:"at",m:"坚持做",w:3},
+  // let
+  {v:"let",c:"down",m:"使失望;放下",w:6},
+  {v:"let",c:"in",m:"让…进;透(水/光)",w:5},
+  {v:"let",c:"out",m:"放出;泄露;放大(衣服);发出",w:5},
+  {v:"let",c:"off",m:"放过;放(烟花);排放",w:5},
+  {v:"let",c:"up",m:"减弱;停歇",w:4},
+  {v:"let",c:"on",m:"泄露(秘密)",w:4},
+  // cut
+  {v:"cut",c:"off",m:"切断;隔绝;打断",w:7},
+  {v:"cut",c:"out",m:"剪下;删除;停止;适合(be cut out for)",w:6},
+  {v:"cut",c:"down",m:"削减;砍倒",w:6},
+  {v:"cut",c:"back",m:"削减(cut back on)",w:5},
+  {v:"cut",c:"in",m:"插嘴;插队;加塞",w:4},
+  {v:"cut",c:"up",m:"切碎",w:4},
+  {v:"cut",c:"through",m:"穿过;切开;化繁为简",w:4},
+  // pull
+  {v:"pull",c:"out",m:"拔出;撤出;(车)驶出",w:6},
+  {v:"pull",c:"off",m:"成功完成;脱下;(车)驶离",w:6},
+  {v:"pull",c:"up",m:"(车)停下;拔起;调出",w:5},
+  {v:"pull",c:"over",m:"(车)靠边停",w:5},
+  {v:"pull",c:"down",m:"拆除;拉低",w:4},
+  {v:"pull",c:"through",m:"渡过难关;康复",w:4},
+  {v:"pull",c:"in",m:"进站;赚得",w:4},
+  {v:"pull",c:"back",m:"撤回;后退",w:4},
+  {v:"pull",c:"together",m:"齐心协力;振作",w:4},
+  {v:"pull",c:"apart",m:"拆开;扯开;严厉批评",w:3},
+  // hand
+  {v:"hand",c:"in",m:"上交",w:6},
+  {v:"hand",c:"out",m:"分发",w:6},
+  {v:"hand",c:"over",m:"移交;交出",w:6},
+  {v:"hand",c:"down",m:"传下;宣布(判决)",w:4},
+  {v:"hand",c:"back",m:"交还",w:4},
+  {v:"hand",c:"off",m:"转交",w:3},
+  // fill
+  {v:"fill",c:"in",m:"填写;告知;临时替代",w:6},
+  {v:"fill",c:"out",m:"填写(表格);变丰满",w:6},
+  {v:"fill",c:"up",m:"装满;加满油",w:6},
+  // check
+  {v:"check",c:"in",m:"登记入住;办登机;报到",w:7},
+  {v:"check",c:"out",m:"退房;结账;查看;借出",w:7},
+  {v:"check",c:"up",m:"检查(check up on 核查)",w:4},
+  {v:"check",c:"off",m:"打勾核对",w:3},
+  {v:"check",c:"over",m:"检查一遍",w:3},
+  // carry
+  {v:"carry",c:"out",m:"执行;实施",w:8},
+  {v:"carry",c:"on",m:"继续;进行",w:7},
+  {v:"carry",c:"over",m:"结转;延续",w:4},
+  {v:"carry",c:"away",m:"冲昏头脑(get carried away)",w:4},
+  {v:"carry",c:"off",m:"成功完成;赢得",w:3},
+  // throw
+  {v:"throw",c:"away",m:"扔掉;浪费",w:7},
+  {v:"throw",c:"up",m:"呕吐;匆忙搭建",w:5},
+  {v:"throw",c:"out",m:"扔出;驳回;赶出",w:5},
+  {v:"throw",c:"off",m:"摆脱;甩掉",w:4},
+  {v:"throw",c:"in",m:"额外奉送;插话",w:4},
+  // show
+  {v:"show",c:"up",m:"出现;露面;使难堪",w:7},
+  {v:"show",c:"off",m:"炫耀",w:6},
+  {v:"show",c:"around",m:"带…参观",w:4},
+  {v:"show",c:"in",m:"领…进来",w:3},
+  {v:"show",c:"out",m:"领…出去",w:3},
+  // find / grow
+  {v:"find",c:"out",m:"查明;发现",w:9},
+  {v:"grow",c:"up",m:"长大;成熟",w:8},
+  {v:"grow",c:"into",m:"成长为;长大穿得下",w:4},
+  {v:"grow",c:"on",m:"逐渐喜欢",w:3},
+  {v:"grow",c:"out",m:"长大不再(grow out of);长长",w:4},
+];
+
+// ── 颜色:粉→绿 渐变, 重要度 1-10 (低=粉, 中=浅, 高=绿) ──
+function rgbFor(w){
+  const t=(w-1)/9, pink=[230,144,171], mid=[245,242,237], grn=[63,143,91];
+  let c;
+  if(t<0.5){const k=t/0.5; c=pink.map((p,i)=>Math.round(p+(mid[i]-p)*k));}
+  else{const k=(t-0.5)/0.5; c=mid.map((m,i)=>Math.round(m+(grn[i]-m)*k));}
+  return c;
+}
+function shade(w){const c=rgbFor(w);return `rgb(${c[0]} ${c[1]} ${c[2]})`;}
+function ink(w){const c=rgbFor(w);const L=(0.2126*c[0]+0.7152*c[1]+0.0722*c[2])/255;return L>0.5?"#2a2320":"#f4faf5";}
+
+// ── 推导行/列 + 合计 ──
+const key=(v,c)=>v+"|"+c;
+const map={}; DATA.forEach(d=>map[key(d.v,d.c)]=d);
+const rowSum={}, colSum={};
+DATA.forEach(d=>{rowSum[d.v]=(rowSum[d.v]||0)+d.w; colSum[d.c]=(colSum[d.c]||0)+d.w;});
+const rows=Object.keys(rowSum).sort((a,b)=>rowSum[b]-rowSum[a]);
+const cols=Object.keys(colSum).sort((a,b)=>colSum[b]-colSum[a]);
+const maxRow=Math.max(...Object.values(rowSum));
+
+// ── 图例渐变 ──
+document.getElementById("ramp").innerHTML=[1,2,3,4,5,6,7,8,9,10].map(w=>`<span style="background:${shade(w)}"></span>`).join("");
+
+// ── 渲染矩阵 ──
+let h="<thead><tr><th>动词＼词</th>";
+cols.forEach(c=>h+=`<th>${c}<span class='cs'>Σ${colSum[c]}</span></th>`);
+h+="<th>合计</th></tr></thead><tbody>";
+rows.forEach(v=>{
+  h+=`<tr><th>${v}<span class='rs'>Σ${rowSum[v]}</span></th>`;
+  cols.forEach(c=>{
+    const d=map[key(v,c)];
+    if(d) h+=`<td class='cell' style='background:${shade(d.w)};color:${ink(d.w)}'><span class='ph'>${v} ${c}<span class='wn'>${d.w}</span></span><span class='mn'>${d.m}</span></td>`;
+    else  h+=`<td class='empty'></td>`;
+  });
+  h+=`<td class='avgcell'><div class='num'>${rowSum[v]}</div><div class='bar' style='width:${(rowSum[v]/maxRow*100).toFixed(0)}%'></div></td></tr>`;
+});
+h+="</tbody>";
+document.getElementById("matrix").innerHTML=h;
+
+// ── 筛选 ──
+document.getElementById("filter").addEventListener("input",e=>{
+  const q=e.target.value.trim().toLowerCase();
+  document.querySelectorAll("#matrix tbody tr").forEach(tr=>{
+    const v=tr.querySelector("th").textContent.toLowerCase();
+    tr.classList.toggle("hide",q&&!v.includes(q));
+  });
+});
+</script>
+</body>
+</html>
