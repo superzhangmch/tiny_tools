@@ -143,9 +143,34 @@
     </div>
   </section>
 
-  <!-- 5 -->
+  <!-- 5 新增:三种域对比 -->
   <section>
-    <h2><span class="n">5</span>安全的根源:单向陷门</h2>
+    <h2><span class="n">5</span>同一条方程,三种域,三种形状</h2>
+    <p>把上一节的想法推到极限:同一条 <span class="mono">y² = x³ + 7</span>,分别放在<b>实数</b>、<b>小有限域</b>、和<b>真·secp256k1</b>(比特币曲线,p≈2²⁵⁶)上,看看「曲线」这个形状怎么一步步消失成噪点。</p>
+    <div class="row">
+      <div class="col">
+        <div class="kv badge" style="text-align:center">实数域 ℝ</div>
+        <canvas id="cReal" height="240"></canvas>
+        <div class="hint">连续、光滑、上下对称 —— 教科书里的样子。</div>
+      </div>
+      <div class="col">
+        <div class="kv badge" style="text-align:center">小有限域 F₂₅₁</div>
+        <canvas id="cSmall" height="240"></canvas>
+        <div class="hint" id="smallStat">全部枚举:已经不是线,是散点,但还看得出上下对称。</div>
+      </div>
+      <div class="col">
+        <div class="kv badge" style="text-align:center">真·secp256k1</div>
+        <canvas id="cBig" height="240"></canvas>
+        <div class="hint" id="bigStat">采样中…(BigInt 真·256位运算)</div>
+      </div>
+    </div>
+    <div class="step" style="margin-top:12px">一旦换成「mod 素数」,<b>相邻的 x 得到的 y 毫无关联</b>(模素数下开平方是高度打乱的操作),于是点均匀铺满方格、<b>再看不出任何曲线轮廓</b>。唯一残留的结构是<b>上下对称</b>(因为 (x,y) 在 → (x, p−y) 也在)。</div>
+    <p class="muted">这正是安全的关键:如果 secp256k1 的点还排成光滑曲线,顺着曲线就能从公钥落点反推私钥;正因为点云毫无几何规律、又多达 ≈2²⁵⁶ 铺满空间,离散对数才无从下手。右图那片噪点,就是「打不穿」的样子。</p>
+  </section>
+
+  <!-- 6 -->
+  <section>
+    <h2><span class="n">6</span>安全的根源:单向陷门</h2>
     <p>选一个固定的<b>基点 G</b>。任何人拿到私钥 <span class="mono">k</span>,算出公钥 <span class="mono">K = k·G</span> 都<b>很快</b>(用「翻倍加」的技巧,几步就到)。</p>
     <p>但反过来 —— <b>已知 G 和 K,想求出 k</b> —— 却<b>极其困难</b>。这叫<span class="warn">椭圆曲线离散对数问题 (ECDLP)</span>,目前没有已知的快速算法。</p>
     <div class="row">
@@ -188,9 +213,9 @@
     </div>
   </section>
 
-  <!-- 6 -->
+  <!-- 7 -->
   <section>
-    <h2><span class="n">6</span>实战:两人如何在公开信道协商出同一把密钥 (ECDH)</h2>
+    <h2><span class="n">7</span>实战:两人如何在公开信道协商出同一把密钥 (ECDH)</h2>
     <p>Alice 和 Bob 想要一把只有他们俩知道的密钥,但他们只能在<b>所有人都能偷看</b>的信道上通信。椭圆曲线让这成为可能:</p>
     <div class="flow">
       <div class="card alice"><h3 style="color:var(--p)">👩 Alice</h3>
@@ -517,6 +542,44 @@ let FIELD={p:67,a:2,b:3,pts:[]};
   window.addEventListener('resize',draw);
   window._refreshDL=()=>{stopAnim();forcedG=null;buildSeq();draw();}; // 换曲线时重置 G
   buildSeq(); draw();
+})();
+
+/* ========== 5(新). 三种域对比: y²=x³+7 ========== */
+(function(){
+  // 实数域
+  (function(){
+    const cv=$('cReal');if(!cv)return;const ctx=fitCanvas(cv);const W=cv._w,H=cv._h;ctx.clearRect(0,0,W,H);
+    ctx.setLineDash([4,4]);ctx.strokeStyle='#3a466b';ctx.beginPath();ctx.moveTo(0,H/2);ctx.lineTo(W,H/2);ctx.stroke();ctx.setLineDash([]);
+    const xmin=-2.1,xmax=4.5,ymax=Math.sqrt(xmax**3+7),ymin=-ymax;
+    const Y=y=>H-(y-ymin)/(ymax-ymin)*H;
+    ctx.strokeStyle='#5e8bff';ctx.lineWidth=2.2;
+    for(const s of[1,-1]){ctx.beginPath();let st=false;
+      for(let px=0;px<=W;px++){const x=xmin+(xmax-xmin)*px/W;const r=x*x*x+7;if(r<0){st=false;continue;}
+        const py=Y(s*Math.sqrt(r));if(!st){ctx.moveTo(px,py);st=true;}else ctx.lineTo(px,py);}ctx.stroke();}
+  })();
+  // 小有限域 F_251
+  (function(){
+    const p=251,b=7;const cv=$('cSmall');if(!cv)return;const ctx=fitCanvas(cv);const W=cv._w,H=cv._h;ctx.clearRect(0,0,W,H);
+    const X=x=>x/p*W,Y=y=>H-y/p*H;let n=0;
+    for(let x=0;x<p;x++){const rhs=((x*x%p*x)%p+b)%p;for(let y=0;y<p;y++)if(y*y%p===rhs){ctx.beginPath();ctx.arc(X(x),Y(y),1.9,0,7);ctx.fillStyle='#42d6a4';ctx.fill();n++;}}
+    $('smallStat').textContent=`全部枚举出 ${n} 个点:已不是线,是散点(仍上下对称)。`;
+  })();
+  // 真 secp256k1 采样
+  (function(){
+    const cv=$('cBig');if(!cv)return;const ctx=fitCanvas(cv);const W=cv._w,H=cv._h;ctx.clearRect(0,0,W,H);
+    const P=0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn,B=7n;
+    const EXP_QR=(P-1n)/2n,EXP_SQRT=(P+1n)/4n,Pf=Number(P);
+    const X=x=>Number(x)/Pf*W,Y=y=>H-Number(y)/Pf*H;
+    function mpow(b,e,m){b%=m;let r=1n;while(e>0n){if(e&1n)r=r*b%m;b=b*b%m;e>>=1n;}return r;}
+    function rnd(m){const by=new Uint8Array(32);crypto.getRandomValues(by);let x=0n;for(const v of by)x=(x<<8n)|BigInt(v);return x%m;}
+    let total=0,on=0;
+    function batch(t){let i=0;while(i<t){i++;total++;const x=rnd(P);const rhs=(mpow(x,3n,P)+B)%P;
+      if(mpow(rhs,EXP_QR,P)!==1n)continue;const y=mpow(rhs,EXP_SQRT,P);
+      for(const yy of[y,(P-y)%P]){ctx.beginPath();ctx.arc(X(x),Y(yy),1.3,0,7);ctx.fillStyle='#ffd166';ctx.fill();}on++;}
+      $('bigStat').textContent=`已随机采样 ${on} 个真实点(256位)—— 纯噪点,毫无曲线轮廓。`;}
+    let done=0;const goal=5000;
+    (function loop(){batch(700);done+=700;if(done<goal)requestAnimationFrame(loop);})();
+  })();
 })();
 
 /* ========== 6. ECDH ========== */
