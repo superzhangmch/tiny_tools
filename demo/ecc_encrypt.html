@@ -1,0 +1,546 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>椭圆曲线密码学 · 图解入门</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#171d2e; --panel2:#1e263b; --ink:#e8ecf5;
+    --muted:#93a0bd; --line:#2b3450; --accent:#5e8bff; --accent2:#ffd166;
+    --p:#ff6b8a; --q:#42d6a4; --r:#ffb454; --grid:#222b44;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0c111c,#0f1420);color:var(--ink);
+    font:15px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:30px;letter-spacing:.5px;margin:0 0 4px}
+  h2{font-size:21px;margin:0 0 12px;display:flex;align-items:center;gap:10px}
+  h2 .n{background:var(--accent);color:#0b1020;width:28px;height:28px;border-radius:8px;
+    display:inline-grid;place-items:center;font-size:15px;font-weight:700;flex:none}
+  .lead{color:var(--muted);margin:0 0 28px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:22px 22px 24px;margin:0 0 22px}
+  canvas{background:var(--panel2);border-radius:12px;display:block;width:100%;touch-action:none;cursor:crosshair}
+  .row{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start}
+  .col{flex:1;min-width:260px}
+  p{margin:10px 0}
+  .muted{color:var(--muted)}
+  code,.mono{font-family:"SF Mono",Menlo,Consolas,monospace;background:#0c1120;
+    padding:1px 6px;border-radius:5px;color:#cde0ff;font-size:13.5px}
+  .ctrl{display:flex;align-items:center;gap:10px;margin:8px 0}
+  .ctrl label{width:64px;color:var(--muted);font-size:13px}
+  input[type=range]{flex:1;accent-color:var(--accent)}
+  .val{width:52px;text-align:right;font-family:"SF Mono",monospace;color:var(--accent2)}
+  button{background:var(--accent);color:#0b1020;border:0;border-radius:9px;padding:8px 14px;
+    font-weight:600;cursor:pointer;font-size:14px}
+  button.ghost{background:#26304d;color:var(--ink)}
+  button:active{transform:translateY(1px)}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:600}
+  .badge{font-family:"SF Mono",monospace;font-size:13px}
+  .kv{background:#0c1120;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0}
+  .kv div{margin:3px 0}
+  .step{background:#0c1120;border-left:3px solid var(--accent);padding:8px 12px;margin:8px 0;border-radius:0 8px 8px 0;font-size:13.5px}
+  .warn{color:var(--accent2)}
+  .flow{display:flex;gap:12px;flex-wrap:wrap}
+  .card{flex:1;min-width:200px;background:#0c1120;border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card h3{margin:0 0 8px;font-size:15px}
+  .alice{border-color:#ff6b8a55}.bob{border-color:#42d6a455}
+  select{background:#0c1120;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+  .big{font-size:22px;font-family:"SF Mono",monospace}
+  .ok{color:#42d6a4}.bad{color:#ff6b8a}
+  a{color:var(--accent)}
+  hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>椭圆曲线密码学 · 图解入门</h1>
+  <p class="lead">从「一条奇怪的曲线」到「你每天都在用的加密」。全程可以动手拖、点、拉。</p>
+
+  <!-- 1 -->
+  <section>
+    <h2><span class="n">1</span>椭圆曲线长什么样</h2>
+    <p>椭圆曲线其实和「椭圆」没关系。它是满足下面这个方程的所有点 <span class="mono">(x, y)</span> 的集合:</p>
+    <p style="text-align:center;font-size:20px" class="mono">y² = x³ + a·x + b</p>
+    <div class="row">
+      <div class="col" style="flex:1.3">
+        <canvas id="c1" height="360"></canvas>
+        <div class="hint">左右对称(关于 x 轴)。拖动下面的滑块改变 a、b,看曲线怎么变形。</div>
+      </div>
+      <div class="col">
+        <div class="ctrl"><label>a</label><input id="a1" type="range" min="-4" max="4" step="0.1" value="-1"><span class="val" id="a1v">-1.0</span></div>
+        <div class="ctrl"><label>b</label><input id="b1" type="range" min="-4" max="4" step="0.1" value="1.5"><span class="val" id="b1v">1.5</span></div>
+        <p class="muted">两个关键性质:</p>
+        <div class="step">① <b>关于 x 轴对称</b> —— 每个 x 若有解,就有 <span class="mono">+y</span> 和 <span class="mono">−y</span> 一对点。</div>
+        <div class="step">② 要求曲线<b>光滑不自交</b>(判别式 <span class="mono">4a³+27b² ≠ 0</span>),否则不能用来做密码学。</div>
+        <div id="disc1" class="kv badge"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2><span class="n">2</span>核心魔法:两点相「加」</h2>
+    <p>密码学的一切都建立在一个自定义的运算上 —— 椭圆曲线上的<b>「加法」</b>。它不是普通加法,是一个几何游戏,规则是:</p>
+    <div class="step">要算 <span style="color:var(--p)">P</span> + <span style="color:var(--q)">Q</span>:画一条过 P、Q 的直线 → 它一定会和曲线交于<b>第三个点</b> → 把这个点<b>沿 x 轴翻折</b>,得到的就是 <span style="color:var(--r)">R = P+Q</span>。</div>
+    <div class="row">
+      <div class="col" style="flex:1.3">
+        <canvas id="c2" height="380"></canvas>
+        <div class="hint">🖱️ 直接在图上<b>拖动</b> P(粉)和 Q(绿)两个点,实时看直线、交点和翻折结果 R(橙)。</div>
+      </div>
+      <div class="col">
+        <div class="kv badge" id="add2"></div>
+        <p class="muted">为什么要「翻折」?这样定义出来的加法才满足数学上的群律(结合律、有单位元、有逆元),才能拿来做严密的密码学。</p>
+        <div class="step">特例:若 P 和 Q 关于 x 轴对称(<span class="mono">x</span> 相同),直线竖直、交不到第三点 —— 结果是「无穷远点 <span class="mono">O</span>」,相当于加法里的 <b>0</b>。</div>
+        <div class="btns"><button class="ghost" id="reset2">重置 P、Q</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <h2><span class="n">3</span>同一个点加自己:P + P = 2P</h2>
+    <p>如果 P 和 Q 是同一个点怎么办?直线过一个点有无数条 —— 这时取曲线在该点的<b>切线</b>,切线与曲线的另一个交点翻折,就是 <span class="mono">2P</span>。</p>
+    <div class="row">
+      <div class="col" style="flex:1.3">
+        <canvas id="c3" height="360"></canvas>
+        <div class="hint">拖动 P,观察切线。点下面的按钮反复「加 P」,看点在曲线上<b>蹦来蹦去</b>。</div>
+      </div>
+      <div class="col">
+        <div class="kv badge" id="mul3"></div>
+        <div class="btns">
+          <button id="stepPlus">再加一个 P (→ nP)</button>
+          <button class="ghost" id="reset3">回到 1·P</button>
+        </div>
+        <p class="muted">这个「不断加 P」的操作,就是<b>标量乘法</b> <span class="mono">nP = P+P+…+P</span>(n 个)。注意结果<b>毫无规律地跳动</b> —— 这正是安全的来源。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section>
+    <h2><span class="n">4</span>回到现实:有限域上的椭圆曲线</h2>
+    <p>真实密码学不用连续的实数曲线,而是把所有运算都放进<b>模 p 的整数</b>里(p 是素数)。方程变成:</p>
+    <p style="text-align:center;font-size:18px" class="mono">y² ≡ x³ + a·x + b  (mod p)</p>
+    <p>曲线不再是平滑曲线,而是一堆<b>散落的点</b>。但那套「连线 / 切线 + 翻折」的加法规则,换成模运算后<b>依然成立</b>。</p>
+    <div class="row">
+      <div class="col" style="flex:1.3"><canvas id="c4" height="360"></canvas>
+        <div class="hint">每个亮点都是曲线上的一个合法点。仍然上下对称(关于 <span class="mono">y = p/2</span>)。</div>
+      </div>
+      <div class="col">
+        <div class="ctrl"><label>素数 p</label>
+          <select id="p4"><option>23</option><option>31</option><option>47</option><option selected>67</option><option>97</option><option>127</option><option>199</option><option>251</option></select>
+        </div>
+        <div class="ctrl"><label>a</label><input id="a4" type="range" min="0" max="10" step="1" value="2"><span class="val" id="a4v">2</span></div>
+        <div class="ctrl"><label>b</label><input id="b4" type="range" min="0" max="10" step="1" value="3"><span class="val" id="b4v">3</span></div>
+        <div class="kv badge" id="pts4"></div>
+        <p class="muted">点的总数(含无穷远点 O)叫曲线的<b>阶</b>。密码学里用的 p 有 ~256 位,点多到 <span class="mono">≈2²⁵⁶</span> 个,比宇宙原子还多。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section>
+    <h2><span class="n">5</span>安全的根源:单向陷门</h2>
+    <p>选一个固定的<b>基点 G</b>。任何人拿到私钥 <span class="mono">k</span>,算出公钥 <span class="mono">K = k·G</span> 都<b>很快</b>(用「翻倍加」的技巧,几步就到)。</p>
+    <p>但反过来 —— <b>已知 G 和 K,想求出 k</b> —— 却<b>极其困难</b>。这叫<span class="warn">椭圆曲线离散对数问题 (ECDLP)</span>,目前没有已知的快速算法。</p>
+    <div class="row">
+      <div class="col" style="flex:1.3">
+        <div class="kv badge" id="eq5" style="text-align:center;font-size:15px;margin-top:0"></div>
+        <canvas id="c5" height="360"></canvas>
+        <div class="hint">🟢 起点 G · 🟡 当前 k·G。点「▶ 播放」看 <span class="mono">1G→2G→3G→…</span> 一步步<b>乱蹦</b>,连线织成毫无规律的网 —— 给你终点也数不出跳了几步(=k)。</div>
+      </div>
+      <div class="col">
+        <div class="ctrl"><label>私钥 k</label><input id="k5" type="range" min="1" max="1" step="1" value="1"><span class="val" id="k5v">1</span></div>
+        <div class="ctrl"><label>速度</label>
+          <select id="speed5" style="flex:1;background:#0c1120;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px">
+            <option value="500">慢</option>
+            <option value="220" selected>中</option>
+            <option value="90">快</option>
+            <option value="30">极快</option>
+          </select>
+        </div>
+        <div class="ctrl"><label>步长 +G</label>
+          <select id="stepSize5" style="flex:1;background:#0c1120;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px">
+            <option value="1" selected>每步 +1</option>
+            <option value="2">每步 +2</option>
+            <option value="3">每步 +3</option>
+            <option value="5">每步 +5</option>
+            <option value="10">每步 +10</option>
+          </select>
+        </div>
+        <div class="btns">
+          <button id="play5">▶ 播放跳跃</button>
+          <button class="ghost" id="stepK">下一步 +G</button>
+          <button class="ghost" id="reset5">回到 1G</button>
+          <button class="ghost" id="randG5">🎲 随机换 G</button>
+        </div>
+        <label class="chk" style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;margin:10px 0">
+          <input type="checkbox" id="showPath5" checked> 显示跳跃连线</label>
+        <div class="kv badge" id="dlog5"></div>
+        <div class="step">✅ 正向 <span class="mono">k·G</span>:快 —— 这是你「加密/签名」时做的。<br>❌ 逆向 求 <span class="mono">k</span>:慢到不可能 —— 这是攻击者面对的墙。</div>
+        <p class="muted">这种「一边容易、一边极难」的性质叫<b>陷门单向函数</b>,是所有公钥密码的地基。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section>
+    <h2><span class="n">6</span>实战:两人如何在公开信道协商出同一把密钥 (ECDH)</h2>
+    <p>Alice 和 Bob 想要一把只有他们俩知道的密钥,但他们只能在<b>所有人都能偷看</b>的信道上通信。椭圆曲线让这成为可能:</p>
+    <div class="flow">
+      <div class="card alice"><h3 style="color:var(--p)">👩 Alice</h3>
+        <div>私钥 <span class="mono">a</span> = <b id="aliceA" class="ok"></b> <span class="muted">(保密)</span></div>
+        <div>公钥 <span class="mono">A = a·G</span> = <span class="mono" id="alicePub"></span></div>
+      </div>
+      <div class="card bob"><h3 style="color:var(--q)">🧑 Bob</h3>
+        <div>私钥 <span class="mono">b</span> = <b id="bobB" class="ok"></b> <span class="muted">(保密)</span></div>
+        <div>公钥 <span class="mono">B = b·G</span> = <span class="mono" id="bobPub"></span></div>
+      </div>
+    </div>
+    <div class="step">📡 两人<b>交换公钥</b>(A、B 在信道上公开,窃听者 Eve 全看得到)。</div>
+    <div class="row" style="margin-top:6px">
+      <div class="col">
+        <div class="kv">
+          <div>Alice 计算 <span class="mono">a·B</span> = a·(b·G) = <b class="badge ok" id="secA"></b></div>
+          <div>Bob&nbsp;&nbsp; 计算 <span class="mono">b·A</span> = b·(a·G) = <b class="badge ok" id="secB"></b></div>
+          <hr>
+          <div class="big">共享密钥 = <span id="secShared" class="ok"></span> ✔</div>
+          <div class="muted" style="font-size:13px">因为 <span class="mono">a·(b·G) = b·(a·G) = (a·b)·G</span>,双方必然算出同一个点。</div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="kv" style="border-color:#ff6b8a55">
+          <div>🕵️ 窃听者 Eve 手里有:<span class="mono">G、A、B</span></div>
+          <div>她想要的是 <span class="mono">a·b·G</span>,但要得到它必须先从 <span class="mono">A</span> 反推出 <span class="mono">a</span>(或从 B 反推 b)——</div>
+          <div class="bad">这正是第 5 节说的 ECDLP,做不到。 ❌</div>
+        </div>
+        <div class="btns"><button id="rekey">🎲 换一组随机私钥</button></div>
+      </div>
+    </div>
+    <hr>
+    <p class="muted">有了这把共享密钥,双方就能用它做对称加密(AES 等)来传真正的消息。这套「非对称协商密钥 + 对称加密内容」就是 HTTPS、Signal、比特币钱包、SSH 背后的日常机制。ECC 的优势是:同等安全下,<b>256 位的 ECC 密钥 ≈ 3072 位的 RSA 密钥</b>,更短更快更省电。</p>
+  </section>
+
+  <p class="muted" style="text-align:center;font-size:13px">本页所有运算都在浏览器里实时计算 · 用小素数便于观察,原理与真实 256 位曲线完全一致</p>
+</div>
+
+<script>
+"use strict";
+/* ---------- 工具 ---------- */
+const $ = id => document.getElementById(id);
+function fitCanvas(cv){
+  const dpr = window.devicePixelRatio || 1;
+  if(cv._h0===undefined) cv._h0 = parseInt(cv.getAttribute('height')); // 原始高度只锁定一次
+  const w = cv.clientWidth, h = cv._h0;
+  cv.width = w*dpr; cv.height = h*dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  cv._w = w; cv._h = h; return ctx;
+}
+
+/* ========== 1. 实数曲线 ========== */
+(function(){
+  const cv=$('c1'); let ctx;
+  const a=$('a1'),b=$('b1');
+  function draw(){
+    ctx=fitCanvas(cv); const W=cv._w,H=cv._h;
+    const A=+a.value,B=+b.value;
+    $('a1v').textContent=A.toFixed(1); $('b1v').textContent=B.toFixed(1);
+    const disc=4*A*A*A+27*B*B;
+    $('disc1').innerHTML=`判别式 4a³+27b² = <b style="color:${Math.abs(disc)<1e-6?'#ff6b8a':'#42d6a4'}">${disc.toFixed(2)}</b> ${Math.abs(disc)<1e-6?'⚠️ 退化,不可用':'✓ 光滑可用'}`;
+    ctx.clearRect(0,0,W,H);
+    const range=5, sx=W/(2*range), sy=H/(2*range), ox=W/2, oy=H/2;
+    const X=x=>ox+x*sx, Y=y=>oy-y*sy;
+    // grid
+    ctx.strokeStyle='#222b44'; ctx.lineWidth=1;
+    for(let g=-range;g<=range;g++){ctx.beginPath();ctx.moveTo(X(g),0);ctx.lineTo(X(g),H);ctx.moveTo(0,Y(g));ctx.lineTo(W,Y(g));ctx.stroke();}
+    ctx.strokeStyle='#455075'; ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(0,oy);ctx.lineTo(W,oy);ctx.moveTo(ox,0);ctx.lineTo(ox,H);ctx.stroke();
+    // curve
+    ctx.strokeStyle='#5e8bff'; ctx.lineWidth=2.5;
+    for(const sign of [1,-1]){
+      ctx.beginPath(); let started=false;
+      for(let px=0;px<=W;px++){
+        const x=(px-ox)/sx; const rhs=x*x*x+A*x+B;
+        if(rhs<0){started=false;continue;}
+        const y=sign*Math.sqrt(rhs); const py=Y(y);
+        if(!started){ctx.moveTo(px,py);started=true;} else ctx.lineTo(px,py);
+      }
+      ctx.stroke();
+    }
+  }
+  a.oninput=draw; b.oninput=draw;
+  window.addEventListener('resize',draw); draw();
+})();
+
+/* ========== 2. 点加法 ========== */
+(function(){
+  const cv=$('c2'); let ctx;
+  const A=-1,B=2; // 固定曲线
+  const range=4.2;
+  let P={x:-1.3}, Q={x:1.1};
+  function onCurveY(x){const r=x*x*x+A*x+B; return r>=0?Math.sqrt(r):null;}
+  // 用上半支存储,y 取正;拖动时吸附到曲线
+  function initY(pt){const y=onCurveY(pt.x); pt.y = y!==null?y:0;}
+  initY(P); Q.y=-1*(onCurveY(Q.x)||0); // Q 放下半支更好看
+  let ctxInfo;
+  function coord(cv){const W=cv._w,H=cv._h;const sx=W/(2*range),sy=H/(2*range),ox=W/2,oy=H/2;
+    return {W,H,sx,sy,ox,oy,X:x=>ox+x*sx,Y:y=>oy-y*sy,ix:px=>(px-ox)/sx,iy:py=>(oy-py)/sy};}
+  function add(P,Q){
+    if(Math.abs(P.x-Q.x)<1e-9 && Math.abs(P.y+Q.y)<1e-9) return null; //相加=O
+    let lam;
+    if(Math.abs(P.x-Q.x)<1e-9 && Math.abs(P.y-Q.y)<1e-9){ lam=(3*P.x*P.x+A)/(2*P.y); }
+    else lam=(Q.y-P.y)/(Q.x-P.x);
+    const x3=lam*lam-P.x-Q.x; const y3=lam*(P.x-x3)-P.y;
+    return {x:x3,y:y3,lam};
+  }
+  function draw(){
+    ctx=fitCanvas(cv); const c=coord(cv); const {W,H,X,Y}=c;
+    ctx.clearRect(0,0,W,H);
+    // grid+axes
+    ctx.strokeStyle='#222b44';ctx.lineWidth=1;
+    for(let g=-4;g<=4;g++){ctx.beginPath();ctx.moveTo(X(g),0);ctx.lineTo(X(g),H);ctx.moveTo(0,Y(g));ctx.lineTo(W,Y(g));ctx.stroke();}
+    ctx.strokeStyle='#455075';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(0,Y(0));ctx.lineTo(W,Y(0));ctx.moveTo(X(0),0);ctx.lineTo(X(0),H);ctx.stroke();
+    // curve
+    ctx.strokeStyle='#5e8bff';ctx.lineWidth=2.5;
+    for(const s of[1,-1]){ctx.beginPath();let st=false;
+      for(let px=0;px<=W;px++){const x=c.ix(px);const r=x*x*x+A*x+B;if(r<0){st=false;continue;}const y=s*Math.sqrt(r);const py=Y(y);if(!st){ctx.moveTo(px,py);st=true;}else ctx.lineTo(px,py);}ctx.stroke();}
+    const R=add(P,Q);
+    // line through P,Q
+    if(R){
+      const lam=R.lam;
+      ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.4;ctx.setLineDash([6,5]);
+      ctx.beginPath();
+      const x0=-range,x1=range;
+      ctx.moveTo(X(x0),Y(P.y+lam*(x0-P.x)));ctx.lineTo(X(x1),Y(P.y+lam*(x1-P.x)));ctx.stroke();
+      // vertical reflect line
+      ctx.strokeStyle='#ffb45466';ctx.beginPath();ctx.moveTo(X(R.x),Y(-R.y));ctx.lineTo(X(R.x),Y(R.y));ctx.stroke();
+      ctx.setLineDash([]);
+      // third intersection (before reflect)
+      dot(X(R.x),Y(-R.y),'#ffffff','',5,true);
+    }
+    dot(X(P.x),Y(P.y),'#ff6b8a','P');
+    dot(X(Q.x),Y(Q.y),'#42d6a4','Q');
+    if(R) dot(X(R.x),Y(R.y),'#ffb454','R = P+Q');
+    // info
+    let s=`P = (${P.x.toFixed(2)}, ${P.y.toFixed(2)})<br>Q = (${Q.x.toFixed(2)}, ${Q.y.toFixed(2)})<br>`;
+    s+= R? `<b style="color:#ffb454">P+Q = (${R.x.toFixed(2)}, ${R.y.toFixed(2)})</b>` : `<b style="color:#ffd166">P+Q = O(无穷远点,即"零")</b>`;
+    $('add2').innerHTML=s;
+    function dot(px,py,col,label,rad,hollow){rad=rad||6.5;
+      ctx.beginPath();ctx.arc(px,py,rad,0,7);
+      if(hollow){ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke();}
+      else{ctx.fillStyle=col;ctx.fill();ctx.strokeStyle='#0f1420';ctx.lineWidth=2;ctx.stroke();}
+      if(label){ctx.fillStyle=col;ctx.font='600 14px sans-serif';ctx.fillText(label,px+11,py-9);}
+    }
+  }
+  // 拖拽
+  let drag=null;
+  function pos(e){const r=cv.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};}
+  function pick(e){const c=coord(cv);const m=pos(e);
+    for(const [pt,name] of [[P,'P'],[Q,'Q']]){if(Math.hypot(c.X(pt.x)-m.x,c.Y(pt.y)-m.y)<16){drag=pt;return;}}}
+  function move(e){if(!drag)return;e.preventDefault();const c=coord(cv);const m=pos(e);
+    let x=Math.max(-range,Math.min(range,c.ix(m.x)));
+    let y=onCurveY(x);
+    // 找最近的有解 x
+    if(y===null){let best=null,bd=1e9;for(let xx=-range;xx<=range;xx+=0.01){if(onCurveY(xx)!==null){const d=Math.abs(xx-x);if(d<bd){bd=d;best=xx;}}}x=best;y=onCurveY(x);}
+    drag.x=x; drag.y = c.iy(m.y)>=0 ? y : -y; // 根据鼠标上下选支
+    draw();
+  }
+  function up(){drag=null;}
+  cv.addEventListener('mousedown',pick);cv.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
+  cv.addEventListener('touchstart',pick,{passive:true});cv.addEventListener('touchmove',move,{passive:false});window.addEventListener('touchend',up);
+  $('reset2').onclick=()=>{P={x:-1.3};Q={x:1.1};initY(P);Q.y=-(onCurveY(Q.x)||0);draw();};
+  window.addEventListener('resize',draw); draw();
+})();
+
+/* ========== 3. 倍点 / nP ========== */
+(function(){
+  const cv=$('c3');let ctx;const A=-1,B=3;const range=4.5;
+  let P={x:0.5}; function ocy(x){const r=x*x*x+A*x+B;return r>=0?Math.sqrt(r):null;}
+  P.y=ocy(P.x); let cur=null, n=1;
+  function coord(){const W=cv._w,H=cv._h;const sx=W/(2*range),sy=H/(2*range),ox=W/2,oy=H/2;
+    return{W,H,X:x=>ox+x*sx,Y:y=>oy-y*sy,ix:px=>(px-ox)/sx,iy:py=>(oy-py)/sy};}
+  function add(P,Q){if(Math.abs(P.x-Q.x)<1e-9&&Math.abs(P.y+Q.y)<1e-9)return null;let lam;
+    if(Math.abs(P.x-Q.x)<1e-9&&Math.abs(P.y-Q.y)<1e-9)lam=(3*P.x*P.x+A)/(2*P.y);else lam=(Q.y-P.y)/(Q.x-P.x);
+    const x3=lam*lam-P.x-Q.x;return{x:x3,y:lam*(P.x-x3)-P.y,lam};}
+  function draw(){
+    ctx=fitCanvas(cv);const c=coord();const{W,H,X,Y}=c;ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle='#222b44';ctx.lineWidth=1;for(let g=-4;g<=4;g++){ctx.beginPath();ctx.moveTo(X(g),0);ctx.lineTo(X(g),H);ctx.moveTo(0,Y(g));ctx.lineTo(W,Y(g));ctx.stroke();}
+    ctx.strokeStyle='#455075';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(0,Y(0));ctx.lineTo(W,Y(0));ctx.moveTo(X(0),0);ctx.lineTo(X(0),H);ctx.stroke();
+    ctx.strokeStyle='#5e8bff';ctx.lineWidth=2.5;for(const s of[1,-1]){ctx.beginPath();let st=false;for(let px=0;px<=W;px++){const x=c.ix(px);const r=x*x*x+A*x+B;if(r<0){st=false;continue;}const py=Y(s*Math.sqrt(r));if(!st){ctx.moveTo(px,py);st=true;}else ctx.lineTo(px,py);}ctx.stroke();}
+    // 切线 at P
+    const lam=(3*P.x*P.x+A)/(2*P.y);
+    ctx.strokeStyle='#ffffff55';ctx.setLineDash([6,5]);ctx.lineWidth=1.4;ctx.beginPath();
+    ctx.moveTo(X(-range),Y(P.y+lam*(-range-P.x)));ctx.lineTo(X(range),Y(P.y+lam*(range-P.x)));ctx.stroke();ctx.setLineDash([]);
+    function dot(px,py,col,label,r){r=r||6.5;ctx.beginPath();ctx.arc(px,py,r,0,7);ctx.fillStyle=col;ctx.fill();ctx.strokeStyle='#0f1420';ctx.lineWidth=2;ctx.stroke();if(label){ctx.fillStyle=col;ctx.font='600 14px sans-serif';ctx.fillText(label,px+11,py-9);}}
+    dot(X(P.x),Y(P.y),'#ff6b8a','P');
+    if(cur) dot(X(cur.x),Y(cur.y),'#ffb454',n+'·P');
+    $('mul3').innerHTML=`P = (${P.x.toFixed(2)}, ${P.y.toFixed(2)})<br>切线斜率 λ = (3x²+a)/(2y) = <b>${lam.toFixed(2)}</b><br>`+(cur?`<b style="color:#ffb454">${n}·P = (${cur.x.toFixed(2)}, ${cur.y.toFixed(2)})</b>`:`<b style="color:#ffd166">${n}·P = O</b>`);
+  }
+  $('stepPlus').onclick=()=>{const base=P;const start=cur||P;const r=add(start,base);n++;cur=r||{x:P.x,y:P.y};if(!r){n=1;cur=null;}draw();};
+  $('reset3').onclick=()=>{n=1;cur=null;draw();};
+  // 拖 P
+  let drag=false;function posf(e){const r=cv.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};}
+  cv.addEventListener('mousedown',e=>{const c=coord();const m=posf(e);if(Math.hypot(c.X(P.x)-m.x,c.Y(P.y)-m.y)<16)drag=true;});
+  function mv(e){if(!drag)return;e.preventDefault&&e.preventDefault();const c=coord();const m=posf(e);let x=Math.max(-range,Math.min(range,c.ix(m.x)));let y=ocy(x);if(y===null){let best=null,bd=1e9;for(let xx=-range;xx<=range;xx+=0.01){if(ocy(xx)!==null){const d=Math.abs(xx-x);if(d<bd){bd=d;best=xx;}}}x=best;y=ocy(x);}P.x=x;P.y=c.iy(m.y)>=0?y:-y;if(Math.abs(P.y)<0.05)P.y=(P.y>=0?1:-1)*0.05;n=1;cur=null;draw();}
+  cv.addEventListener('mousemove',mv);window.addEventListener('mouseup',()=>drag=false);
+  cv.addEventListener('touchstart',e=>{const c=coord();const m=posf(e);if(Math.hypot(c.X(P.x)-m.x,c.Y(P.y)-m.y)<18)drag=true;},{passive:true});
+  cv.addEventListener('touchmove',mv,{passive:false});window.addEventListener('touchend',()=>drag=false);
+  window.addEventListener('resize',draw);draw();
+})();
+
+/* ========== 有限域通用运算 ========== */
+function modp(n,p){return((n%p)+p)%p;}
+function curvePoints(p,a,b){
+  const pts=[];
+  for(let x=0;x<p;x++){
+    const rhs=modp(x*x%p*x + a*x + b,p);
+    for(let y=0;y<p;y++){ if(modp(y*y,p)===rhs) pts.push([x,y]); }
+  }
+  return pts;
+}
+function inv(n,p){n=modp(n,p);for(let i=1;i<p;i++)if(modp(n*i,p)===1)return i;return null;}
+function ecAdd(P,Q,a,p){ // null = O
+  if(!P)return Q; if(!Q)return P;
+  const[x1,y1]=P,[x2,y2]=Q;
+  if(x1===x2 && modp(y1+y2,p)===0) return null;
+  let lam;
+  if(x1===x2 && y1===y2){ lam=modp((3*x1*x1+a)*inv(2*y1,p),p); }
+  else lam=modp((y2-y1)*inv(modp(x2-x1,p),p),p);
+  const x3=modp(lam*lam-x1-x2,p); const y3=modp(lam*(x1-x3)-y1,p);
+  return[x3,y3];
+}
+function ecMul(k,G,a,p){let R=null,Q=G;while(k>0){if(k&1)R=ecAdd(R,Q,a,p);Q=ecAdd(Q,Q,a,p);k>>=1;}return R;}
+
+/* ========== 4. 有限域点集 ========== */
+let FIELD={p:67,a:2,b:3,pts:[]};
+(function(){
+  const cv=$('c4');
+  const pS=$('p4'),aS=$('a4'),bS=$('b4');
+  function draw(){
+    const p=+pS.value,a=+aS.value,b=+bS.value;
+    $('a4v').textContent=a;$('b4v').textContent=b;
+    const pts=curvePoints(p,a,b);
+    FIELD={p,a,b,pts};
+    $('pts4').innerHTML=`曲线 y² = x³ + ${a}x + ${b} (mod ${p})<br>共 <b style="color:#ffd166">${pts.length}</b> 个点 (+1 个无穷远点 O,阶 = <b>${pts.length+1}</b>)`;
+    const ctx=fitCanvas(cv);const W=cv._w,H=cv._h;ctx.clearRect(0,0,W,H);
+    const pad=28;const sx=(W-2*pad)/p,sy=(H-2*pad)/p;
+    const X=x=>pad+x*sx, Y=y=>H-pad-y*sy;
+    ctx.strokeStyle='#222b44';ctx.lineWidth=1;
+    const step=Math.ceil(p/12);
+    for(let g=0;g<=p;g+=step){ctx.beginPath();ctx.moveTo(X(g),pad);ctx.lineTo(X(g),H-pad);ctx.moveTo(pad,Y(g));ctx.lineTo(W-pad,Y(g));ctx.stroke();}
+    // symmetry line y=p/2
+    ctx.strokeStyle='#455075';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(pad,Y(p/2));ctx.lineTo(W-pad,Y(p/2));ctx.stroke();ctx.setLineDash([]);
+    for(const [x,y] of pts){ctx.beginPath();ctx.arc(X(x),Y(y),Math.max(2.5,Math.min(5,sx*0.35)),0,7);ctx.fillStyle='#5e8bff';ctx.fill();}
+    ctx.fillStyle='#93a0bd';ctx.font='12px monospace';ctx.fillText('x →',W-pad-24,H-pad+18);
+    // 通知第5、6节刷新
+    if(window._refreshDL)window._refreshDL();
+    if(window._refreshDH)window._refreshDH();
+  }
+  pS.onchange=draw;aS.oninput=draw;bS.oninput=draw;window.addEventListener('resize',draw);
+  window._drawField=draw; draw();
+})();
+
+/* ========== 5. 离散对数 + 跳跃路线 ========== */
+(function(){
+  const cv=$('c5');const kS=$('k5');
+  let SEQ=[],ORD=0,GG=null,anim=null,forcedG=null;
+  function ordOf(G){const {p,a}=FIELD;let R=null,n=0;do{R=ecAdd(R,G,a,p);n++;}while(R&&n<p*2);return n;}
+  function pickG(){ // 默认取阶最大的点;forcedG 时用随机选定的点
+    const {p,a,pts}=FIELD; if(!pts.length)return null;
+    if(forcedG) return {G:forcedG, ord:ordOf(forcedG)};
+    let best=pts[0],bestn=0;
+    for(const G of pts){const n=ordOf(G);if(n>bestn){bestn=n;best=G;}if(bestn>=pts.length)break;}
+    return {G:best,ord:bestn};
+  }
+  function randomG(){ // 在阶最大的那批点(生成元)里随机挑一个
+    const {pts}=FIELD; if(!pts.length)return;
+    let maxOrd=0; for(const G of pts){const n=ordOf(G);if(n>maxOrd)maxOrd=n;if(maxOrd>=pts.length)break;}
+    const gens=pts.filter(G=>ordOf(G)===maxOrd);
+    forcedG=gens[Math.floor(Math.random()*gens.length)];
+    kS.value=1; buildSeq(); draw();
+  }
+  function buildSeq(){
+    const {p,a,pts}=FIELD; if(!pts.length)return;
+    const info=pickG(); GG=info.G; ORD=info.ord;
+    SEQ=[]; let R=null; for(let i=1;i<=ORD;i++){R=ecAdd(R,GG,a,p);SEQ.push(R);}
+    kS.max=ORD; if(+kS.value>ORD)kS.value=ORD;
+  }
+  function draw(){
+    const {p,a,b,pts}=FIELD; if(!pts.length||!GG)return;
+    let k=Math.min(+kS.value,ORD); kS.value=k; $('k5v').textContent=k;
+    $('eq5').innerHTML=`曲线  <b style="color:#5e8bff">y² = x³ + ${a}x + ${b}  (mod ${p})</b>`;
+    const K=SEQ[k-1];
+    const ctx=fitCanvas(cv);const W=cv._w,H=cv._h;ctx.clearRect(0,0,W,H);
+    const pad=28;const sx=(W-2*pad)/p,sy=(H-2*pad)/p;const X=x=>pad+x*sx,Y=y=>H-pad-y*sy;
+    ctx.strokeStyle='#222b44';ctx.lineWidth=1;const step=Math.ceil(p/12);
+    for(let g=0;g<=p;g+=step){ctx.beginPath();ctx.moveTo(X(g),pad);ctx.lineTo(X(g),H-pad);ctx.moveTo(pad,Y(g));ctx.lineTo(W-pad,Y(g));ctx.stroke();}
+    for(const[x,y]of pts){ctx.beginPath();ctx.arc(X(x),Y(y),3,0,7);ctx.fillStyle='#2f3c60';ctx.fill();}
+    // 跳跃连线 1G→..→kG
+    if($('showPath5').checked){
+      for(let i=0;i<k-1;i++){const p1=SEQ[i],p2=SEQ[i+1];if(!p1||!p2)continue;const t=i/Math.max(1,k-1);
+        ctx.strokeStyle=`rgba(${94+t*160},${150-t*30},${255-t*100},0.75)`;ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.moveTo(X(p1[0]),Y(p1[1]));ctx.lineTo(X(p2[0]),Y(p2[1]));ctx.stroke();
+        const ang=Math.atan2(Y(p2[1])-Y(p1[1]),X(p2[0])-X(p1[0]));const ax=X(p2[0]),ay=Y(p2[1]);
+        ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(ax-6*Math.cos(ang-.4),ay-6*Math.sin(ang-.4));
+        ctx.moveTo(ax,ay);ctx.lineTo(ax-6*Math.cos(ang+.4),ay-6*Math.sin(ang+.4));ctx.stroke();}
+    }
+    // 已访问点
+    for(let i=0;i<k;i++){const pt=SEQ[i];if(!pt)continue;const t=i/Math.max(1,k-1);
+      ctx.beginPath();ctx.arc(X(pt[0]),Y(pt[1]),3.2,0,7);ctx.fillStyle=`rgba(${120+t*135},${175-t*20},255,.9)`;ctx.fill();}
+    // G
+    ctx.beginPath();ctx.arc(X(GG[0]),Y(GG[1]),6.5,0,7);ctx.fillStyle='#42d6a4';ctx.fill();ctx.strokeStyle='#0f1420';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#42d6a4';ctx.font='600 13px sans-serif';ctx.fillText('G',X(GG[0])+9,Y(GG[1])-8);
+    // 当前 K
+    if(K){ctx.beginPath();ctx.arc(X(K[0]),Y(K[1]),7.5,0,7);ctx.fillStyle='#ffb454';ctx.fill();ctx.strokeStyle='#0f1420';ctx.lineWidth=2;ctx.stroke();
+      ctx.fillStyle='#ffb454';ctx.font='600 13px sans-serif';ctx.fillText(k+'G',X(K[0])+9,Y(K[1])-8);}
+    $('dlog5').innerHTML=`基点 G = (${GG[0]}, ${GG[1]}) · 阶 = ${ORD}<br>私钥 k = <b>${k}</b><br><b style="color:#ffb454">公钥 K = ${k}·G = ${K?`(${K[0]}, ${K[1]})`:'O'}</b>`;
+  }
+  function stopAnim(){if(anim){clearInterval(anim);anim=null;$('play5').textContent='▶ 播放跳跃';}}
+  function speed(){const s=$('speed5');return s?+s.value:220;}
+  function stepSz(){const s=$('stepSize5');return s?+s.value:1;}
+  function advance(){const nv=+kS.value+stepSz();kS.value=Math.min(nv,ORD);draw();return +kS.value>=ORD;}
+  function startAnim(){stopAnim();$('play5').textContent='⏸ 暂停';
+    if(+kS.value>=ORD)kS.value=1;
+    anim=setInterval(()=>{if(advance())stopAnim();},speed());}
+  $('play5').onclick=()=>{if(anim)stopAnim();else startAnim();};
+  $('stepK').onclick=()=>{stopAnim();if(+kS.value<ORD)advance();};
+  $('reset5').onclick=()=>{stopAnim();kS.value=1;draw();};
+  $('randG5').onclick=()=>{stopAnim();randomG();};
+  $('showPath5').onchange=draw;
+  const sp=$('speed5'); if(sp)sp.onchange=()=>{if(anim)startAnim();};
+  kS.oninput=()=>{stopAnim();draw();};
+  window.addEventListener('resize',draw);
+  window._refreshDL=()=>{stopAnim();forcedG=null;buildSeq();draw();}; // 换曲线时重置 G
+  buildSeq(); draw();
+})();
+
+/* ========== 6. ECDH ========== */
+(function(){
+  let a=6,b=11;
+  function pickG(){const{p,a:ca,b:cb,pts}=FIELD;let best=pts[0],bestn=0;for(const G of pts){let R=null,n=0;do{R=ecAdd(R,G,ca,p);n++;}while(R&&n<p*2);if(n>bestn){bestn=n;best=G;}if(bestn>=pts.length)break;}return{G:best,ord:bestn};}
+  function fmt(P){return P?`(${P[0]}, ${P[1]})`:'O';}
+  function run(){
+    const{p,a:ca}=FIELD;const info=pickG();const G=info.G,ord=info.ord;
+    a=((a-1)%(ord-1))+1; b=((b-1)%(ord-1))+1;
+    const A=ecMul(a,G,ca,p), B=ecMul(b,G,ca,p);
+    const sA=ecMul(a,B,ca,p), sB=ecMul(b,A,ca,p);
+    $('aliceA').textContent=a; $('bobB').textContent=b;
+    $('alicePub').textContent=fmt(A); $('bobPub').textContent=fmt(B);
+    $('secA').textContent=fmt(sA); $('secB').textContent=fmt(sB);
+    const same=sA&&sB&&sA[0]===sB[0]&&sA[1]===sB[1];
+    $('secShared').innerHTML= same? fmt(sA) : '<span class="bad">不一致?</span>';
+  }
+  $('rekey').onclick=()=>{ // 用点位置伪随机取新私钥
+    const{pts}=FIELD;const seed=(pts.length*7+ (a*13+b*17))%97;
+    a=2+ (seed%9); b=2+ ((seed*3+5)%11); run();
+  };
+  window._refreshDH=run; run();
+})();
+</script>
+</body>
+</html>
