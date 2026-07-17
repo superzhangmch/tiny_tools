@@ -111,6 +111,24 @@ const mesh=new THREE.InstancedMesh(geo,mat,COUNT);
 scene.add(mesh);
 const dummy=new THREE.Object3D();
 
+// ---- 双星源(位于 -z 远端,轨道面在 x-y,引力波沿 +z 辐射) ----
+const srcZ=-72;
+const starGeo=new THREE.SphereGeometry(3,16,16);
+const starMat=new THREE.MeshStandardMaterial({color:0xffd27f, emissive:0x6a4700, roughness:0.5});
+const starA=new THREE.Mesh(starGeo,starMat);
+const starB=new THREE.Mesh(starGeo,starMat);
+const merged=new THREE.Mesh(new THREE.SphereGeometry(4.6,24,24),
+  new THREE.MeshStandardMaterial({color:0xfff0c0, emissive:0x8a6000, roughness:0.35}));
+merged.position.set(0,0,srcZ);
+const orbPts=[]; for(let i=0;i<=64;i++){ const a=2*Math.PI*i/64; orbPts.push(new THREE.Vector3(Math.cos(a),Math.sin(a),0)); }
+const orbitRing=new THREE.Line(new THREE.BufferGeometry().setFromPoints(orbPts),
+  new THREE.LineBasicMaterial({color:0xffd27f, transparent:true, opacity:0.3}));
+orbitRing.position.z=srcZ;
+const binaryGroup=new THREE.Group();
+binaryGroup.add(starA,starB,merged,orbitRing);
+binaryGroup.visible=false;
+scene.add(binaryGroup);
+
 // 参考(未形变)环，淡色线框
 const refMat=new THREE.LineBasicMaterial({color:0x3a4763, transparent:true, opacity:0.35});
 for(let iz=0;iz<NZ;iz++){ const z=(iz-(NZ-1)/2)*zStep;
@@ -144,6 +162,22 @@ function animate(now){
     dummy.updateMatrix(); mesh.setMatrixAt(i,dummy.matrix);
   }
   mesh.instanceMatrix.needsUpdate=true;
+
+  // 双星源动画
+  if(mode==='binary'){
+    binaryGroup.visible=true;
+    const orbA=phi/2;                       // 引力波频率 = 2×轨道频率
+    if(tau>0.92){                            // 并合 + 铃宕
+      starA.visible=starB.visible=orbitRing.visible=false; merged.visible=true;
+      merged.scale.setScalar(1+0.35*Math.exp(-(tau-0.92)*18)*Math.sin(phi*3));
+    } else {
+      starA.visible=starB.visible=orbitRing.visible=true; merged.visible=false;
+      const sep=Math.max(4, 22*(1-tau));
+      starA.position.set( sep*Math.cos(orbA),  sep*Math.sin(orbA), srcZ);
+      starB.position.set(-sep*Math.cos(orbA), -sep*Math.sin(orbA), srcZ);
+      orbitRing.scale.set(sep,sep,1);
+    }
+  } else binaryGroup.visible=false;
 
   controls.update();
   renderer.render(scene,camera);
