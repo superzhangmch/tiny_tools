@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>电磁波 3D · E⊥B 一起以光速传播 · 线偏振 / 圆偏振</title>
+<style>
+  :root { --panel:#111726cc; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5; --accent:#4da3ff; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#04050b; color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  #app { position:fixed; inset:0; }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--dim); font-size:14px; text-align:center; padding:20px; }
+  .panel { position:fixed; top:14px; right:14px; width:262px; background:var(--panel);
+    backdrop-filter:blur(8px); border:1px solid var(--line); border-radius:12px; padding:15px; }
+  h1 { font-size:15px; margin:0 0 4px; }
+  .sub { font-size:11.5px; color:var(--dim); margin:0 0 12px; line-height:1.55; }
+  .grp { margin:11px 0; }
+  .grp label { display:block; font-size:11.5px; color:var(--dim); margin-bottom:5px; }
+  .modes { display:flex; gap:6px; flex-wrap:wrap; }
+  button { background:#1b2536; color:var(--txt); border:1px solid var(--line);
+    padding:6px 9px; border-radius:8px; font-size:11.5px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#04101f; border-color:var(--accent); font-weight:600; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .legend { font-size:11.5px; line-height:1.7; }
+  .legend b.e { color:#ff6b6b; } .legend b.b { color:#6bb6ff; }
+  .hint { font-size:11px; color:var(--dim); line-height:1.6; border-top:1px solid var(--line);
+    padding-top:10px; margin-top:12px; }
+  .tag { position:fixed; left:14px; bottom:12px; font-size:11.5px; color:var(--dim); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading">正在加载 three.js …（此页需要联网；若长时间空白说明没联网，可改用 2D 版 maxwell_fdtd.html）</div>
+
+<div class="panel">
+  <h1>电磁波 3D</h1>
+  <p class="sub">平面电磁波沿 <b style="color:#ffd27f">z 轴</b>以光速传播。
+    <span class="legend"><b class="e">红 = 电场 E</b>，<b class="b">蓝 = 磁场 B</b></span>，
+    两者互相垂直、且同相位(一起到峰值)。拖动可旋转视角。</p>
+
+  <div class="grp">
+    <label>偏振</label>
+    <div class="modes">
+      <button id="mLinear" class="on">线偏振</button>
+      <button id="mCircular">圆偏振</button>
+    </div>
+  </div>
+  <div class="grp">
+    <label>显示</label>
+    <div class="modes">
+      <button id="tE" class="on">E 电场</button>
+      <button id="tB" class="on">B 磁场</button>
+      <button id="tTip" class="on">连峰曲线</button>
+    </div>
+  </div>
+  <div class="grp">
+    <label>波长 λ = <span id="lV">40</span></label>
+    <input type="range" id="lam" min="18" max="80" step="2" value="40">
+  </div>
+  <div class="grp">
+    <label>频率 = <span id="fV">0.6</span></label>
+    <input type="range" id="freq" min="0.1" max="1.6" step="0.05" value="0.6">
+  </div>
+  <div class="grp"><button id="pause">⏸ 暂停</button></div>
+
+  <div class="hint">这是平面波的<b>场结构</b>(两条旋度方程的解):E 与 B 垂直、同相、以 c 同行。
+    圆偏振时电场矢量端点画出一条<b>螺旋</b>。想看反射/衍射/双缝那种真·数值模拟,用 2D 版。</div>
+</div>
+<div class="tag">鼠标拖动=旋转 · 滚轮=缩放 · 右键=平移</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+document.getElementById('loading').remove();
+
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x04050b);
+const camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 3000);
+camera.position.set(70,42,78);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
+document.getElementById('app').appendChild(renderer.domElement);
+const controls=new OrbitControls(camera,renderer.domElement); controls.enableDamping=true; controls.dampingFactor=0.08;
+
+scene.add(new THREE.AmbientLight(0x8899bb,0.8));
+const pl=new THREE.PointLight(0xffffff,1.0); pl.position.set(60,80,90); scene.add(pl);
+
+// 传播轴(z)
+const L=110, N=52;
+scene.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,-L/2-8), L+16, 0xffd27f, 9, 5));
+// 淡轴线
+scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(
+  [new THREE.Vector3(0,0,-L/2),new THREE.Vector3(0,0,L/2)]),
+  new THREE.LineBasicMaterial({color:0x3a4763})));
+
+// E、B 箭头
+const SCALE=17;
+const eArrows=[], bArrows=[], zpos=[];
+const up=new THREE.Vector3(0,1,0);
+for(let i=0;i<N;i++){
+  const z=-L/2 + L*i/(N-1); zpos.push(z);
+  const ea=new THREE.ArrowHelper(up, new THREE.Vector3(0,0,z), 0.001, 0xff6b6b, 3, 2);
+  const ba=new THREE.ArrowHelper(up, new THREE.Vector3(0,0,z), 0.001, 0x6bb6ff, 3, 2);
+  scene.add(ea); scene.add(ba); eArrows.push(ea); bArrows.push(ba);
+}
+// 连峰曲线
+function tipLine(color){ const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N*3),3));
+  return new THREE.Line(g, new THREE.LineBasicMaterial({color})); }
+const eTip=tipLine(0xff6b6b), bTip=tipLine(0x6bb6ff);
+scene.add(eTip); scene.add(bTip);
+
+// 参数
+let mode='linear', running=true, lambda=40, freq=0.6, phi=0;
+let showE=true, showB=true, showTip=true;
+
+const tmp=new THREE.Vector3();
+
+let lastT=performance.now();
+function animate(now){
+  const dt=Math.min(0.05,(now-lastT)/1000); lastT=now;
+  if(running) phi += 2*Math.PI*freq*dt;
+  const k=2*Math.PI/lambda;
+  const eArr=eTip.geometry.attributes.position.array;
+  const bArr=bTip.geometry.attributes.position.array;
+
+  for(let i=0;i<N;i++){
+    const ph=k*zpos[i]-phi;
+    let Ex,Ey;
+    if(mode==='circular'){ Ex=Math.cos(ph); Ey=Math.sin(ph); }
+    else { Ex=0; Ey=Math.cos(ph); }
+    // B = ẑ × E = (−Ey, Ex, 0)，与 E 垂直、同相
+    const Bx=-Ey, By=Ex;
+    const ex=Ex*SCALE, ey=Ey*SCALE, bx=Bx*SCALE, by=By*SCALE;
+
+    eArrows[i].visible = showE && setArrowV(eArrows[i], zpos[i], ex, ey);
+    bArrows[i].visible = showB && setArrowV(bArrows[i], zpos[i], bx, by);
+
+    eArr[i*3]=ex; eArr[i*3+1]=ey; eArr[i*3+2]=zpos[i];
+    bArr[i*3]=bx; bArr[i*3+1]=by; bArr[i*3+2]=zpos[i];
+  }
+  eTip.visible=showTip&&showE; bTip.visible=showTip&&showB;
+  eTip.geometry.attributes.position.needsUpdate=true;
+  bTip.geometry.attributes.position.needsUpdate=true;
+
+  controls.update(); renderer.render(scene,camera);
+  requestAnimationFrame(animate);
+}
+// 返回是否可见(供 showE/showB 与零幅共同决定)
+function setArrowV(arr, base, vx, vy){
+  const mag=Math.hypot(vx,vy);
+  if(mag<1e-4) return false;
+  arr.position.set(0,0,base);
+  tmp.set(vx,vy,0).multiplyScalar(1/mag); arr.setDirection(tmp);
+  arr.setLength(mag, Math.min(4,mag*0.35), Math.min(2.4,mag*0.28));
+  return true;
+}
+requestAnimationFrame(animate);
+
+// 控件
+function setMode(m,id){ mode=m; phi=0;
+  ['mLinear','mCircular'].forEach(x=>document.getElementById(x).classList.remove('on'));
+  document.getElementById(id).classList.add('on'); }
+document.getElementById('mLinear').onclick=()=>setMode('linear','mLinear');
+document.getElementById('mCircular').onclick=()=>setMode('circular','mCircular');
+function toggle(id,set){ const b=document.getElementById(id);
+  b.onclick=()=>{ const v=!b.classList.contains('on'); b.classList.toggle('on',v); set(v); }; }
+toggle('tE',v=>showE=v); toggle('tB',v=>showB=v); toggle('tTip',v=>showTip=v);
+
+const lEl=document.getElementById('lam'),lV=document.getElementById('lV');
+lEl.oninput=()=>{lambda=+lEl.value;lV.textContent=lambda;};
+const fEl=document.getElementById('freq'),fV=document.getElementById('fV');
+fEl.oninput=()=>{freq=+fEl.value;fV.textContent=freq.toFixed(2);};
+document.getElementById('pause').onclick=e=>{running=!running;e.target.textContent=running?'⏸ 暂停':'▶ 继续';};
+
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); });
+</script>
+</body>
+</html>
