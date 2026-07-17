@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>麦克斯韦方程组可视化 · 2D FDTD 电磁波</title>
+<style>
+  :root { --bg:#0b0f17; --panel:#141b28; --line:#26324a; --txt:#dfe7f5; --dim:#8a99b5; --accent:#4da3ff; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  .wrap { display:flex; gap:16px; padding:16px; height:100%; align-items:flex-start; flex-wrap:wrap; }
+  .stage { position:relative; }
+  canvas { background:#000; border-radius:10px; image-rendering:pixelated;
+    box-shadow:0 8px 30px rgba(0,0,0,.5); cursor:crosshair; touch-action:none; }
+  .panel { width:280px; background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:16px; }
+  h1 { font-size:16px; margin:0 0 4px; }
+  .sub { font-size:12px; color:var(--dim); margin:0 0 14px; line-height:1.5; }
+  .grp { margin:14px 0; }
+  .grp label { display:block; font-size:12px; color:var(--dim); margin-bottom:6px; }
+  .modes { display:flex; gap:6px; flex-wrap:wrap; }
+  button { background:#1d283b; color:var(--txt); border:1px solid var(--line);
+    padding:7px 10px; border-radius:8px; font-size:12px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#04101f; border-color:var(--accent); font-weight:600; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .row { display:flex; justify-content:space-between; font-size:12px; color:var(--dim); }
+  .hint { font-size:11.5px; color:var(--dim); line-height:1.6; border-top:1px solid var(--line);
+    padding-top:12px; margin-top:14px; }
+  .eq { font-size:11px; color:#9fb4d8; background:#0e1420; border:1px solid var(--line);
+    border-radius:8px; padding:8px 10px; margin-top:8px; line-height:1.7; }
+  .fps { position:absolute; top:8px; left:10px; font-size:11px; color:#7fd0ff;
+    background:rgba(0,0,0,.4); padding:2px 6px; border-radius:5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="c"></canvas>
+    <div class="fps" id="fps"></div>
+  </div>
+
+  <div class="panel">
+    <h1>麦克斯韦方程组 · 电磁波</h1>
+    <p class="sub">2D FDTD(时域有限差分)。颜色 = 电场 E<sub>z</sub>(垂直屏幕方向):
+      <b style="color:#ff6b6b">红</b> 正 · <b style="color:#6bb6ff">蓝</b> 负。
+      灰色 = 金属(理想导体)。</p>
+
+    <div class="grp">
+      <label>鼠标模式（在画面上拖动）</label>
+      <div class="modes">
+        <button id="mSource" class="on">放波源</button>
+        <button id="mWall">画金属</button>
+        <button id="mErase">擦除</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <label>波长 λ = <span id="lamV">18</span> 格</label>
+      <input type="range" id="lam" min="8" max="48" value="18">
+    </div>
+
+    <div class="grp">
+      <label>示例场景</label>
+      <div class="modes">
+        <button id="pDouble">双缝干涉</button>
+        <button id="pLens">透镜聚焦</button>
+        <button id="pPoint">中心点源</button>
+        <button id="pPulse">💥 单脉冲</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="modes">
+        <button id="pause">⏸ 暂停</button>
+        <button id="clearF">清空场</button>
+        <button id="clearW">清空金属</button>
+      </div>
+    </div>
+
+    <div class="hint">
+      每一帧交替更新两条旋度方程:
+      <div class="eq">
+        ∂B/∂t = −∇×E &nbsp;(法拉第)<br>
+        ∂E/∂t = &nbsp;∇×B &nbsp;(安培-麦克斯韦)
+      </div>
+      边界是吸收层(模拟无限空间),金属处强制 E<sub>z</sub>=0(电场无法穿透理想导体)。
+      试试:画一堵带缝的墙看衍射,或围一圈金属看谐振腔驻波。
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- 网格与场 ----------
+const W = 360, H = 260;            // 计算网格
+const SCALE = 2;                    // 每个格子渲染 2x2 像素
+const cv = document.getElementById('c');
+cv.width = W; cv.height = H;
+cv.style.width = (W*SCALE)+'px'; cv.style.height = (H*SCALE)+'px';
+const ctx = cv.getContext('2d');
+const img = ctx.createImageData(W, H);
+
+const N = W*H;
+const ez = new Float32Array(N);   // 电场 (z 分量)
+const hx = new Float32Array(N);   // 磁场 x
+const hy = new Float32Array(N);   // 磁场 y
+const solid = new Uint8Array(N);  // 1 = 金属导体
+// 吸收边界的损耗系数(graded loss，近似 PML)
+const caE = new Float32Array(N);  // ez 的衰减系数
+const cbE = new Float32Array(N);  // ez 的旋度系数
+const idx = (i,j) => i + j*W;
+
+const COURANT = 0.7071;           // 2D 稳定性: <= 1/sqrt(2)
+const PML = 24;                    // 吸收层厚度
+
+function buildBoundary(){
+  for (let j=0;j<H;j++) for (let i=0;i<W;i++){
+    // 到最近边界的距离
+    const d = Math.min(i, j, W-1-i, H-1-j);
+    let sigma = 0;
+    if (d < PML){ const x=(PML-d)/PML; sigma = 0.33*x*x*x; }
+    const k = idx(i,j);
+    caE[k] = (1-sigma)/(1+sigma);
+    cbE[k] = COURANT/(1+sigma);
+  }
+}
+buildBoundary();
+
+// ---------- 波源 ----------
+let sources = [];                  // {i,j} 软点源
+let pulses = [];                   // {i,j,t0} 一次性脉冲
+let lambda = 18;                   // 波长(格)
+let planeSrcX = -1;                // >=0 时在该列注入平面波
+let t = 0;
+let running = true;
+
+function omega(){ return 2*Math.PI*COURANT/lambda; }
+
+// ---------- 一步 FDTD ----------
+function step(){
+  const w = omega();
+  // 磁场更新: ∂B/∂t = -∇×E
+  for (let j=0;j<H-1;j++){
+    for (let i=0;i<W-1;i++){
+      const k = idx(i,j);
+      hx[k] -= COURANT*(ez[k+W] - ez[k]);   // -dEz/dy
+      hy[k] += COURANT*(ez[k+1] - ez[k]);   //  dEz/dx
+    }
+  }
+  // 电场更新: ∂E/∂t = ∇×B
+  for (let j=1;j<H;j++){
+    for (let i=1;i<W;i++){
+      const k = idx(i,j);
+      if (solid[k]){ ez[k]=0; continue; }   // 理想导体
+      const curl = (hy[k]-hy[k-1]) - (hx[k]-hx[k-W]);
+      ez[k] = caE[k]*ez[k] + cbE[k]*curl;
+    }
+  }
+  // 注入源(软源,不反射)
+  const s = 6*Math.sin(w*t);
+  if (planeSrcX>=0){
+    for (let j=PML;j<H-PML;j++){ const k=idx(planeSrcX,j); if(!solid[k]) ez[k]+=s; }
+  }
+  for (const p of sources){ const k=idx(p.i,p.j); if(!solid[k]) ez[k]+=s; }
+  // 一次性脉冲: 高斯的导数(净值为零),抖一下就停 -> 干净的向外行波
+  for (const p of pulses){
+    const tt = t - p.t0 - 30;
+    const env = -(tt/8) * Math.exp(-(tt*tt)/(2*8*8));
+    const k = idx(p.i,p.j); if(!solid[k]) ez[k] += 60*env;
+  }
+  pulses = pulses.filter(p => (t - p.t0) < 70);
+  t++;
+}
+
+// ---------- 渲染 ----------
+function render(){
+  const d = img.data;
+  const scale = 3.0; // 显示对比度
+  for (let k=0;k<N;k++){
+    let p = k*4;
+    if (solid[k]){ d[p]=90; d[p+1]=100; d[p+2]=120; d[p+3]=255; continue; }
+    let a = ez[k]/scale; if(a>1)a=1; if(a<-1)a=-1;
+    let r,g,b;
+    if (a>=0){ r=255; g=255*(1-a); b=255*(1-a); }
+    else     { b=255; r=255*(1+a); g=255*(1+a); }
+    d[p]=r; d[p+1]=g; d[p+2]=b; d[p+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+}
+
+// ---------- 主循环 ----------
+let last=performance.now(), frames=0, fpsEl=document.getElementById('fps');
+function loop(now){
+  if (running){ for(let s=0;s<3;s++) step(); }
+  render();
+  frames++;
+  if (now-last>500){ fpsEl.textContent = Math.round(frames*1000/(now-last))+' fps · t='+t;
+    frames=0; last=now; }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---------- 交互 ----------
+let mode='source', down=false;
+function setMode(m,btn){ mode=m;
+  ['mSource','mWall','mErase'].forEach(id=>document.getElementById(id).classList.remove('on'));
+  btn.classList.add('on');
+}
+document.getElementById('mSource').onclick=e=>setMode('source',e.target);
+document.getElementById('mWall').onclick  =e=>setMode('wall',e.target);
+document.getElementById('mErase').onclick =e=>setMode('erase',e.target);
+
+function evtCell(e){
+  const r=cv.getBoundingClientRect();
+  const i=Math.floor((e.clientX-r.left)/SCALE);
+  const j=Math.floor((e.clientY-r.top)/SCALE);
+  return {i:Math.max(0,Math.min(W-1,i)), j:Math.max(0,Math.min(H-1,j))};
+}
+function paint(e){
+  const {i,j}=evtCell(e);
+  if (mode==='source'){
+    planeSrcX=-1;                       // 手动点源时关掉平面波
+    if(!sources.some(p=>p.i===i&&p.j===j)) sources.push({i,j});
+  } else {
+    const rad=4;
+    for(let dj=-rad;dj<=rad;dj++)for(let di=-rad;di<=rad;di++){
+      const ii=i+di, jj=j+dj; if(ii<0||jj<0||ii>=W||jj>=H) continue;
+      if(di*di+dj*dj>rad*rad) continue;
+      solid[idx(ii,jj)] = (mode==='wall')?1:0;
+    }
+  }
+}
+cv.addEventListener('pointerdown',e=>{down=true;paint(e);});
+cv.addEventListener('pointermove',e=>{if(down)paint(e);});
+window.addEventListener('pointerup',()=>down=false);
+
+// ---------- 控件 ----------
+const lamEl=document.getElementById('lam'), lamV=document.getElementById('lamV');
+lamEl.oninput=()=>{lambda=+lamEl.value; lamV.textContent=lambda;};
+document.getElementById('pause').onclick=e=>{running=!running; e.target.textContent=running?'⏸ 暂停':'▶ 继续';};
+document.getElementById('clearF').onclick=()=>{ez.fill(0);hx.fill(0);hy.fill(0);t=0;};
+document.getElementById('clearW').onclick=()=>{solid.fill(0);};
+
+function resetAll(){ ez.fill(0);hx.fill(0);hy.fill(0);solid.fill(0);sources=[];pulses=[];planeSrcX=-1;t=0; }
+
+// 示例场景
+document.getElementById('pPoint').onclick=()=>{ resetAll(); sources.push({i:W>>1,j:H>>1}); };
+document.getElementById('pDouble').onclick=()=>{
+  resetAll(); planeSrcX=PML+6;
+  const wallX=W>>2, cx=H>>1, gap=6, sep=28;
+  for(let j=PML;j<H-PML;j++){
+    const nearA=Math.abs(j-(cx-sep))<gap, nearB=Math.abs(j-(cx+sep))<gap;
+    if(!nearA && !nearB){ solid[idx(wallX,j)]=1; solid[idx(wallX+1,j)]=1; }
+  }
+};
+document.getElementById('pLens').onclick=()=>{
+  resetAll(); planeSrcX=PML+6;
+  // 一堵带小孔的金属，近似把平面波变成会聚/衍射
+  const wallX=W>>2, cx=H>>1;
+  for(let j=PML;j<H-PML;j++){ if(Math.abs(j-cx)>10){ solid[idx(wallX,j)]=1; solid[idx(wallX+1,j)]=1; } }
+};
+
+document.getElementById('pPulse').onclick=()=>{
+  // 只在中心抖一下就停: 看波纹独自扩散出去、中心归零 = 传播的铁证
+  ez.fill(0);hx.fill(0);hy.fill(0);sources=[];planeSrcX=-1;
+  pulses=[{i:W>>1,j:H>>1,t0:t}];
+};
+
+// 默认场景
+document.getElementById('pPoint').click();
+</script>
+</body>
+</html>
