@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinyCPU 计算器 — 每一次计算都由模拟处理器算出</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --line:#2a3140;
+    --txt:#e6edf3; --dim:#8b98a5; --accent:#58a6ff; --green:#3fb950;
+    --amber:#e3b341; --red:#f85149; --purple:#bc8cff; --mono:'SF Mono',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5}
+  a{color:var(--accent)}
+  .wrap{max-width:1240px;margin:0 auto;padding:20px}
+  header h1{font-size:20px;margin:0 0 4px}
+  header p{margin:0 0 16px;color:var(--dim)}
+  .grid{display:grid;grid-template-columns:360px 1fr;gap:18px;align-items:start}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:0 0 12px;font-weight:600}
+
+  /* calculator */
+  .disp{background:#05070a;border:1px solid var(--line);border-radius:10px;padding:14px 16px;text-align:right;margin-bottom:12px}
+  .disp .expr{color:var(--dim);font-family:var(--mono);min-height:18px;font-size:13px;word-break:break-all}
+  .disp .res{font-size:30px;font-family:var(--mono);color:var(--green);word-break:break-all;min-height:38px}
+  .keys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  button.k{background:var(--panel2);border:1px solid var(--line);color:var(--txt);font-size:16px;padding:14px 0;border-radius:9px;cursor:pointer;font-family:var(--mono);transition:.08s}
+  button.k:hover{border-color:var(--accent)}
+  button.k:active{transform:translateY(1px)}
+  button.k.op{color:var(--amber)}
+  button.k.fn{color:var(--purple);font-size:14px}
+  button.k.eq{background:var(--accent);color:#05070a;font-weight:700;grid-column:span 2}
+  button.k.clr{color:var(--red)}
+  button.k.wide{grid-column:span 2}
+  .modebar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .toggle{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .toggle button{background:var(--panel2);border:0;color:var(--dim);padding:6px 12px;cursor:pointer;font-size:12px}
+  .toggle button.active{background:var(--accent);color:#05070a;font-weight:600}
+  .chk{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:12px;cursor:pointer}
+
+  /* right side */
+  .stat{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+  .stat div{font-family:var(--mono);font-size:13px}
+  .stat b{color:var(--accent)}
+  .regs{font-family:var(--mono);font-size:12px}
+  .regrow{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:5px 8px;margin-bottom:5px;transition:border-color .1s}
+  .regrow.chg{border-color:var(--amber);background:#241f14}
+  .regrow .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .regrow .n{color:var(--purple);font-weight:700}
+  .regrow .dec{color:var(--green);flex:1;text-align:right;word-break:break-all}
+  .regrow .hex{color:#5a6472;font-size:10px}
+  .bits{font-family:var(--mono);font-size:9px;line-height:1.5;white-space:nowrap;overflow-x:auto;padding:3px 0 1px}
+  .bits .b0{color:#39414d}
+  .bits .b1{color:var(--green)}
+  .bits .bc{background:var(--amber);color:#0d1117;border-radius:2px;font-weight:700}
+  .bits .bg{display:inline-block;width:4px}
+  .bits .pt{color:var(--red);font-weight:700;padding:0 1px}
+  .flags{font-family:var(--mono);font-size:12px;color:var(--dim);margin-top:8px}
+  .flags span.on{color:var(--green)}
+  .curinstr{font-family:var(--mono);font-size:12px;color:var(--amber);margin-left:auto}
+
+  .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .tabs button{background:var(--panel2);border:1px solid var(--line);color:var(--dim);padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px}
+  .tabs button.active{color:var(--txt);border-color:var(--accent)}
+  .pane{display:none}
+  .pane.active{display:block}
+
+  .prog{font-family:var(--mono);font-size:12px;max-height:340px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  .prog .ln{display:flex;gap:10px;padding:2px 10px;white-space:pre;border-bottom:1px solid #1a2029}
+  .prog .ln .a{color:var(--dim);width:34px;text-align:right}
+  .prog .ln .h{color:#4b5563;width:78px}
+  .prog .ln .t{color:var(--txt)}
+  .prog .ln.cur{background:#1f3326;border-left:3px solid var(--green);padding-left:7px}
+  .prog .ln.cur .t{color:#7ee787;font-weight:700}
+  .prog .ln.cur .a{color:var(--green)}
+
+  .play{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .play button{background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:6px 10px;border-radius:7px;cursor:pointer;font-size:12px}
+  .play button:disabled{opacity:.4;cursor:default}
+  .play input[type=range]{flex:1;min-width:120px}
+  .play .cyc{font-family:var(--mono);color:var(--dim);font-size:12px}
+
+  .trace{font-family:var(--mono);font-size:12px;white-space:pre-wrap;color:var(--dim);max-height:340px;overflow:auto;background:#05070a;border:1px solid var(--line);border-radius:8px;padding:10px}
+  .trace .cur{color:var(--amber)}
+
+  /* gate adder */
+  .adder{font-family:var(--mono);font-size:11px;overflow:auto}
+  .adder table{border-collapse:collapse}
+  .adder td,.adder th{border:1px solid var(--line);padding:2px 5px;text-align:center;min-width:20px}
+  .adder th{color:var(--dim);font-weight:400}
+  .bit0{color:#4b5563}.bit1{color:var(--green);font-weight:700}
+  .adder .lbl{color:var(--purple);text-align:right;padding-right:8px;white-space:nowrap}
+  .adder .cin{color:var(--amber)}
+  .note{color:var(--dim);font-size:12px;margin-top:10px}
+  .kbd{font-family:var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>TinyCPU 计算器</h1>
+    <p>一个从零搭的 <b>128 位定点</b>处理器模拟器（Q64.64，10+ 位有效数字）。屏幕上每一个数字——哪怕是 <span class="kbd">3+5</span>——都由这颗模拟 CPU 的 ALU 逐位算出，三角函数用 CORDIC 机器码程序（只靠加法和移位）算出。</p>
+  </header>
+
+  <div class="grid">
+    <!-- ============ LEFT: calculator ============ -->
+    <div class="card">
+      <div class="disp">
+        <div class="expr" id="expr">&nbsp;</div>
+        <div class="res" id="res">0</div>
+      </div>
+      <div class="modebar">
+        <div class="toggle" id="angleMode">
+          <button data-m="deg" class="active">DEG</button>
+          <button data-m="rad">RAD</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="recordChk"> 单步观察（录制执行过程）</label>
+      </div>
+      <div class="keys">
+        <button class="k fn" data-k="sin(">sin</button>
+        <button class="k fn" data-k="cos(">cos</button>
+        <button class="k fn" data-k="tan(">tan</button>
+        <button class="k clr" data-act="clear">C</button>
+
+        <button class="k fn" data-k="sqrt(">√</button>
+        <button class="k fn" data-k="pi">π</button>
+        <button class="k op" data-k="^">x^y</button>
+        <button class="k op" data-act="back">⌫</button>
+
+        <button class="k fn" data-k="ln(">ln</button>
+        <button class="k fn" data-k="exp(">eˣ</button>
+        <button class="k fn" data-k="log(">log</button>
+        <button class="k fn" data-k="e">e</button>
+
+        <button class="k" data-k="7">7</button>
+        <button class="k" data-k="8">8</button>
+        <button class="k" data-k="9">9</button>
+        <button class="k op" data-k="/">÷</button>
+
+        <button class="k" data-k="4">4</button>
+        <button class="k" data-k="5">5</button>
+        <button class="k" data-k="6">6</button>
+        <button class="k op" data-k="*">×</button>
+
+        <button class="k" data-k="1">1</button>
+        <button class="k" data-k="2">2</button>
+        <button class="k" data-k="3">3</button>
+        <button class="k op" data-k="-">−</button>
+
+        <button class="k" data-k="0">0</button>
+        <button class="k" data-k=".">.</button>
+        <button class="k op" data-k="(">(</button>
+        <button class="k op" data-k=")">)</button>
+
+        <button class="k op wide" data-k="+">+</button>
+        <button class="k eq" data-act="eq">=</button>
+      </div>
+      <div class="note">键盘同样可用：数字、<span class="kbd">+ - * /</span>、<span class="kbd">(</span> <span class="kbd">)</span>、<span class="kbd">Enter</span>=计算、<span class="kbd">Esc</span>=清空。</div>
+    </div>
+
+    <!-- ============ RIGHT: CPU internals ============ -->
+    <div class="card">
+      <h2>处理器内部状态</h2>
+      <div class="stat">
+        <div>PC <b id="pc">0</b></div>
+        <div>周期 <b id="cyc">0</b></div>
+        <div>本次计算 <b id="cycTotal">0</b> 周期</div>
+      </div>
+      <div class="regs" id="regs"></div>
+      <div class="flags" id="flags"></div>
+
+      <div class="play" id="playbar" style="margin-top:14px;display:none">
+        <button id="pFirst">⏮</button>
+        <button id="pPrev">◀ 步</button>
+        <button id="pPlay">▶ 播放</button>
+        <button id="pNext">步 ▶</button>
+        <button id="pLast">⏭</button>
+        <input type="range" id="pSlider" min="0" max="0" value="0">
+        <span class="cyc" id="pInfo">0 / 0</span>
+        <span class="cyc">慢 🐢</span>
+        <input type="range" id="pSpeed" min="1" max="100" value="22" style="max-width:110px" title="播放速度">
+        <span class="cyc">🐇 快</span>
+        <span class="curinstr" id="pCurInstr"></span>
+      </div>
+
+      <div class="tabs" style="margin-top:14px">
+        <button data-t="prog" class="active">机器码程序</button>
+        <button data-t="adder">门电路加法器</button>
+        <button data-t="trace">计算轨迹</button>
+        <button data-t="about">原理</button>
+      </div>
+
+      <div class="pane active" id="pane-prog">
+        <div class="prog" id="prog"></div>
+        <div class="note">这是常驻在内存里的机器码库（含 sin/cos 的 CORDIC 子程序）。开启"单步观察"后，绿色高亮表示当前执行到的指令。</div>
+      </div>
+
+      <div class="pane" id="pane-adder">
+        <div class="adder" id="adder"></div>
+        <div class="note">最近一次 <b>ADD/SUB</b> 的逐位纹波进位过程：每一位由 <b>和 = a⊕b⊕进位</b>、<b>进位 = 多数(a,b,进位)</b> 得到——纯逻辑门，没用 JavaScript 的 <span class="kbd">+</span>。减法 = 加上补码。</div>
+      </div>
+
+      <div class="pane" id="pane-trace">
+        <div class="trace" id="trace">还没有计算。</div>
+      </div>
+
+      <div class="pane" id="pane-about">
+        <div class="note" style="line-height:1.7">
+          <b>数字格式</b>：有符号 <b>128 位定点 Q64.64</b>（整数 64 位 + 小数 64 位），分辨率 2⁻⁶⁴≈5.4e-20，足够 <b>10+ 位有效数字</b>。<br>
+          <b>加/减</b>：128 位纹波进位加法器，逐位逻辑门；减法用二进制补码。<br>
+          <b>乘/除</b>：移位-相加 / 移位-相减（内部用 256 位累加器，仍归结为上面的门加法器）。<br>
+          <b>sin/cos</b>：<a href="https://en.wikipedia.org/wiki/CORDIC" target="_blank">CORDIC</a> 机器码子程序，48 次迭代——只用加法、减法、算术右移，外加一张 arctan(2⁻ⁱ) 只读表。π 等常数以 50 位十进制精度写入 ROM。<br>
+          <b>√</b>：牛顿迭代 x←(x+a/x)/2（机器码子程序）。<b>tan</b> = sin ÷ cos。<b>角度制</b>先在 CPU 上乘以 π/180 转弧度。<br>
+          <b>eˣ / ln</b>：区间归约 + 泰勒/atanh 级数机器码子程序（e^x=2^k·e^r；ln a=e·ln2+ln m）。<b>log</b>=ln/ln10。<br>
+          <b>xʸ</b>：整数幂用重复相乘（E_POW，精确）；非整数幂 = <b>eˣ 与 ln 组合</b> exp(y·ln x)——全部在 CPU 上，不再有任何 Math 兜底。<br>
+          <b>指令集</b>：MOVI/MOV/LD/ST/ADD/SUB/MUL/DIV/SHL/SHR/CMP/条件跳转/CALL/RET/HALT，编码成 32 位机器字，取指-译码-执行。
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   TinyCPU — a from-scratch fixed-point CPU emulator.
+
+   Design goals:
+     * Every arithmetic result the calculator shows is produced by this
+       emulated CPU, NOT by JavaScript's own math. Even "3 + 5" is added
+       one bit at a time by a gate-level ripple-carry adder.
+     * sin / cos / tan are computed by a real machine-code program running
+       on this CPU using the CORDIC algorithm — nothing but additions,
+       subtractions and bit-shifts (plus a small arctan ROM table).
+
+   Number format: signed 128-bit fixed point, Q64.64
+     value_stored (int128) = round(real * 2^64)
+     real                  = value_stored / 2^64
+   Integer range ~ ±9.2e18, resolution 2^-64 ≈ 5.4e-20  →  well over
+   10 significant decimal digits of accuracy for the calculator.
+   ===================================================================== */
+
+(function (root) {
+'use strict';
+
+/* ------------------------------------------------------------------ */
+/* Fixed-point format                                                  */
+/* ------------------------------------------------------------------ */
+const WIDTH = 128n;
+const FRAC  = 64n;
+const MASK  = (1n << WIDTH) - 1n;
+const SIGNB = 1n << (WIDTH - 1n);
+const ONE   = 1n << FRAC;                    // 1.0
+const ONE_N = Number(ONE);
+
+const u   = v => v & MASK;                   // wrap to unsigned 128-bit
+const sgn = v => { v &= MASK; return (v & SIGNB) ? v - (1n << WIDTH) : v; };
+
+function toFloat(v) { return Number(sgn(v)) / ONE_N; }
+
+function toFixed(real) {                     // JS number -> Q64.64 pattern
+  const neg = real < 0;
+  let r = Math.abs(real);
+  const ip = Math.floor(r);
+  const fp = r - ip;
+  let v = (BigInt(ip) << FRAC) + BigInt(Math.round(fp * ONE_N));
+  return u(neg ? -v : v);
+}
+
+/* Exact decimal string -> Q64.64 (used for the high-precision π, etc). */
+function decToFixed(str) {
+  str = String(str).trim();
+  let neg = false;
+  if (str[0] === '-') { neg = true; str = str.slice(1); }
+  const [ip, fp = ''] = str.split('.');
+  let v = BigInt(ip || '0') << FRAC;
+  if (fp.length) {
+    const D = BigInt(fp.length), F = BigInt(fp);
+    const num = F << FRAC, den = 10n ** D;
+    v += (num + den / 2n) / den;             // round to nearest
+  }
+  return u(neg ? -v : v);
+}
+
+/* ------------------------------------------------------------------ */
+/* Gate-level ripple-carry adder — built only from AND / OR / XOR.     */
+/* Works at an arbitrary bit width (32 for the visible ALU, wider for  */
+/* the internal MUL/DIV intermediates).                                */
+/* ------------------------------------------------------------------ */
+function gateAdd(a, b, width, recordCarries) {
+  const W = BigInt(width);
+  const m = (1n << W) - 1n;
+  a &= m; b &= m;
+  let carry = 0n, res = 0n;
+  const carries = recordCarries ? [] : null;
+  for (let i = 0n; i < W; i++) {
+    const ai = (a >> i) & 1n;
+    const bi = (b >> i) & 1n;
+    const sum  = ai ^ bi ^ carry;                          // XOR
+    const cout = (ai & bi) | (bi & carry) | (ai & carry);  // AND / OR
+    res |= (sum << i);
+    if (carries) carries.push({ i: Number(i), ai:Number(ai), bi:Number(bi), cin:Number(carry), sum:Number(sum), cout:Number(cout) });
+    carry = cout;
+  }
+  return { sum: res & m, carry, carries };
+}
+function gateNot(a, width) { return (~a) & ((1n << BigInt(width)) - 1n); }
+function gateNeg(a, width) { return gateAdd(gateNot(a, width), 1n, width).sum; }        // two's complement
+function gateSub(a, b, width, rec) { return gateAdd(a, gateNeg(b, width), width, rec); }
+
+/* MUL: Q64.64 * Q64.64 -> Q64.64 via 256-bit shift-and-add.           */
+function aluMul(a, b) {
+  const sa = sgn(a), sb = sgn(b);
+  const neg = (sa < 0n) !== (sb < 0n);
+  let A = sa < 0n ? -sa : sa, B = sb < 0n ? -sb : sb;
+  let prod = 0n;
+  for (let i = 0n; i < 128n; i++)
+    if ((B >> i) & 1n) prod = gateAdd(prod, A << i, 256).sum;   // partial products
+  let q = (prod >> FRAC) & MASK;                                // rescale
+  if (neg) q = gateNeg(q, 128);
+  return q & MASK;
+}
+
+/* DIV: Q64.64 / Q64.64 -> Q64.64 via restoring shift-and-subtract.    */
+function aluDiv(a, b) {
+  const sa = sgn(a), sb = sgn(b);
+  if (sb === 0n) return 0n;
+  const neg = (sa < 0n) !== (sb < 0n);
+  let A = sa < 0n ? -sa : sa, B = sb < 0n ? -sb : sb;
+  let num = A << FRAC;                                          // pre-scale dividend
+  let q = 0n, rem = 0n;
+  for (let i = 191; i >= 0; i--) {
+    rem = (rem << 1n) | ((num >> BigInt(i)) & 1n);
+    if (rem >= B) { rem = gateSub(rem, B, 256).sum; q |= (1n << BigInt(i)); }
+  }
+  q &= MASK;
+  if (neg) q = gateNeg(q, 128);
+  return q & MASK;
+}
+
+/* ------------------------------------------------------------------ */
+/* Instruction set                                                     */
+/* ------------------------------------------------------------------ */
+const OP = {
+  HALT:0, MOVI:1, MOV:2, LD:3, LDX:4, ST:5, STX:6,
+  ADD:7, SUB:8, ADDI:9, SHL:10, SHR:11, SHLV:12, SHRV:13,
+  MUL:14, DIV:15, CMP:16, CMPI:17, JMP:18, JZ:19, JNZ:20,
+  JN:21, JGE:22, CALL:23, RET:24, NEG:25, NOP:26
+};
+const OP_NAME = Object.keys(OP).reduce((m,k)=>(m[OP[k]]=k,m),{});
+
+function encode(op, rd=0, ra=0, rb=0, imm=0) {
+  return (((op & 0x3F) << 26) | ((rd & 7) << 23) | ((ra & 7) << 20) |
+          ((rb & 7) << 17) | (imm & 0xFFFF)) >>> 0;
+}
+function decode(w) {
+  let imm = w & 0xFFFF; if (imm & 0x8000) imm -= 0x10000;
+  return { op:(w>>>26)&0x3F, rd:(w>>>23)&7, ra:(w>>>20)&7, rb:(w>>>17)&7, imm };
+}
+
+/* ------------------------------------------------------------------ */
+/* Data (ROM/RAM) symbol layout — word addressed, kept above program.  */
+/* ------------------------------------------------------------------ */
+const SYM = {
+  IN0:256, IN1:257, OUT:258, OUT2:259, SGN:260,
+  K:280, PI:281, HALF_PI:282, TWO_PI:283, NEG_PI:284, NEG_HALF_PI:285,
+  DEG2RAD:286, ONEC:287, LN2:288, SQRT2:289, TWOC:290, HALFC:291, LN10:292,
+  ATAN:300
+};
+const CORDIC_N = 48;                         // iterations (resolves past ~14 digits)
+
+/* High-precision constants (50 significant digits, exact to Q64.64).  */
+const PI_STR      = '3.14159265358979323846264338327950288419716939937511';
+const HALF_PI_STR = '1.57079632679489661923132169163975144209858469968756';
+const TWO_PI_STR  = '6.28318530717958647692528676655900576839433879875021';
+const DEG2RAD_STR = '0.01745329251994329576923690768488612713442871888542';
+const LN2_STR     = '0.69314718055994530941723212145817656807550013436026';
+const SQRT2_STR   = '1.41421356237309504880168872420969807856967187537694';
+const LN10_STR    = '2.30258509299404568401799145468436420760110148862877';
+const E_STR       = '2.71828182845904523536028747135266249775724709369996';
+
+function cordicConstants() {
+  let k = 1.0;
+  const atan = [];
+  for (let i = 0; i < CORDIC_N; i++) {
+    k *= 1 / Math.sqrt(1 + Math.pow(2, -2 * i));
+    atan.push(toFixed(Math.atan(Math.pow(2, -i))));
+  }
+  return { K: toFixed(k), atan };
+}
+
+/* ------------------------------------------------------------------ */
+/* Assembler                                                           */
+/* ------------------------------------------------------------------ */
+function assemble(src) {
+  const lines = src.split('\n');
+  const labels = {};
+  const cleaned = [];
+  for (let raw of lines) {
+    let line = raw.replace(/;.*/, '').trim();
+    if (!line) continue;
+    while (true) {
+      const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$/);
+      if (!m) break;
+      labels[m[1]] = cleaned.length;
+      line = m[2].trim();
+      if (!line) break;
+    }
+    if (line) cleaned.push(line);
+  }
+  const sym = Object.assign({}, SYM, labels);
+  const reg = t => { const m=/^R([0-7])$/.exec(t); if(!m) throw new Error('bad reg '+t); return +m[1]; };
+  const val = t => { if (t in sym) return sym[t]; const n = Number(t); if (Number.isNaN(n)) throw new Error('bad value '+t); return n; };
+  const memaddr = t => { const m=/^\[(.+)\]$/.exec(t); if(!m) throw new Error('bad mem '+t); return val(m[1].trim()); };
+  const memreg  = t => { const m=/^\[R([0-7])\]$/.exec(t); if(!m) throw new Error('bad memreg '+t); return +m[1]; };
+
+  const code = [], listing = [];
+  for (const line of cleaned) {
+    const parts = line.split(/\s+/);
+    const mn = parts[0].toUpperCase();
+    const a  = parts.slice(1).join(' ').split(',').map(s=>s.trim()).filter(Boolean);
+    let w;
+    switch (mn) {
+      case 'HALT': w = encode(OP.HALT); break;
+      case 'NOP':  w = encode(OP.NOP);  break;
+      case 'RET':  w = encode(OP.RET);  break;
+      case 'MOVI': w = encode(OP.MOVI, reg(a[0]), 0,0, val(a[1])); break;
+      case 'MOV':  w = encode(OP.MOV,  reg(a[0]), reg(a[1])); break;
+      case 'LD':   w = encode(OP.LD,   reg(a[0]), 0,0, memaddr(a[1])); break;
+      case 'LDX':  w = encode(OP.LDX,  reg(a[0]), memreg(a[1])); break;
+      case 'ST':   w = encode(OP.ST,   0, reg(a[1]), 0, memaddr(a[0])); break;
+      case 'STX':  w = encode(OP.STX,  0, memreg(a[0]), reg(a[1])); break;
+      case 'ADD':  w = encode(OP.ADD,  reg(a[0]), reg(a[1]), reg(a[2])); break;
+      case 'SUB':  w = encode(OP.SUB,  reg(a[0]), reg(a[1]), reg(a[2])); break;
+      case 'MUL':  w = encode(OP.MUL,  reg(a[0]), reg(a[1]), reg(a[2])); break;
+      case 'DIV':  w = encode(OP.DIV,  reg(a[0]), reg(a[1]), reg(a[2])); break;
+      case 'NEG':  w = encode(OP.NEG,  reg(a[0]), reg(a[1])); break;
+      case 'ADDI': w = encode(OP.ADDI, reg(a[0]), reg(a[1]), 0, val(a[2])); break;
+      case 'SHL':  w = encode(OP.SHL,  reg(a[0]), reg(a[1]), 0, val(a[2])); break;
+      case 'SHR':  w = encode(OP.SHR,  reg(a[0]), reg(a[1]), 0, val(a[2])); break;
+      case 'SHLV': w = encode(OP.SHLV, reg(a[0]), reg(a[1]), reg(a[2])); break;
+      case 'SHRV': w = encode(OP.SHRV, reg(a[0]), reg(a[1]), reg(a[2])); break;
+      case 'CMP':  w = encode(OP.CMP,  0, reg(a[0]), reg(a[1])); break;
+      case 'CMPI': w = encode(OP.CMPI, 0, reg(a[0]), 0, val(a[1])); break;
+      case 'JMP':  w = encode(OP.JMP,  0,0,0, val(a[0])); break;
+      case 'JZ':   w = encode(OP.JZ,   0,0,0, val(a[0])); break;
+      case 'JNZ':  w = encode(OP.JNZ,  0,0,0, val(a[0])); break;
+      case 'JN':   w = encode(OP.JN,   0,0,0, val(a[0])); break;
+      case 'JGE':  w = encode(OP.JGE,  0,0,0, val(a[0])); break;
+      case 'CALL': w = encode(OP.CALL, 0,0,0, val(a[0])); break;
+      default: throw new Error('unknown mnemonic: '+mn);
+    }
+    listing.push({ addr: code.length, word: w, text: line });
+    code.push(w >>> 0);
+  }
+  return { code, sym, listing };
+}
+
+/* ------------------------------------------------------------------ */
+/* Disassembler                                                        */
+/* ------------------------------------------------------------------ */
+function disasm(w) {
+  const d = decode(w), R = i => 'R'+i, n = OP_NAME[d.op] || '???';
+  switch (d.op) {
+    case OP.HALT: case OP.NOP: case OP.RET: return n;
+    case OP.MOVI: return `MOVI ${R(d.rd)}, ${d.imm}`;
+    case OP.MOV:  return `MOV ${R(d.rd)}, ${R(d.ra)}`;
+    case OP.LD:   return `LD ${R(d.rd)}, [${d.imm}]`;
+    case OP.LDX:  return `LDX ${R(d.rd)}, [${R(d.ra)}]`;
+    case OP.ST:   return `ST [${d.imm}], ${R(d.ra)}`;
+    case OP.STX:  return `STX [${R(d.ra)}], ${R(d.rb)}`;
+    case OP.ADD:  return `ADD ${R(d.rd)}, ${R(d.ra)}, ${R(d.rb)}`;
+    case OP.SUB:  return `SUB ${R(d.rd)}, ${R(d.ra)}, ${R(d.rb)}`;
+    case OP.MUL:  return `MUL ${R(d.rd)}, ${R(d.ra)}, ${R(d.rb)}`;
+    case OP.DIV:  return `DIV ${R(d.rd)}, ${R(d.ra)}, ${R(d.rb)}`;
+    case OP.NEG:  return `NEG ${R(d.rd)}, ${R(d.ra)}`;
+    case OP.ADDI: return `ADDI ${R(d.rd)}, ${R(d.ra)}, ${d.imm}`;
+    case OP.SHL:  return `SHL ${R(d.rd)}, ${R(d.ra)}, ${d.imm}`;
+    case OP.SHR:  return `SHR ${R(d.rd)}, ${R(d.ra)}, ${d.imm}`;
+    case OP.SHLV: return `SHLV ${R(d.rd)}, ${R(d.ra)}, ${R(d.rb)}`;
+    case OP.SHRV: return `SHRV ${R(d.rd)}, ${R(d.ra)}, ${R(d.rb)}`;
+    case OP.CMP:  return `CMP ${R(d.ra)}, ${R(d.rb)}`;
+    case OP.CMPI: return `CMPI ${R(d.ra)}, ${d.imm}`;
+    case OP.JMP:  return `JMP ${d.imm}`;
+    case OP.JZ:   return `JZ ${d.imm}`;
+    case OP.JNZ:  return `JNZ ${d.imm}`;
+    case OP.JN:   return `JN ${d.imm}`;
+    case OP.JGE:  return `JGE ${d.imm}`;
+    case OP.CALL: return `CALL ${d.imm}`;
+    default: return n;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Machine-code library resident in memory                             */
+/* ------------------------------------------------------------------ */
+const PROGRAM = `
+; ---- entry stubs: harness writes IN0/IN1, jumps to entry, runs to HALT ----
+E_ADD:  LD R0,[IN0]
+        LD R1,[IN1]
+        ADD R2,R0,R1
+        ST [OUT],R2
+        HALT
+E_SUB:  LD R0,[IN0]
+        LD R1,[IN1]
+        SUB R2,R0,R1
+        ST [OUT],R2
+        HALT
+E_MUL:  LD R0,[IN0]
+        LD R1,[IN1]
+        MUL R2,R0,R1
+        ST [OUT],R2
+        HALT
+E_DIV:  LD R0,[IN0]
+        LD R1,[IN1]
+        DIV R2,R0,R1
+        ST [OUT],R2
+        HALT
+E_NEG:  LD R0,[IN0]
+        NEG R1,R0
+        ST [OUT],R1
+        HALT
+E_D2R:  LD R0,[IN0]           ; degrees -> radians
+        LD R1,[DEG2RAD]
+        MUL R2,R0,R1
+        ST [OUT],R2
+        HALT
+E_SINCOS: CALL SINCOS         ; -> OUT=sin, OUT2=cos
+        HALT
+E_TAN:  CALL SINCOS
+        LD R0,[OUT]
+        LD R1,[OUT2]
+        DIV R2,R0,R1
+        ST [OUT],R2
+        HALT
+
+; ---- E_SQRT: sqrt(a) in IN0 -> OUT, Newton x<-(x+a/x)/2 as machine code ----
+; The whole iteration (loop, /2, convergence test) runs on the CPU itself,
+; just like CORDIC — the host only sets the input and reads the result.
+E_SQRT: LD R0,[IN0]          ; a
+        CMPI R0,0
+        JN  SQZERO           ; a < 0  -> 0
+        JZ  SQZERO           ; a == 0 -> 0
+        LD R3,[ONEC]         ; 1.0
+        CMP R0,R3
+        JN  SQG1             ; a < 1 -> start x = 1.0
+        MOV R1,R0            ; else   start x = a
+        JMP SQINIT
+SQG1:   MOV R1,R3
+SQINIT: MOVI R5,0            ; iteration counter
+SQLOOP: CMPI R5,80
+        JGE SQDONE
+        MOV R6,R1            ; remember old x
+        DIV R2,R0,R1         ; t = a / x
+        ADD R2,R2,R1         ; s = t + x
+        SHR R2,R2,1          ; x_new = s / 2
+        MOV R1,R2
+        CMP R1,R6            ; x_new - old_x
+        JGE SQDONE           ; stopped decreasing (converged, monotone from above)
+        ADDI R5,R5,1
+        JMP SQLOOP
+SQDONE: ST [OUT],R1
+        HALT
+SQZERO: MOVI R1,0
+        ST [OUT],R1
+        HALT
+
+; ---- E_POW: base in IN0, integer exponent in IN1 -> OUT = base^n ----
+; Repeated multiply, all on the CPU; negative exponent -> reciprocal.
+E_POW:  LD R0,[IN1]
+        SHR R0,R0,64          ; n = integer part of exponent
+        LD R1,[IN0]           ; base
+        LD R2,[ONEC]          ; acc = 1
+        MOVI R5,0             ; negative-exponent flag
+        CMPI R0,0
+        JGE POWP
+        NEG R0,R0             ; n = |n|
+        MOVI R5,1
+POWP:   CMPI R0,0
+        JZ  POWE
+        MUL R2,R2,R1          ; acc *= base
+        ADDI R0,R0,-1
+        JMP POWP
+POWE:   CMPI R5,0
+        JZ  POWST
+        LD R6,[ONEC]
+        DIV R2,R6,R2          ; acc = 1 / acc
+POWST:  ST [OUT],R2
+        HALT
+
+; ---- E_EXP: x in IN0 -> OUT = e^x ----
+; x = k*ln2 + r  (|r| <= ln2/2);  e^x = 2^k * e^r ; e^r via Taylor series.
+E_EXP:  LD R0,[IN0]           ; x
+        LD R7,[LN2]
+        DIV R1,R0,R7          ; x/ln2
+        LD R7,[HALFC]
+        ADD R1,R1,R7          ; + 0.5
+        SHR R5,R1,64          ; k = floor(x/ln2 + 0.5)   (integer)
+        SHL R6,R5,64          ; k as Q64.64
+        LD R7,[LN2]
+        MUL R6,R6,R7          ; k*ln2
+        SUB R1,R0,R6          ; r = x - k*ln2
+        LD R2,[ONEC]          ; sum  = 1
+        LD R3,[ONEC]          ; term = 1
+        MOVI R4,1             ; n = 1
+EXPL:   CMPI R4,20
+        JGE EXPE
+        MUL R3,R3,R1          ; term *= r
+        MOV R6,R4
+        SHL R6,R6,64          ; n as Q64.64
+        DIV R3,R3,R6          ; term /= n
+        ADD R2,R2,R3          ; sum += term
+        ADDI R4,R4,1
+        JMP EXPL
+EXPE:   CMPI R5,0
+        JN  EXPNEG
+        SHLV R2,R2,R5         ; * 2^k
+        JMP EXPST
+EXPNEG: NEG R6,R5
+        SHRV R2,R2,R6         ; * 2^-|k|
+EXPST:  ST [OUT],R2
+        HALT
+
+; ---- E_LN: a in IN0 (a>0) -> OUT = ln(a) ----
+; a = m * 2^e with m in [1/sqrt2, sqrt2); ln a = e*ln2 + ln m.
+; ln m = 2*(s + s^3/3 + s^5/5 + ...),  s = (m-1)/(m+1).
+E_LN:   LD R0,[IN0]           ; a
+        CMPI R0,0
+        JN  LNERR
+        JZ  LNERR
+        MOVI R1,0             ; e = 0
+        LD R7,[TWOC]
+LNUP:   CMP R0,R7             ; a >= 2 ?
+        JN  LNUPD
+        SHR R0,R0,1
+        ADDI R1,R1,1
+        JMP LNUP
+LNUPD:  LD R7,[ONEC]
+LNDN:   CMP R0,R7             ; a < 1 ?
+        JGE LNDND
+        SHL R0,R0,1
+        ADDI R1,R1,-1
+        JMP LNDN
+LNDND:  LD R7,[SQRT2]
+        CMP R0,R7             ; a > sqrt2 ?
+        JN  LNMOK
+        JZ  LNMOK
+        SHR R0,R0,1
+        ADDI R1,R1,1
+LNMOK:  LD R7,[ONEC]
+        SUB R6,R0,R7          ; m-1
+        ADD R5,R0,R7          ; m+1
+        DIV R2,R6,R5          ; s
+        MUL R5,R2,R2          ; s2
+        MOV R3,R2             ; sum  = s
+        MOV R6,R2             ; term = s^k
+        MOVI R4,3             ; k = 3
+LNSL:   CMPI R4,31
+        JGE LNSE
+        MUL R6,R6,R5          ; term *= s2
+        MOV R7,R4
+        SHL R7,R7,64          ; k as Q64.64
+        DIV R7,R6,R7          ; term / k
+        ADD R3,R3,R7          ; sum += term/k
+        ADDI R4,R4,2
+        JMP LNSL
+LNSE:   SHL R3,R3,1           ; ln m = 2*sum
+        MOV R7,R1
+        SHL R7,R7,64          ; e as Q64.64
+        LD R6,[LN2]
+        MUL R7,R7,R6          ; e*ln2
+        ADD R3,R3,R7          ; + ln m
+        ST [OUT],R3
+        HALT
+LNERR:  MOVI R3,0
+        ST [OUT],R3
+        HALT
+
+; ---- SINCOS: angle(rad) in IN0 -> sin->OUT, cos->OUT2 ----
+; CORDIC: only ADD / SUB / arithmetic-shift, plus an arctan ROM table.
+SINCOS: LD R2,[IN0]           ; z = angle
+
+; range-reduce z into (-pi, pi]
+RHI:    LD R7,[PI]
+        CMP R2,R7
+        JN  RHIEND
+        JZ  RHIEND
+        LD R7,[TWO_PI]
+        SUB R2,R2,R7
+        JMP RHI
+RHIEND: LD R7,[NEG_PI]
+RLO:    CMP R2,R7
+        JN  RLODO
+        JMP RLOEND
+RLODO:  LD R7,[TWO_PI]
+        ADD R2,R2,R7
+        LD R7,[NEG_PI]
+        JMP RLO
+RLOEND:
+
+; quadrant fold into [-pi/2, pi/2]; SGN=1 if cos must be negated
+        MOVI R6,0
+        LD R7,[HALF_PI]
+        CMP R2,R7
+        JN  QLOW
+        JZ  QLOW
+        LD R7,[PI]
+        SUB R2,R7,R2
+        MOVI R6,1
+        JMP QDONE
+QLOW:   LD R7,[NEG_HALF_PI]
+        CMP R2,R7
+        JN  QLOWDO
+        JMP QDONE
+QLOWDO: LD R7,[NEG_PI]
+        SUB R2,R7,R2
+        MOVI R6,1
+QDONE:  ST [SGN],R6
+
+; CORDIC core: x=K, y=0, iterate i=0..N-1
+        LD R0,[K]
+        MOVI R1,0
+        MOVI R3,0
+CLOOP:  CMPI R3,48
+        JGE CEND
+        SHRV R4,R0,R3        ; R4 = x >> i
+        SHRV R5,R1,R3        ; R5 = y >> i
+        MOVI R6,300          ; ATAN base
+        ADD R6,R6,R3
+        LDX R7,[R6]          ; R7 = atan(2^-i)
+        CMPI R2,0
+        JN  CNEG
+        SUB R0,R0,R5         ; d=+1
+        ADD R1,R1,R4
+        SUB R2,R2,R7
+        JMP CNEXT
+CNEG:   ADD R0,R0,R5         ; d=-1
+        SUB R1,R1,R4
+        ADD R2,R2,R7
+CNEXT:  ADDI R3,R3,1
+        JMP CLOOP
+CEND:   LD R6,[SGN]
+        CMPI R6,0
+        JZ  CPOS
+        NEG R0,R0
+CPOS:   ST [OUT2],R0         ; cos
+        ST [OUT],R1          ; sin
+        RET
+`;
+
+/* ------------------------------------------------------------------ */
+/* The CPU                                                             */
+/* ------------------------------------------------------------------ */
+function CPU() {
+  const asm = assemble(PROGRAM);
+  const MEMSIZE = 1024;
+  const mem = new Array(MEMSIZE).fill(0n);
+  for (let i = 0; i < asm.code.length; i++) mem[i] = BigInt(asm.code[i]);
+
+  const cc = cordicConstants();
+  mem[SYM.K]           = cc.K;
+  mem[SYM.PI]          = decToFixed(PI_STR);
+  mem[SYM.HALF_PI]     = decToFixed(HALF_PI_STR);
+  mem[SYM.TWO_PI]      = decToFixed(TWO_PI_STR);
+  mem[SYM.NEG_PI]      = u(-decToFixed(PI_STR));
+  mem[SYM.NEG_HALF_PI] = u(-decToFixed(HALF_PI_STR));
+  mem[SYM.DEG2RAD]     = decToFixed(DEG2RAD_STR);
+  mem[SYM.ONEC]        = ONE;
+  mem[SYM.LN2]         = decToFixed(LN2_STR);
+  mem[SYM.SQRT2]       = decToFixed(SQRT2_STR);
+  mem[SYM.TWOC]        = decToFixed('2');
+  mem[SYM.HALFC]       = decToFixed('0.5');
+  mem[SYM.LN10]        = decToFixed(LN10_STR);
+  for (let i = 0; i < cc.atan.length; i++) mem[SYM.ATAN + i] = cc.atan[i];
+
+  const cpu = {
+    mem, sym: asm.sym, listing: asm.listing, progLen: asm.code.length,
+    reg: new Array(8).fill(0n),
+    pc: 0, flagZ: 0, flagN: 0, halted: true,
+    retStack: [], cycles: 0, lastAdd: null,
+  };
+  const AM = MEMSIZE - 1;
+
+  cpu.setEntry = a => { cpu.pc = a; cpu.halted = false; cpu.retStack.length = 0; };
+
+  cpu.step = function () {
+    if (cpu.halted) return null;
+    const d = decode(Number(cpu.mem[cpu.pc] & 0xFFFFFFFFn));
+    const R = cpu.reg;
+    let next = cpu.pc + 1;
+    switch (d.op) {
+      case OP.HALT: cpu.halted = true; return d;
+      case OP.NOP: break;
+      case OP.MOVI: R[d.rd] = u(BigInt(d.imm)); break;
+      case OP.MOV:  R[d.rd] = R[d.ra]; break;
+      case OP.LD:   R[d.rd] = cpu.mem[d.imm & 0xFFFF]; break;
+      case OP.LDX:  R[d.rd] = cpu.mem[Number(R[d.ra] & BigInt(AM))]; break;
+      case OP.ST:   cpu.mem[d.imm & 0xFFFF] = R[d.ra]; break;
+      case OP.STX:  cpu.mem[Number(R[d.ra] & BigInt(AM))] = R[d.rb]; break;
+      case OP.ADD: { const r=gateAdd(R[d.ra],R[d.rb],128,true); R[d.rd]=r.sum; cpu.lastAdd={op:'ADD',a:R[d.ra],b:R[d.rb],sum:r.sum,carries:r.carries}; break; }
+      case OP.SUB: { const nb=gateNeg(R[d.rb],128); const r=gateAdd(R[d.ra],nb,128,true); R[d.rd]=r.sum; cpu.lastAdd={op:'SUB',a:R[d.ra],b:R[d.rb],sum:r.sum,carries:r.carries}; break; }
+      case OP.ADDI:{ R[d.rd]=gateAdd(R[d.ra],u(BigInt(d.imm)),128).sum; break; }
+      case OP.NEG:  R[d.rd]=gateNeg(R[d.ra],128); break;
+      case OP.MUL:  R[d.rd]=aluMul(R[d.ra],R[d.rb]); break;
+      case OP.DIV:  R[d.rd]=aluDiv(R[d.ra],R[d.rb]); break;
+      case OP.SHL:  R[d.rd]=u(R[d.ra] << BigInt(d.imm & 127)); break;
+      case OP.SHR:  R[d.rd]=u(sgn(R[d.ra]) >> BigInt(d.imm & 127)); break;   // arithmetic
+      case OP.SHLV: R[d.rd]=u(R[d.ra] << (R[d.rb] & 127n)); break;
+      case OP.SHRV: R[d.rd]=u(sgn(R[d.ra]) >> (R[d.rb] & 127n)); break;      // arithmetic
+      case OP.CMP: { const r=gateSub(R[d.ra],R[d.rb],128); cpu.flagZ=(r.sum===0n)?1:0; cpu.flagN=Number((r.sum>>127n)&1n); break; }
+      case OP.CMPI:{ const r=gateSub(R[d.ra],u(BigInt(d.imm)),128); cpu.flagZ=(r.sum===0n)?1:0; cpu.flagN=Number((r.sum>>127n)&1n); break; }
+      case OP.JMP:  next=d.imm; break;
+      case OP.JZ:   if (cpu.flagZ) next=d.imm; break;
+      case OP.JNZ:  if (!cpu.flagZ) next=d.imm; break;
+      case OP.JN:   if (cpu.flagN) next=d.imm; break;
+      case OP.JGE:  if (!cpu.flagN) next=d.imm; break;
+      case OP.CALL: cpu.retStack.push(cpu.pc+1); next=d.imm; break;
+      case OP.RET:  if (cpu.retStack.length) next=cpu.retStack.pop(); else { cpu.halted=true; return d; } break;
+      default: throw new Error('bad opcode '+d.op+' @ '+cpu.pc);
+    }
+    cpu.pc = next;
+    cpu.cycles++;
+    return d;
+  };
+
+  cpu.run = function (maxCycles = 500000) {
+    let n = 0;
+    while (!cpu.halted && n < maxCycles) { cpu.step(); n++; }
+    if (n >= maxCycles) throw new Error('CPU runaway (>'+maxCycles+' cycles)');
+    return n;
+  };
+
+  cpu.callRoutine = function (entryName, in0, in1) {
+    cpu.mem[SYM.IN0] = u(in0);
+    if (in1 !== undefined) cpu.mem[SYM.IN1] = u(in1);
+    cpu.setEntry(cpu.sym[entryName]);
+    cpu.run();
+    return cpu.mem[SYM.OUT];
+  };
+
+  return cpu;
+}
+
+/* ------------------------------------------------------------------ */
+/* Expression compiler / evaluator                                     */
+/* ------------------------------------------------------------------ */
+function tokenize(s) {
+  const toks = [];
+  const re = /\s*([0-9]*\.?[0-9]+|[-+*/()^%]|sin|cos|tan|sqrt|exp|ln|log|pi|e|÷|×|−)/gi;
+  let m, last = null;
+  while ((m = re.exec(s))) {
+    let t = m[1];
+    if (t === '÷') t = '/'; if (t === '×') t = '*'; if (t === '−') t = '-';
+    if (t === '-' && (last === null || last === '(' || '+-*/^%'.includes(last) || /^(sin|cos|tan|sqrt|exp|ln|log)$/i.test(last))) toks.push('u-');
+    else toks.push(t);
+    last = t;
+  }
+  return toks;
+}
+const PREC = { 'u-':5, '^':4, '*':3, '/':3, '%':3, '+':2, '-':2 };
+const RIGHT = { '^':true, 'u-':true };
+const FUNCS = { sin:1, cos:1, tan:1, sqrt:1, exp:1, ln:1, log:1 };
+function toRPN(toks) {
+  const out = [], ops = [];
+  for (const t of toks) {
+    if (/^[0-9.]+$/.test(t) || t === 'pi' || t === 'e') out.push(t);
+    else if (t.toLowerCase() in FUNCS) ops.push(t.toLowerCase());
+    else if (t in PREC) {
+      while (ops.length) {
+        const top = ops[ops.length-1];
+        if (top === '(') break;
+        const tp = (top in PREC) ? PREC[top] : 99;
+        if (tp > PREC[t] || (tp === PREC[t] && !RIGHT[t])) out.push(ops.pop());
+        else break;
+      }
+      ops.push(t);
+    } else if (t === '(') ops.push(t);
+    else if (t === ')') {
+      while (ops.length && ops[ops.length-1] !== '(') out.push(ops.pop());
+      if (ops[ops.length-1] === '(') ops.pop();
+      if (ops.length && ops[ops.length-1] in FUNCS) out.push(ops.pop());
+    }
+  }
+  while (ops.length) { const o = ops.pop(); if (o !== '(') out.push(o); }
+  return out;
+}
+
+function evaluate(expr, opts) {
+  opts = opts || {};
+  const degrees = !!opts.degrees;
+  const cpu = opts.cpu || CPU();
+  cpu.cycles = 0;
+  const rpn = toRPN(tokenize(expr));
+  const st = [], trace = [];
+  const push = v => st.push(u(v));
+
+  const bin = (name, symc) => {
+    const b = st.pop(), a = st.pop();
+    const before = cpu.cycles;
+    const r = cpu.callRoutine(name, a, b);
+    trace.push(`${fmtNum(toFloat(a))} ${symc} ${fmtNum(toFloat(b))} = ${fmtNum(toFloat(r))}  [${cpu.cycles-before} cyc, ${name}]`);
+    push(r);
+  };
+
+  for (const t of rpn) {
+    if (/^[0-9.]+$/.test(t)) push(toFixed(parseFloat(t)));
+    else if (t === 'pi') push(decToFixed(PI_STR));
+    else if (t === 'e') push(decToFixed('2.71828182845904523536028747135266249775724709369996'));
+    else if (t === '+') bin('E_ADD','+');
+    else if (t === '-') bin('E_SUB','-');
+    else if (t === '*') bin('E_MUL','×');
+    else if (t === '/') bin('E_DIV','÷');
+    else if (t === '%') { const b=st.pop(),a=st.pop(); const q=cpu.callRoutine('E_DIV',a,b); const qf=toFixed(Math.trunc(toFloat(q))); const mm=cpu.callRoutine('E_MUL',qf,b); push(cpu.callRoutine('E_SUB',a,mm)); }
+    else if (t === '^') {
+      const b=st.pop(), a=st.pop(), yf=toFloat(b), n=Math.round(yf);
+      const before = cpu.cycles;
+      if (Math.abs(yf-n)<1e-9 && Math.abs(n)<=1024) {           // integer exponent: exact, on CPU
+        push(cpu.callRoutine('E_POW', a, b));
+        trace.push(`${fmtNum(toFloat(a))} ^ ${n} = ${fmtNum(toFloat(st[st.length-1]))}  [${cpu.cycles-before} cyc, E_POW]`);
+      } else {                                                   // x^y = exp(y*ln x), needs x>0
+        const lnx = cpu.callRoutine('E_LN', a);
+        const yl  = cpu.callRoutine('E_MUL', b, lnx);
+        push(cpu.callRoutine('E_EXP', yl));
+        trace.push(`${fmtNum(toFloat(a))} ^ ${fmtNum(yf)} = exp(y·ln x) = ${fmtNum(toFloat(st[st.length-1]))}  [${cpu.cycles-before} cyc]`);
+      }
+    }
+    else if (t === 'u-') { const a=st.pop(); push(cpu.callRoutine('E_NEG',a)); }
+    else if (t === 'sqrt') { const a=st.pop(); push(cpu.callRoutine('E_SQRT', a)); }
+    else if (t === 'exp') { const a=st.pop(); const bf=cpu.cycles; push(cpu.callRoutine('E_EXP', a)); trace.push(`exp(${fmtNum(toFloat(a))}) = ${fmtNum(toFloat(st[st.length-1]))}  [${cpu.cycles-bf} cyc, Taylor]`); }
+    else if (t === 'ln')  { const a=st.pop(); const bf=cpu.cycles; push(cpu.callRoutine('E_LN', a));  trace.push(`ln(${fmtNum(toFloat(a))}) = ${fmtNum(toFloat(st[st.length-1]))}  [${cpu.cycles-bf} cyc, series]`); }
+    else if (t === 'log') { const a=st.pop(); const bf=cpu.cycles; const lnx=cpu.callRoutine('E_LN', a); push(cpu.callRoutine('E_DIV', lnx, cpu.mem[SYM.LN10])); trace.push(`log10(${fmtNum(toFloat(a))}) = ${fmtNum(toFloat(st[st.length-1]))}  [${cpu.cycles-bf} cyc]`); }
+    else if (t === 'sin' || t === 'cos' || t === 'tan') {
+      let a = st.pop();
+      const before = cpu.cycles;
+      if (degrees) a = cpu.callRoutine('E_D2R', a);
+      if (t === 'tan') { cpu.callRoutine('E_TAN', a); push(cpu.mem[SYM.OUT]); }
+      else { cpu.callRoutine('E_SINCOS', a); push(t === 'sin' ? cpu.mem[SYM.OUT] : cpu.mem[SYM.OUT2]); }
+      trace.push(`${t}(${fmtNum(toFloat(a))}${degrees?'°':' rad'}) = ${fmtNum(toFloat(st[st.length-1]))}  [${cpu.cycles-before} cyc, CORDIC]`);
+    }
+  }
+  return { value: toFloat(st.pop() ?? 0n), cycles: cpu.cycles, trace, cpu };
+}
+
+/* format a number to ~11 significant digits, trimming noise/zeros */
+function fmtNum(x) {
+  if (!isFinite(x)) return String(x);
+  if (Math.abs(x) < 1e-13) return '0';
+  if (Number.isInteger(x) && Math.abs(x) < 1e15) return String(x);
+  let s = x.toPrecision(11);
+  if (s.indexOf('e') < 0 && s.indexOf('.') >= 0) s = s.replace(/0+$/,'').replace(/\.$/,'');
+  return s;
+}
+
+/* ------------------------------------------------------------------ */
+const API = {
+  CPU, evaluate, assemble, disasm, decode, encode,
+  toFixed, toFloat, decToFixed, sgn, fmtNum,
+  gateAdd, gateSub, aluMul, aluDiv,
+  SYM, OP, OP_NAME, PROGRAM, CORDIC_N, cordicConstants, MASK, FRAC, ONE
+};
+if (typeof module !== 'undefined' && module.exports) module.exports = API;
+root.TinyCPU = API;
+
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+<script>
+(function(){
+  const T = window.TinyCPU;
+  const $ = id => document.getElementById(id);
+  let exprStr = '';
+  let degrees = true;
+  let frames = [], frameIdx = 0, playing = false, playTimer = null;
+  let lastAddForView = null;
+
+  const baseCpu = T.CPU();               // for static program listing + non-recorded runs
+
+  /* ---------- program listing (static) ---------- */
+  function hex(w){ return '0x'+(w>>>0).toString(16).padStart(8,'0'); }               // 32-bit instr word
+  function hex128(v){ return '0x'+(v & ((1n<<128n)-1n)).toString(16).padStart(32,'0'); } // 128-bit register
+  function renderProg(curPc){
+    const el = $('prog');
+    if(!el._built){
+      el.innerHTML = baseCpu.listing.map(l=>
+        `<div class="ln" data-a="${l.addr}"><span class="a">${l.addr}</span><span class="h">${hex(l.word)}</span><span class="t">${T.disasm(l.word)}</span></div>`
+      ).join('');
+      el._built = true;
+    }
+    el.querySelectorAll('.ln').forEach(n=>{
+      const on = (+n.dataset.a === curPc);
+      n.classList.toggle('cur', on);
+    });
+    if(curPc!=null){
+      const cur = el.querySelector('.ln.cur');
+      if(cur && cur.scrollIntoView) try{ cur.scrollIntoView({block:'nearest'}); }catch(e){}
+    }
+  }
+
+  /* ---------- registers (decimal + hex + 128-bit binary) ---------- */
+  let prevRegs = [0n,0n,0n,0n,0n,0n,0n,0n];
+  function bitsHtml(v, prev){
+    let out = '';
+    for(let i=127;i>=0;i--){
+      const b  = Number((v >> BigInt(i)) & 1n);
+      const pb = prev==null ? b : Number((prev >> BigInt(i)) & 1n);
+      let cls = b ? 'b1' : 'b0';
+      if(b !== pb) cls += ' bc';                 // flipped since previous step
+      out += `<span class="${cls}">${b}</span>`;
+      if(i === 64) out += '<span class="pt" title="小数点：高 64 位=整数，低 64 位=小数">·</span>';
+      else if(i % 8 === 0) out += '<span class="bg"></span>';
+    }
+    return out;
+  }
+  function renderRegs(regs, z, n, pc, cyc){
+    const el = $('regs');
+    let html = '';
+    for(let i=0;i<8;i++){
+      const v = regs[i], pv = prevRegs[i];
+      const chg = v !== pv;
+      html += `<div class="regrow ${chg?'chg':''}">`
+            +   `<div class="top"><span class="n">R${i}</span><span class="dec">${fmt(T.toFloat(v))}</span><span class="hex">${hex128(v)}</span></div>`
+            +   `<div class="bits">${bitsHtml(v, chg?pv:v)}</div>`
+            + `</div>`;
+    }
+    el.innerHTML = html;
+    $('flags').innerHTML = `FLAGS: <span class="${z?'on':''}">Z=${z}</span> &nbsp; <span class="${n?'on':''}">N=${n}</span>`;
+    $('pc').textContent = pc;
+    $('cyc').textContent = cyc;
+    prevRegs = regs.slice();
+  }
+  function fmt(x){ return T.fmtNum(x); }
+
+  /* ---------- gate adder view (128-bit, trimmed to significant range) ---------- */
+  function renderAdder(la){
+    const el = $('adder');
+    if(!la){ el.innerHTML = '<div class="note">还没有加/减法运算。</div>'; return; }
+    const bit = (v,i) => Number((v >> BigInt(i)) & 1n);
+    // decide the top bit to show: highest set bit in a|b|sum (min 8 bits shown)
+    const un = x => x & ((1n<<128n)-1n);
+    const merged = un(la.a) | un(la.b) | un(la.sum);
+    let hi = 7;
+    for(let i=127;i>=0;i--){ if((merged>>BigInt(i))&1n){ hi=Math.max(hi,i); break; } }
+    hi = Math.min(hi+1, 127);   // one extra bit of headroom for carry-out
+    const cinAt = i => { const c = la.carries[i]; return c ? c.cin : 0; };
+    const row = (label, fn, cls) => {
+      let tds='';
+      for(let i=hi;i>=0;i--){ const b=fn(i); tds+=`<td class="${b?'bit1':'bit0'} ${cls||''}">${b}</td>`; }
+      return `<tr><td class="lbl">${label}</td>${tds}</tr>`;
+    };
+    const opLabel = la.op==='SUB' ? 'b 取补码后相加' : 'a + b';
+    let html = `<div class="note" style="margin:0 0 8px">${la.op}: ${fmt(T.toFloat(la.a))} ${la.op==='SUB'?'−':'+'} ${fmt(T.toFloat(la.b))} = <b>${fmt(T.toFloat(la.sum))}</b> &nbsp;(${opLabel}，显示低 ${hi+1} 位 / 共 128 位)</div>`;
+    html += '<table>';
+    let th='<tr><td class="lbl">bit</td>'; for(let i=hi;i>=0;i--) th+=`<th>${i}</th>`; th+='</tr>';
+    html += th;
+    html += row('进位 cin', cinAt, 'cin');
+    html += row('a', i=>bit(la.a,i));
+    html += row('b', i=>bit(la.b,i));
+    html += row('和 sum', i=>bit(la.sum,i));
+    html += '</table>';
+    el.innerHTML = html;
+  }
+
+  /* ---------- compute ---------- */
+  function recordEval(expr){
+    const cpu = T.CPU();
+    const fr = [];
+    const orig = cpu.step;
+    cpu.step = function(){
+      const pcBefore = cpu.pc;
+      const d = orig.call(cpu);
+      fr.push({
+        pc: pcBefore,
+        regs: Array.from(cpu.reg),
+        z: cpu.flagZ, n: cpu.flagN, cyc: cpu.cycles,
+        lastAdd: cpu.lastAdd,
+        halted: cpu.halted
+      });
+      return d;
+    };
+    const res = T.evaluate(expr, {degrees, cpu});
+    return {res, fr};
+  }
+
+  function compute(){
+    if(!exprStr.trim()) return;
+    stopPlay();
+    let result, trace, cyc, la;
+    try{
+      if($('recordChk').checked){
+        const {res, fr} = recordEval(exprStr);
+        result = res.value; trace = res.trace; cyc = res.cycles;
+        frames = fr; frameIdx = fr.length-1;
+        $('playbar').style.display='flex';
+        $('pSlider').max = Math.max(0,fr.length-1);
+        showFrame(frameIdx);
+      }else{
+        const res = T.evaluate(exprStr, {degrees, cpu:baseCpu});
+        result = res.value; trace = res.trace; cyc = res.cycles;
+        frames = [];
+        $('playbar').style.display='none';
+        const fr = Array.from(baseCpu.reg);
+        prevRegs = fr.slice();                 // no spurious bit-flip highlight in one-shot mode
+        renderRegs(fr, baseCpu.flagZ, baseCpu.flagN, baseCpu.pc, baseCpu.cycles);
+        renderProg(null);
+        lastAddForView = baseCpu.lastAdd;
+        renderAdder(lastAddForView);
+      }
+      $('res').textContent = fmt(result);
+      $('cycTotal').textContent = cyc;
+      $('trace').innerHTML = trace.length? trace.map(t=>escapeHtml(t)).join('\n') : '（无运算）';
+    }catch(e){
+      $('res').textContent = 'Error';
+      $('trace').textContent = String(e.message||e);
+    }
+  }
+  function escapeHtml(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+  /* ---------- playback ---------- */
+  function showFrame(i){
+    if(!frames.length) return;
+    i = Math.max(0, Math.min(frames.length-1, i));
+    frameIdx = i;
+    const f = frames[i];
+    // prevRegs from previous frame so changed values / flipped bits highlight
+    prevRegs = i>0 ? frames[i-1].regs.slice() : [0n,0n,0n,0n,0n,0n,0n,0n];
+    renderRegs(f.regs, f.z, f.n, f.pc, f.cyc);
+    renderProg(f.pc);
+    if(f.lastAdd) renderAdder(f.lastAdd);
+    const li = baseCpu.listing[f.pc];
+    $('pCurInstr').textContent = li ? `▶ ${T.disasm(li.word)}` : '';
+    $('pSlider').value = i;
+    $('pInfo').textContent = `${i+1} / ${frames.length}`;
+  }
+  function stopPlay(){ playing=false; if(playTimer){clearInterval(playTimer);playTimer=null;} $('pPlay').textContent='▶ 播放'; }
+  function playInterval(){ const s=+$('pSpeed').value; return Math.round(440 - s*4.1); }  // slow(1)≈436ms .. fast(100)≈30ms
+  function scheduleTick(){
+    if(playTimer) clearInterval(playTimer);
+    playTimer = setInterval(()=>{
+      if(frameIdx>=frames.length-1){ stopPlay(); return; }
+      showFrame(frameIdx+1);
+    }, playInterval());
+  }
+  function play(){
+    if(playing){ stopPlay(); return; }
+    if(frameIdx>=frames.length-1) frameIdx=0;
+    playing=true; $('pPlay').textContent='⏸ 暂停';
+    scheduleTick();
+  }
+
+  /* ---------- input handling ---------- */
+  function setExpr(s){ exprStr=s; $('expr').textContent = s||' '; }
+  function press(k){
+    if(k==='pi') setExpr(exprStr+'π');
+    else setExpr(exprStr + k);
+  }
+  // map display symbols to parser tokens
+  function forParser(s){ return s.replace(/π/g,'pi').replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-'); }
+
+  document.querySelectorAll('button.k').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const act = b.dataset.act, k = b.dataset.k;
+      if(act==='clear'){ setExpr(''); $('res').textContent='0'; }
+      else if(act==='back'){ setExpr(exprStr.slice(0,-1)); }
+      else if(act==='eq'){ compute(); }
+      else if(k!=null){
+        // show pretty symbol, keep parseable via forParser on compute
+        let disp = k;
+        if(k==='*') disp='×'; if(k==='/') disp='÷'; if(k==='-') disp='−'; if(k==='pi') disp='π';
+        if(k==='pi'){ setExpr(exprStr+'π'); }
+        else setExpr(exprStr + disp);
+      }
+    });
+  });
+
+  // angle mode
+  document.querySelectorAll('#angleMode button').forEach(b=>{
+    b.addEventListener('click',()=>{
+      document.querySelectorAll('#angleMode button').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      degrees = (b.dataset.m==='deg');
+    });
+  });
+
+  // tabs
+  document.querySelectorAll('.tabs button').forEach(b=>{
+    b.addEventListener('click',()=>{
+      document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));
+      document.querySelectorAll('.pane').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      $('pane-'+b.dataset.t).classList.add('active');
+    });
+  });
+
+  // playback controls
+  $('pFirst').onclick=()=>{stopPlay();showFrame(0);};
+  $('pLast').onclick =()=>{stopPlay();showFrame(frames.length-1);};
+  $('pPrev').onclick =()=>{stopPlay();showFrame(frameIdx-1);};
+  $('pNext').onclick =()=>{stopPlay();showFrame(frameIdx+1);};
+  $('pPlay').onclick = play;
+  $('pSlider').oninput = e=>{stopPlay();showFrame(+e.target.value);};
+  $('pSpeed').oninput = ()=>{ if(playing) scheduleTick(); };   // apply new speed live
+
+  // keyboard
+  window.addEventListener('keydown',e=>{
+    if(e.key==='Enter'||e.key==='='){ e.preventDefault(); compute(); }
+    else if(e.key==='Escape'){ setExpr(''); $('res').textContent='0'; }
+    else if(e.key==='Backspace'){ e.preventDefault(); setExpr(exprStr.slice(0,-1)); }
+    else if(/[0-9.]/.test(e.key)) setExpr(exprStr+e.key);
+    else if(e.key==='+'||e.key==='-') setExpr(exprStr+(e.key==='-'?'−':'+'));
+    else if(e.key==='*') setExpr(exprStr+'×');
+    else if(e.key==='/') { e.preventDefault(); setExpr(exprStr+'÷'); }
+    else if(e.key==='('||e.key===')') setExpr(exprStr+e.key);
+    else if(e.key==='^') setExpr(exprStr+'^');
+  });
+
+  // patch compute to translate display -> parser tokens
+  const _compute = compute;
+  compute = function(){
+    const saved = exprStr;
+    exprStr = forParser(saved);
+    try{ _compute(); } finally { exprStr = saved; }
+  };
+  // init
+  setExpr('');
+  renderProg(null);
+  renderRegs([0n,0n,0n,0n,0n,0n,0n,0n],0,0,0,0);
+  renderAdder(null);
+})();
+</script>
+</body>
+</html>
