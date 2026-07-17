@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>薛定谔方程可视化 · 2D 波包 · 隧穿 / 双缝 / 扩散</title>
+<style>
+  :root { --bg:#080a12; --panel:#131a29; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5; --accent:#8b6bff; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  .wrap { display:flex; gap:16px; padding:16px; align-items:flex-start; flex-wrap:wrap; }
+  .stage { position:relative; }
+  canvas { background:#000; border-radius:10px; image-rendering:pixelated;
+    box-shadow:0 8px 30px rgba(0,0,0,.5); cursor:crosshair; touch-action:none; }
+  .panel { width:290px; background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:16px; }
+  h1 { font-size:16px; margin:0 0 4px; }
+  .sub { font-size:12px; color:var(--dim); margin:0 0 14px; line-height:1.55; }
+  .grp { margin:13px 0; }
+  .grp label { display:block; font-size:12px; color:var(--dim); margin-bottom:6px; }
+  .modes { display:flex; gap:6px; flex-wrap:wrap; }
+  button { background:#1d283b; color:var(--txt); border:1px solid var(--line);
+    padding:7px 10px; border-radius:8px; font-size:12px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#0a0417; border-color:var(--accent); font-weight:600; }
+  button.fire { background:var(--accent); color:#0a0417; font-weight:700; width:100%; padding:10px; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .hint { font-size:11.5px; color:var(--dim); line-height:1.65; border-top:1px solid var(--line);
+    padding-top:12px; margin-top:14px; }
+  .eq { font-size:12px; color:#b6a7ff; background:#0e1420; border:1px solid var(--line);
+    border-radius:8px; padding:9px 11px; margin-top:8px; line-height:1.6; text-align:center; }
+  .fps { position:absolute; top:8px; left:10px; font-size:11px; color:#b79bff;
+    background:rgba(0,0,0,.4); padding:2px 6px; border-radius:5px; }
+  .stat { position:absolute; top:8px; right:10px; font-size:11px; color:#cbd6ee;
+    background:rgba(0,0,0,.45); padding:3px 8px; border-radius:5px; line-height:1.5; text-align:right; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="c"></canvas>
+    <div class="fps" id="fps"></div>
+    <div class="stat" id="stat"></div>
+  </div>
+
+  <div class="panel">
+    <h1>薛定谔方程 · 量子波包</h1>
+    <p class="sub">解含时薛定谔方程。<b>亮度 = |ψ|²</b>(找到粒子的概率),
+      <b>颜色 = 相位</b>(波动的相位在转)。灰色 = 势垒(墙)。</p>
+
+    <div class="eq">iℏ ∂ψ/∂t = −(ℏ²/2m)∇²ψ + V·ψ</div>
+
+    <div class="grp" style="margin-top:16px">
+      <button id="fire" class="fire">🚀 发射波包（从左往右）</button>
+    </div>
+
+    <div class="grp">
+      <label>动量 / 速度 k = <span id="kV">1.2</span></label>
+      <input type="range" id="k" min="0.4" max="2.4" step="0.1" value="1.2">
+    </div>
+
+    <div class="grp">
+      <label>示例场景</label>
+      <div class="modes">
+        <button id="pFree">自由扩散</button>
+        <button id="pTunnel">量子隧穿</button>
+        <button id="pSlit">双缝干涉</button>
+        <button id="pScatter">圆盘散射</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <label>鼠标：画墙 / 擦除</label>
+      <div class="modes">
+        <button id="mWall" class="on">画势垒</button>
+        <button id="mErase">擦除</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="modes">
+        <button id="pause">⏸ 暂停</button>
+        <button id="clearW">清空墙</button>
+      </div>
+    </div>
+
+    <div class="hint">
+      每帧交替更新 ψ 的实部与虚部(Visscher 稳定蛙跳格式),
+      没有任何"波的公式",波包的<b>移动、变胖(色散)、隧穿、干涉</b>全是方程演化出来的。
+      右上角 <b>P透</b> 是墙右侧的概率(隧穿/透射掉过去的比例)。
+      试试:把动量 k 调小 → 隧穿更难、透射更少。
+    </div>
+  </div>
+</div>
+
+<script>
+// ---------- 网格 ----------
+const W = 340, H = 240, SCALE = 2;
+const cv = document.getElementById('c');
+cv.width=W; cv.height=H; cv.style.width=(W*SCALE)+'px'; cv.style.height=(H*SCALE)+'px';
+const ctx = cv.getContext('2d');
+const img = ctx.createImageData(W,H);
+const N = W*H, idx=(i,j)=>i+j*W;
+
+// ℏ = m = dx = 1
+const R = new Float32Array(N);   // ψ 实部
+const I = new Float32Array(N);   // ψ 虚部
+const V = new Float32Array(N);   // 势能(墙)
+const damp = new Float32Array(N).fill(1); // 边界吸收
+const dt = 0.08;
+const PML = 26;
+
+// 边界吸收层
+for(let j=0;j<H;j++)for(let i=0;i<W;i++){
+  const d=Math.min(i,j,W-1-i,H-1-j);
+  if(d<PML){ const x=(PML-d)/PML; damp[idx(i,j)] = 1 - 0.06*x*x; }
+}
+
+let k0 = 1.2;          // 初始动量
+let running = true;
+let barrierX = -1;     // 用于统计透射率的墙位置
+
+// ---------- 发射高斯波包 ----------
+function launch(){
+  R.fill(0); I.fill(0);
+  const x0=60, y0=H>>1, sig=13;
+  for(let j=0;j<H;j++)for(let i=0;i<W;i++){
+    const dx=i-x0, dy=j-y0;
+    const env=Math.exp(-(dx*dx+dy*dy)/(2*sig*sig));
+    const ph=k0*i;                       // 平面波相位 -> 向右的动量
+    R[idx(i,j)]=env*Math.cos(ph);
+    I[idx(i,j)]=env*Math.sin(ph);
+  }
+}
+
+// ---------- 一步演化 (稳定蛙跳: 先更新 I(用R), 再更新 R(用新I)) ----------
+function Hf(f,k){                          // (Ĥf) at cell k, ℏ=m=1, dx=1
+  const lap = f[k+1]+f[k-1]+f[k+W]+f[k-W]-4*f[k];
+  return -0.5*lap + V[k]*f[k];
+}
+function step(){
+  for(let j=1;j<H-1;j++)for(let i=1;i<W-1;i++){ const k=idx(i,j); I[k] -= dt*Hf(R,k); }
+  for(let j=1;j<H-1;j++)for(let i=1;i<W-1;i++){ const k=idx(i,j); R[k] += dt*Hf(I,k); }
+  for(let k=0;k<N;k++){ R[k]*=damp[k]; I[k]*=damp[k]; }
+}
+
+// ---------- 相位->色相, 亮度->概率 ----------
+function hsv(h,v){ // h∈[0,1), s=1
+  const i=Math.floor(h*6), f=h*6-i, q=v*(1-f), t=v*f;
+  switch(i%6){
+    case 0: return [v*255,t*255,0];
+    case 1: return [q*255,v*255,0];
+    case 2: return [0,v*255,t*255];
+    case 3: return [0,q*255,v*255];
+    case 4: return [t*255,0,v*255];
+    default:return [v*255,0,q*255];
+  }
+}
+function render(){
+  const d=img.data, gain=3.6;
+  for(let k=0;k<N;k++){
+    const p=k*4;
+    const r=R[k], im=I[k];
+    let amp=Math.sqrt(r*r+im*im)*gain; if(amp>1)amp=1;
+    const phase=(Math.atan2(im,r)/(2*Math.PI))+0.5;   // 0..1
+    let [cr,cg,cb]=hsv(phase,amp);
+    if(V[k]>0){ const g=Math.min(90,20+V[k]*40); cr=Math.max(cr,g);cg=Math.max(cg,g);cb=Math.max(cb,g+15); }
+    d[p]=cr; d[p+1]=cg; d[p+2]=cb; d[p+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+}
+
+// ---------- 概率与透射率 ----------
+let statEl=document.getElementById('stat');
+function stats(){
+  let tot=0,right=0;
+  for(let j=0;j<H;j++)for(let i=0;i<W;i++){ const k=idx(i,j); const pr=R[k]*R[k]+I[k]*I[k];
+    tot+=pr; if(barrierX>0 && i>barrierX) right+=pr; }
+  const t = barrierX>0 ? '<br>P透 ≈ '+(100*right/(tot||1)).toFixed(0)+'%' : '';
+  statEl.innerHTML = '总概率 '+(tot).toExponential(1)+t;
+}
+
+// ---------- 主循环 ----------
+let last=performance.now(),frames=0,fpsEl=document.getElementById('fps');
+function loop(now){
+  if(running){ for(let s=0;s<4;s++) step(); }
+  render(); frames++;
+  if(now-last>400){ fpsEl.textContent=Math.round(frames*1000/(now-last))+' fps';
+    stats(); frames=0; last=now; }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---------- 交互 ----------
+let mode='wall',down=false;
+document.getElementById('mWall').onclick=e=>{mode='wall';e.target.classList.add('on');document.getElementById('mErase').classList.remove('on');};
+document.getElementById('mErase').onclick=e=>{mode='erase';e.target.classList.add('on');document.getElementById('mWall').classList.remove('on');};
+function cell(e){const r=cv.getBoundingClientRect();
+  return {i:Math.max(0,Math.min(W-1,Math.floor((e.clientX-r.left)/SCALE))),
+          j:Math.max(0,Math.min(H-1,Math.floor((e.clientY-r.top)/SCALE)))};}
+function paint(e){const {i,j}=cell(e),rad=4;
+  for(let dj=-rad;dj<=rad;dj++)for(let di=-rad;di<=rad;di++){
+    const ii=i+di,jj=j+dj; if(ii<1||jj<1||ii>=W-1||jj>=H-1)continue;
+    if(di*di+dj*dj>rad*rad)continue;
+    V[idx(ii,jj)] = (mode==='wall')?4:0; }
+  barrierX=-1;
+}
+cv.addEventListener('pointerdown',e=>{down=true;paint(e);});
+cv.addEventListener('pointermove',e=>{if(down)paint(e);});
+window.addEventListener('pointerup',()=>down=false);
+
+// ---------- 控件 ----------
+const kEl=document.getElementById('k'),kV=document.getElementById('kV');
+kEl.oninput=()=>{k0=+kEl.value;kV.textContent=k0.toFixed(1);};
+document.getElementById('fire').onclick=launch;
+document.getElementById('pause').onclick=e=>{running=!running;e.target.textContent=running?'⏸ 暂停':'▶ 继续';};
+document.getElementById('clearW').onclick=()=>{V.fill(0);barrierX=-1;};
+
+// ---------- 场景 ----------
+function clearW(){V.fill(0);barrierX=-1;}
+document.getElementById('pFree').onclick=()=>{clearW();launch();};
+document.getElementById('pTunnel').onclick=()=>{
+  clearW(); const bx=W>>1; barrierX=bx;
+  const h=1.2;                                  // 势垒高度(比波包能量略高 -> 部分隧穿)
+  for(let j=0;j<H;j++)for(let w=0;w<4;w++) V[idx(bx+w,j)]=h;
+  launch();
+};
+document.getElementById('pSlit').onclick=()=>{
+  clearW(); const bx=W>>1, cy=H>>1, gap=7, sep=26; barrierX=bx;
+  for(let j=0;j<H;j++){
+    const nA=Math.abs(j-(cy-sep))<gap, nB=Math.abs(j-(cy+sep))<gap;
+    if(!nA&&!nB) for(let w=0;w<4;w++) V[idx(bx+w,j)]=6;
+  }
+  launch();
+};
+document.getElementById('pScatter').onclick=()=>{
+  clearW(); const cx=W>>1, cy=H>>1, rr=22; barrierX=cx;
+  for(let j=0;j<H;j++)for(let i=0;i<W;i++){ if((i-cx)**2+(j-cy)**2<rr*rr) V[idx(i,j)]=6; }
+  launch();
+};
+
+// 默认
+document.getElementById('pTunnel').click();
+</script>
+</body>
+</html>
