@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一杯晃动 & 倾倒的水 · 2D SPH 流体模拟</title>
+<style>
+  :root { --bg:#070b12; --panel:#111a28; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5; --accent:#4db8ff; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  .wrap { padding:16px; }
+  .stage { position:relative; }
+  canvas { display:block; background:#02040a; border-radius:12px;
+    box-shadow:0 8px 30px rgba(0,0,0,.55); cursor:grab; touch-action:none; }
+  canvas.drag { cursor:grabbing; }
+  .panel { width:100%; max-width:900px; margin-top:14px; background:var(--panel);
+    border:1px solid var(--line); border-radius:12px; padding:16px; }
+  h1 { font-size:16px; margin:0 0 4px; }
+  .sub { font-size:12px; color:var(--dim); margin:0 0 14px; line-height:1.55; }
+  .grp { margin:13px 0; }
+  .grp label { display:block; font-size:12px; color:var(--dim); margin-bottom:6px; }
+  .modes { display:flex; gap:6px; flex-wrap:wrap; }
+  button { background:#1b2536; color:var(--txt); border:1px solid var(--line);
+    padding:7px 10px; border-radius:8px; font-size:12px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#04121f; border-color:var(--accent); font-weight:600; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .hint { font-size:11.5px; color:var(--dim); line-height:1.65; border-top:1px solid var(--line);
+    padding-top:12px; margin-top:14px; }
+  .fps { position:absolute; top:8px; left:10px; font-size:11px; color:#8fd0ff;
+    background:rgba(0,0,0,.4); padding:2px 6px; border-radius:5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="c" width="900" height="600"></canvas>
+    <div class="fps" id="fps"></div>
+  </div>
+
+  <div class="panel">
+    <h1>晃动 & 倾倒的水 · SPH</h1>
+    <p class="sub"><b>用鼠标左右拖动杯子来倾倒</b>——拖多少倒多少,松手停在那个角度。
+      每个蓝点是一小团水,受压强 + 黏性 + 重力驱动。</p>
+
+    <div class="grp">
+      <label>倾斜角度 = <span id="tV">0</span>°（拖动杯子 / 或拉此滑块）</label>
+      <input type="range" id="tilt" min="-140" max="140" step="1" value="0">
+    </div>
+    <div class="grp">
+      <div class="modes">
+        <button id="autoBtn">🔄 自动晃动</button>
+      </div>
+    </div>
+    <div class="grp">
+      <label>晃动幅度 = <span id="aV">70</span> / 频率 = <span id="fV">1.4</span></label>
+      <input type="range" id="amp" min="10" max="150" step="5" value="70">
+      <input type="range" id="freq" min="0.3" max="3.5" step="0.1" value="1.4" style="margin-top:6px">
+    </div>
+    <div class="grp">
+      <label>黏性(越大越像糖浆) = <span id="vV">200</span></label>
+      <input type="range" id="visc" min="40" max="600" step="10" value="200">
+    </div>
+    <div class="grp">
+      <div class="modes">
+        <button id="reset">↺ 重新接满</button>
+        <button id="pause">⏸ 暂停</button>
+      </div>
+    </div>
+
+    <div class="hint">
+      倒水原理:整只杯子绕底部旋转;哪个粒子越过了<b>杯口平面</b>就不再被杯壁约束,
+      于是在重力下顺着杯沿流出、落到桌面(画面底部)。杯内的拍壁/晃荡、杯外的水流,都是同一套 SPH 力学。<br>
+      杯内 <span id="np">—</span> · 已倒出 <span id="ns">0</span>
+    </div>
+  </div>
+</div>
+
+<script>
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const CW=cv.width, CH=cv.height;
+
+// ---------- SPH 参数 ----------
+const H=16, HSQ=H*H, MASS=2.5, REST_DENS=300, GAS_CONST=2000;
+let VISC=200;
+const DT=0.0007, G=12000, BOUND_DAMPING=-0.5, EPS=H, NSUB=6, VMAX=3500;
+const POLY6=4/(Math.PI*Math.pow(H,8));
+const SPIKY_GRAD=-10/(Math.PI*Math.pow(H,5));
+const VISC_LAP=40/(Math.PI*Math.pow(H,5));
+
+// ---------- 杯子 ----------
+const glass={x:270, y:80, w:360, h:440};      // 内壁;绕"中心"旋转,中心落在画布中心(450,300)
+let gvx=0;                                   // 平移速度(晃动时施加给水)
+let angle=0, targetAngle=0;                  // 倾斜角(绕底部中心)
+
+// ---------- 粒子 ----------
+let P=[];
+function initParticles(){
+  P=[]; const x0=glass.x+EPS+2, x1=glass.x+glass.w-EPS-2;
+  const y1=glass.y+glass.h-EPS-2, y0=y1-300;
+  for(let y=y0;y<y1;y+=H) for(let x=x0;x<x1;x+=H)
+    P.push({x:x+(Math.random()-0.5)*2, y:y, vx:0,vy:0, rho:0,p:0, fx:0,fy:0, spilled:false});
+  document.getElementById('np').textContent=P.length;
+}
+initParticles();
+
+// ---------- 邻居网格 ----------
+const cell=H, gw=Math.ceil(CW/cell), gh=Math.ceil(CH/cell);
+let grid=[];
+function rebuildGrid(){
+  grid=new Array(gw*gh); for(let i=0;i<grid.length;i++) grid[i]=[];
+  for(let i=0;i<P.length;i++){ const p=P[i];
+    const cx=Math.max(0,Math.min(gw-1,(p.x/cell)|0)), cy=Math.max(0,Math.min(gh-1,(p.y/cell)|0));
+    grid[cy*gw+cx].push(i); }
+}
+function neighbors(p, cb){
+  const cx=Math.max(0,Math.min(gw-1,(p.x/cell)|0)), cy=Math.max(0,Math.min(gh-1,(p.y/cell)|0));
+  for(let yy=cy-1;yy<=cy+1;yy++){ if(yy<0||yy>=gh)continue;
+    for(let xx=cx-1;xx<=cx+1;xx++){ if(xx<0||xx>=gw)continue;
+      const b=grid[yy*gw+xx]; for(let m=0;m<b.length;m++) cb(b[m]); } }
+}
+
+// ---------- SPH ----------
+function computeDensityPressure(){
+  for(let i=0;i<P.length;i++){ const pi=P[i]; let rho=0;
+    neighbors(pi, j=>{ const pj=P[j]; const dx=pj.x-pi.x, dy=pj.y-pi.y, r2=dx*dx+dy*dy;
+      if(r2<HSQ) rho += MASS*POLY6*Math.pow(HSQ-r2,3); });
+    pi.rho=rho; pi.p=GAS_CONST*(rho-REST_DENS);
+  }
+}
+function computeForces(){
+  for(let i=0;i<P.length;i++){ const pi=P[i]; let fpx=0,fpy=0,fvx=0,fvy=0;
+    neighbors(pi, j=>{ if(j===i)return; const pj=P[j];
+      const dx=pj.x-pi.x, dy=pj.y-pi.y, r=Math.hypot(dx,dy);
+      if(r>0 && r<H){ const nx=dx/r, ny=dy/r;
+        const fp=MASS*(pi.p+pj.p)/(2*pj.rho)*SPIKY_GRAD*Math.pow(H-r,2);
+        fpx+=-nx*fp; fpy+=-ny*fp;
+        const fv=VISC*MASS*VISC_LAP*(H-r)/pj.rho;
+        fvx+=fv*(pj.vx-pi.vx); fvy+=fv*(pj.vy-pi.vy);
+      } });
+    pi.fx=fpx+fvx; pi.fy=fpy+fvy + G*pi.rho;   // 重力恒向下(世界系)
+  }
+}
+function integrate(){
+  const cw=Math.cos(angle), sw=Math.sin(angle);
+  const pvx=glass.x+glass.w/2, pvy=glass.y+glass.h/2;   // 绕中心旋转
+  const halfw=glass.w/2, halfh=glass.h/2;
+  const lwx=cw*gvx, lwy=-sw*gvx;              // 杯壁平移速度在杯系下
+  for(let i=0;i<P.length;i++){ const pi=P[i];
+    pi.vx += DT*pi.fx/pi.rho; pi.vy += DT*pi.fy/pi.rho;
+    const sp=Math.hypot(pi.vx,pi.vy); if(sp>VMAX){ pi.vx*=VMAX/sp; pi.vy*=VMAX/sp; }
+    pi.x += DT*pi.vx; pi.y += DT*pi.vy;
+
+    // 杯壁碰撞(在旋转杯系里,原点=杯中心)
+    if(!pi.spilled){
+      const dx=pi.x-pvx, dy=pi.y-pvy;
+      let lx=cw*dx+sw*dy, ly=-sw*dx+cw*dy;    // 旋转到杯系
+      if(ly < -halfh){ pi.spilled=true; }     // 越过杯口(顶) → 倒出
+      else {
+        let lvx=cw*pi.vx+sw*pi.vy, lvy=-sw*pi.vx+cw*pi.vy, hit=false;
+        if(ly > halfh-EPS){ ly=halfh-EPS; lvy=BOUND_DAMPING*(lvy-lwy)+lwy; hit=true; }  // 底
+        if(lx < -halfw+EPS){ lx=-halfw+EPS; lvx=BOUND_DAMPING*(lvx-lwx)+lwx; hit=true; } // 左壁
+        if(lx >  halfw-EPS){ lx= halfw-EPS; lvx=BOUND_DAMPING*(lvx-lwx)+lwx; hit=true; } // 右壁
+        if(hit){ pi.x=pvx+cw*lx-sw*ly; pi.y=pvy+sw*lx+cw*ly;
+                 pi.vx=cw*lvx-sw*lvy; pi.vy=sw*lvx+cw*lvy; }
+      }
+    }
+    // 世界边界(桌面/画面)
+    if(pi.x<EPS){pi.x=EPS; if(pi.vx<0)pi.vx*=BOUND_DAMPING;}
+    if(pi.x>CW-EPS){pi.x=CW-EPS; if(pi.vx>0)pi.vx*=BOUND_DAMPING;}
+    if(pi.y>CH-EPS){pi.y=CH-EPS; if(pi.vy>0)pi.vy*=BOUND_DAMPING;}
+    if(pi.y<-60){pi.y=-60; if(pi.vy<0)pi.vy*=BOUND_DAMPING;}
+  }
+}
+function stepSPH(){ rebuildGrid(); computeDensityPressure(); computeForces(); integrate(); }
+
+// ---------- 水滴贴图 ----------
+const sprite=document.createElement('canvas'); const sr=Math.round(H*1.25); sprite.width=sprite.height=sr*2;
+{ const s=sprite.getContext('2d'); const g=s.createRadialGradient(sr,sr,0,sr,sr,sr);
+  g.addColorStop(0,'rgba(90,170,255,0.95)'); g.addColorStop(0.55,'rgba(50,110,225,0.55)');
+  g.addColorStop(1,'rgba(30,70,180,0)'); s.fillStyle=g; s.beginPath(); s.arc(sr,sr,sr,0,7); s.fill(); }
+
+// ---------- 主循环 ----------
+let auto=false, amp=70, freq=1.4, t=0, running=true;
+let gx0=glass.x, dragging=false, dragPrev=0;
+
+function frame(now){
+  const rt=Math.min(0.033,(now-(frame.last||now))/1000); frame.last=now;
+  const px0=glass.x;
+  if(running){
+    if(auto && !dragging){ t+=rt; glass.x=gx0+amp*Math.sin(2*Math.PI*freq*t); }
+    gvx=(glass.x-px0)/Math.max(rt,1e-3);
+    angle += (targetAngle-angle)*0.1;         // 平滑趋向目标倾角
+    for(let s=0;s<NSUB;s++) stepSPH();
+  }
+
+  // 绘制
+  ctx.fillStyle='#02040a'; ctx.fillRect(0,0,CW,CH);
+  // 桌面线
+  ctx.strokeStyle='rgba(90,110,150,0.35)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,CH-EPS); ctx.lineTo(CW,CH-EPS); ctx.stroke();
+  // 水
+  ctx.globalCompositeOperation='lighter';
+  for(let i=0;i<P.length;i++) ctx.drawImage(sprite, P[i].x-sr, P[i].y-sr);
+  ctx.globalCompositeOperation='source-over';
+  // 杯子(绕中心旋转;开口在上,只画左壁/底/右壁三面)
+  const pvx=glass.x+glass.w/2, pvy=glass.y+glass.h/2, halfw=glass.w/2, halfh=glass.h/2;
+  ctx.save(); ctx.translate(pvx,pvy); ctx.rotate(angle);
+  ctx.fillStyle='rgba(120,170,255,0.05)'; ctx.fillRect(-halfw,-halfh,glass.w,glass.h);
+  ctx.strokeStyle='rgba(170,205,255,0.55)'; ctx.lineWidth=5; ctx.lineJoin='round';
+  ctx.beginPath(); ctx.moveTo(-halfw,-halfh); ctx.lineTo(-halfw,halfh);
+  ctx.lineTo(halfw,halfh); ctx.lineTo(halfw,-halfh); ctx.stroke();
+  ctx.restore();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+setInterval(()=>{ let sp=0; for(const p of P) if(p.spilled)sp++;
+  document.getElementById('ns').textContent=sp;
+  document.getElementById('fps').textContent=(running?'▶':'⏸')+' '+P.length+' 粒子'; }, 400);
+
+// ---------- 输入:拖动杯子 = 连续倾倒 ----------
+const MAXA=140*Math.PI/180, SENS=0.006;   // 每像素拖动对应的角度
+let dragStartX=0, dragStartAngle=0;
+function px(e){ const r=cv.getBoundingClientRect(); return (e.clientX-r.left)*(CW/r.width); }
+function setTilt(a){ a=Math.max(-MAXA,Math.min(MAXA,a)); targetAngle=a;
+  const deg=Math.round(a*180/Math.PI); tEl.value=deg; tV.textContent=deg; }
+cv.addEventListener('pointerdown',e=>{ dragging=true; dragStartX=px(e); dragStartAngle=targetAngle; cv.classList.add('drag'); });
+cv.addEventListener('pointermove',e=>{ if(!dragging)return; setTilt(dragStartAngle+(px(e)-dragStartX)*SENS); });
+window.addEventListener('pointerup',()=>{ dragging=false; cv.classList.remove('drag'); });
+
+const tEl=document.getElementById('tilt'), tV=document.getElementById('tV');
+tEl.oninput=()=>{ targetAngle=(+tEl.value)*Math.PI/180; tV.textContent=tEl.value; };
+const autoBtn=document.getElementById('autoBtn');
+autoBtn.onclick=()=>{ auto=!auto; t=0; gx0=glass.x; autoBtn.classList.toggle('on',auto);
+  autoBtn.textContent='🔄 自动晃动'+(auto?'·开':''); };
+const ampEl=document.getElementById('amp'),aV=document.getElementById('aV');
+ampEl.oninput=()=>{amp=+ampEl.value;aV.textContent=amp;};
+const fEl=document.getElementById('freq'),fV=document.getElementById('fV');
+fEl.oninput=()=>{freq=+fEl.value;fV.textContent=freq.toFixed(1);};
+const vEl=document.getElementById('visc'),vV=document.getElementById('vV');
+vEl.oninput=()=>{VISC=+vEl.value;vV.textContent=VISC;};
+document.getElementById('reset').onclick=()=>{ glass.x=270; gx0=270; angle=0; targetAngle=0;
+  tEl.value=0; tV.textContent='0'; auto=false; autoBtn.classList.remove('on'); autoBtn.textContent='🔄 自动晃动';
+  initParticles(); };
+document.getElementById('pause').onclick=e=>{running=!running;e.target.textContent=running?'⏸ 暂停':'▶ 继续';};
+</script>
+</body>
+</html>
