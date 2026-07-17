@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boids 群集 · 三条规则涌现出鸟群</title>
+<style>
+  :root{--bg:#0b0f1a;--panel:#141a2b;--ink:#e8ecf5;--muted:#93a0bd;--line:#2b3450;
+    --accent:#5e8bff;--sep:#ff6b8a;--ali:#42d6a4;--coh:#ffd166;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;overflow:hidden}
+  #stage{position:fixed;inset:0}
+  canvas{display:block;background:radial-gradient(circle at 50% 40%,#101725,#0b0f1a)}
+  .panel{position:fixed;top:14px;left:14px;width:280px;background:rgba(20,26,43,.92);
+    border:1px solid var(--line);border-radius:14px;padding:14px 16px;backdrop-filter:blur(8px);max-height:calc(100vh - 28px);overflow:auto}
+  h1{font-size:16px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:12px;margin:0 0 12px}
+  .ctrl{margin:9px 0}
+  .ctrl .lab{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px}
+  .ctrl .lab .v{font-family:"SF Mono",monospace}
+  input[type=range]{width:100%}
+  .sep .v,.sep b{color:var(--sep)}.ali .v,.ali b{color:var(--ali)}.coh .v,.coh b{color:var(--coh)}
+  input.sep{accent-color:var(--sep)}input.ali{accent-color:var(--ali)}input.coh{accent-color:var(--coh)}
+  input{accent-color:var(--accent)}
+  .btns{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+  button{background:#26304d;color:var(--ink);border:0;border-radius:8px;padding:7px 11px;font-weight:600;cursor:pointer;font-size:12.5px}
+  button.on{background:var(--accent);color:#0b1020}
+  .tip{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.7;border-top:1px solid var(--line);padding-top:10px}
+  .legend{display:flex;gap:12px;font-size:11.5px;margin-top:4px}
+  .legend span{display:flex;align-items:center;gap:4px}
+  .dot{width:9px;height:9px;border-radius:50%}
+  label.chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;margin:7px 0}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="cv"></canvas></div>
+<div class="panel">
+  <h1>Boids 群集</h1>
+  <p class="sub">三条局部规则 → 涌现出鸟群。拖滑块感受三力的平衡。</p>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--sep)"></span>分离</span>
+    <span><span class="dot" style="background:var(--ali)"></span>对齐</span>
+    <span><span class="dot" style="background:var(--coh)"></span>聚合</span>
+  </div>
+
+  <div class="ctrl sep"><div class="lab"><span><b>分离</b> 别撞上</span><span class="v" id="sepV">1.6</span></div>
+    <input class="sep" id="sep" type="range" min="0" max="4" step="0.1" value="1.6"></div>
+  <div class="ctrl ali"><div class="lab"><span><b>对齐</b> 随大流</span><span class="v" id="aliV">1.0</span></div>
+    <input class="ali" id="ali" type="range" min="0" max="4" step="0.1" value="1.0"></div>
+  <div class="ctrl coh"><div class="lab"><span><b>聚合</b> 别掉队</span><span class="v" id="cohV">1.0</span></div>
+    <input class="coh" id="coh" type="range" min="0" max="4" step="0.1" value="1.0"></div>
+
+  <div class="ctrl"><div class="lab"><span>感知半径</span><span class="v" id="perV">60</span></div>
+    <input id="per" type="range" min="20" max="150" step="1" value="60"></div>
+  <div class="ctrl"><div class="lab"><span>最大速度</span><span class="v" id="spdV">3.0</span></div>
+    <input id="spd" type="range" min="1" max="7" step="0.1" value="3.0"></div>
+  <div class="ctrl"><div class="lab"><span>数量</span><span class="v" id="numV">160</span></div>
+    <input id="num" type="range" min="20" max="400" step="10" value="160"></div>
+
+  <label class="chk"><input type="checkbox" id="showPer" checked> 高亮一只 + 显示它的感知圈与邻居连线</label>
+  <label class="chk"><input type="checkbox" id="trail"> 拖尾</label>
+
+  <div class="btns">
+    <button id="mouseMode" class="on">🖱️ 鼠标=吸引</button>
+    <button id="preset1">经典鸟群</button>
+    <button id="preset2">炸开</button>
+    <button id="preset3">挤成团</button>
+  </div>
+  <div class="tip">
+    ① <b>分离</b>:太近的邻居朝反方向躲<br>
+    ② <b>对齐</b>:靠近邻居们的平均朝向<br>
+    ③ <b>聚合</b>:朝邻居群的平均位置靠<br>
+    每只鸟<b>只看感知半径内的邻居</b>,没有指挥 —— 群体行为是"涌现"出来的。移动鼠标试试引它们过来(点按钮切换 吸引/驱散)。
+  </div>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const cv=$('cv'), ctx=cv.getContext('2d');
+let W,H,DPR;
+function resize(){DPR=window.devicePixelRatio||1;W=window.innerWidth;H=window.innerHeight;
+  cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
+window.addEventListener('resize',resize);resize();
+
+const P={sep:1.6,ali:1.0,coh:1.0,per:60,spd:3.0,num:160};
+const bind=(id,key,el)=>{const s=$(id);s.oninput=()=>{P[key]=+s.value;$(id+'V').textContent=(+s.value).toFixed(id==='per'||id==='num'?0:1);if(key==='num')sync();};};
+bind('sep','sep');bind('ali','ali');bind('coh','coh');bind('per','per');bind('spd','spd');bind('num','num');
+
+const rand=(a,b)=>a+Math.random()*(b-a);
+let boids=[];
+function makeBoid(){const ang=rand(0,Math.PI*2);return{x:rand(0,W),y:rand(0,H),vx:Math.cos(ang)*P.spd,vy:Math.sin(ang)*P.spd};}
+function sync(){while(boids.length<P.num)boids.push(makeBoid());boids.length=P.num;}
+sync();
+
+// 鼠标
+let mouse={x:-1e4,y:-1e4,active:false}, attract=true;
+window.addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;mouse.active=true;});
+window.addEventListener('mouseleave',()=>mouse.active=false);
+$('mouseMode').onclick=()=>{attract=!attract;const b=$('mouseMode');b.textContent=attract?'🖱️ 鼠标=吸引':'🖱️ 鼠标=驱散';b.classList.toggle('on',attract);};
+
+$('preset1').onclick=()=>set(1.6,1.0,1.0,60);
+$('preset2').onclick=()=>set(3.5,0.2,0.1,50);
+$('preset3').onclick=()=>set(0.2,0.5,3.5,80);
+function set(s,a,c,p){P.sep=s;P.ali=a;P.coh=c;P.per=p;
+  $('sep').value=s;$('sepV').textContent=s.toFixed(1);
+  $('ali').value=a;$('aliV').textContent=a.toFixed(1);
+  $('coh').value=c;$('cohV').textContent=c.toFixed(1);
+  $('per').value=p;$('perV').textContent=p;}
+
+const limit=(vx,vy,max)=>{const m=Math.hypot(vx,vy);return m>max?[vx/m*max,vy/m*max]:[vx,vy];};
+
+function step(){
+  const per=P.per, per2=per*per, sepR=per*0.5, sepR2=sepR*sepR, maxF=0.06*P.spd;
+  for(const b of boids){
+    let cx=0,cy=0,ax=0,ay=0,sx=0,sy=0,n=0,ns=0;
+    for(const o of boids){ if(o===b)continue;
+      const dx=o.x-b.x, dy=o.y-b.y, d2=dx*dx+dy*dy;
+      if(d2>per2||d2===0)continue;
+      cx+=o.x;cy+=o.y;              // 聚合:邻居位置
+      ax+=o.vx;ay+=o.vy;           // 对齐:邻居速度
+      n++;
+      if(d2<sepR2){const d=Math.sqrt(d2);sx-=dx/d;sy-=dy/d;ns++;} // 分离:近邻反方向
+    }
+    let fx=0,fy=0;
+    if(n>0){
+      // 聚合
+      let dcx=cx/n-b.x, dcy=cy/n-b.y;[dcx,dcy]=limit(dcx,dcy,P.spd);
+      let scx=dcx-b.vx, scy=dcy-b.vy;[scx,scy]=limit(scx,scy,maxF);
+      fx+=scx*P.coh;fy+=scy*P.coh;
+      // 对齐
+      let dax=ax/n, day=ay/n;[dax,day]=limit(dax,day,P.spd);
+      let sax=dax-b.vx, say=day-b.vy;[sax,say]=limit(sax,say,maxF);
+      fx+=sax*P.ali;fy+=say*P.ali;
+    }
+    if(ns>0){
+      let dsx=sx/ns, dsy=sy/ns;[dsx,dsy]=limit(dsx,dsy,P.spd);
+      let ssx=dsx-b.vx, ssy=dsy-b.vy;[ssx,ssy]=limit(ssx,ssy,maxF);
+      fx+=ssx*P.sep;fy+=ssy*P.sep;
+    }
+    // 鼠标
+    if(mouse.active){const dx=mouse.x-b.x,dy=mouse.y-b.y,d=Math.hypot(dx,dy);
+      if(d<180&&d>0){const s=(attract?1:-1)*maxF*2.2;fx+=dx/d*s;fy+=dy/d*s;}}
+    b.vx+=fx;b.vy+=fy;
+    [b.vx,b.vy]=limit(b.vx,b.vy,P.spd);
+    b.x+=b.vx;b.y+=b.vy;
+    // 环绕
+    if(b.x<0)b.x+=W;if(b.x>W)b.x-=W;if(b.y<0)b.y+=H;if(b.y>H)b.y-=H;
+  }
+}
+
+function draw(){
+  if($('trail').checked){ctx.fillStyle='rgba(11,15,26,0.18)';ctx.fillRect(0,0,W,H);}
+  else ctx.clearRect(0,0,W,H);
+  const hl=$('showPer').checked?boids[0]:null;
+  if(hl){
+    ctx.strokeStyle='rgba(94,139,255,.35)';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.arc(hl.x,hl.y,P.per,0,7);ctx.stroke();
+    // 邻居连线
+    ctx.strokeStyle='rgba(94,139,255,.25)';ctx.lineWidth=1;
+    for(const o of boids){if(o===hl)continue;const d=Math.hypot(o.x-hl.x,o.y-hl.y);
+      if(d<P.per){ctx.beginPath();ctx.moveTo(hl.x,hl.y);ctx.lineTo(o.x,o.y);ctx.stroke();}}
+  }
+  for(const b of boids){
+    const ang=Math.atan2(b.vy,b.vx);
+    ctx.save();ctx.translate(b.x,b.y);ctx.rotate(ang);
+    ctx.beginPath();ctx.moveTo(7,0);ctx.lineTo(-5,3.2);ctx.lineTo(-5,-3.2);ctx.closePath();
+    ctx.fillStyle=(b===hl)?'#ffd166':'#8fb2ff';ctx.fill();
+    ctx.restore();
+  }
+  if(hl){ctx.beginPath();ctx.arc(hl.x,hl.y,3,0,7);ctx.fillStyle='#ffd166';ctx.fill();}
+}
+
+function loop(){step();draw();requestAnimationFrame(loop);}
+loop();
+</script>
+</body>
+</html>

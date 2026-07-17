@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N-body 引力模拟 · 只放一条规则,涌现出星系</title>
+<style>
+  :root{--bg:#05070d;--panel:#111726;--ink:#e8ecf5;--muted:#93a0bd;--line:#2b3450;--accent:#5e8bff;--accent2:#ffd166;}
+  *{box-sizing:border-box}
+  body{margin:0;background:#05070d;color:var(--ink);overflow:hidden;
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;}
+  canvas{display:block;position:fixed;inset:0}
+  .panel{position:fixed;top:14px;left:14px;width:270px;background:rgba(17,23,38,.9);
+    border:1px solid var(--line);border-radius:14px;padding:14px 16px;backdrop-filter:blur(8px);max-height:calc(100vh - 28px);overflow:auto}
+  h1{font-size:16px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:12px;margin:0 0 12px}
+  .ctrl{margin:9px 0}
+  .ctrl .lab{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px}
+  .ctrl .v{font-family:"SF Mono",monospace;color:var(--accent2)}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .btns{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0}
+  button{background:#26304d;color:var(--ink);border:0;border-radius:8px;padding:7px 10px;font-weight:600;cursor:pointer;font-size:12px}
+  button.pri{background:var(--accent);color:#0b1020;width:100%}
+  button.on{outline:2px solid var(--accent2)}
+  .tip{font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.7;border-top:1px solid var(--line);padding-top:10px}
+  label.chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;margin:6px 0}
+  .stat{font-family:"SF Mono",monospace;font-size:11px;color:var(--muted);margin-top:6px}
+  b.eq{color:var(--accent2);font-family:"SF Mono",monospace}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div class="panel">
+  <h1>N-body 引力模拟</h1>
+  <p class="sub">唯一规则:每对粒子互相吸引 <b class="eq">F = G·m₁m₂ / r²</b>。没别的了 —— 结构自己长出来。</p>
+
+  <div class="ctrl"><div class="lab"><span>初始形态</span></div>
+    <div class="btns">
+      <button id="ps_disk" class="on">🌀 旋转盘</button>
+      <button id="ps_collapse">💥 冷坍缩</button>
+      <button id="ps_collide">🔭 双星系碰撞</button>
+      <button id="ps_cloud">☁️ 随机云</button>
+    </div>
+  </div>
+
+  <div class="ctrl"><div class="lab"><span>引力强度 G</span><span class="v" id="gV">60</span></div>
+    <input id="g" type="range" min="0" max="200" step="1" value="60"></div>
+  <div class="ctrl"><div class="lab"><span>粒子数</span><span class="v" id="nV">500</span></div>
+    <input id="n" type="range" min="50" max="1500" step="50" value="500"></div>
+  <div class="ctrl"><div class="lab"><span>时间步 dt</span><span class="v" id="dtV">0.6</span></div>
+    <input id="dt" type="range" min="0.1" max="1.5" step="0.1" value="0.6"></div>
+  <div class="ctrl"><div class="lab"><span>软化(防奇点)</span><span class="v" id="epsV">14</span></div>
+    <input id="eps" type="range" min="4" max="40" step="1" value="14"></div>
+
+  <label class="chk"><input type="checkbox" id="trail" checked> 拖尾(看清轨道)</label>
+  <label class="chk"><input type="checkbox" id="center" checked> 含中心大质量(黑洞)</label>
+  <div class="btns"><button class="pri" id="restart">↻ 重新撒粒子</button></div>
+
+  <div class="stat" id="stat"></div>
+  <div class="tip">
+    <b>玩法</b>:选一种初始形态 →「重新撒粒子」。<br>
+    🌀 <b>旋转盘</b>:给初速让它转,看它摊成盘、差速旋转拉出旋臂。<br>
+    💥 <b>冷坍缩</b>:静止一团,纯引力把它吸成团再弹开、稳定成球团。<br>
+    🔭 <b>碰撞</b>:两团星系相撞并合。<br>
+    🖱️ 鼠标按住 = 临时引力源,拖动搅动它们。
+  </div>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+let W,H,DPR;
+function resize(){DPR=window.devicePixelRatio||1;W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',resize);resize();
+
+const P={G:60,n:500,dt:0.6,eps:14};
+function bindS(id,key,fix){const s=$(id);s.oninput=()=>{P[key]=+s.value;$(id+'V').textContent=fix?(+s.value).toFixed(1):s.value;};}
+bindS('g','G');bindS('n','n');bindS('dt','dt',1);bindS('eps','eps');
+$('n').oninput=()=>{P.n=+$('n').value;$('nV').textContent=P.n;};
+
+let px,py,vx,vy,m,big,N;
+const rand=(a,b)=>a+Math.random()*(b-a);
+const gauss=()=>{let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);};
+
+let preset='disk';
+function alloc(n){N=n;px=new Float64Array(n);py=new Float64Array(n);vx=new Float64Array(n);vy=new Float64Array(n);m=new Float64Array(n);big=new Uint8Array(n);}
+
+function build(){
+  const useCenter=$('center').checked;
+  let n=P.n, idx=0;
+  alloc(n);
+  const cx=W/2, cy=H/2, G=P.G;
+  const Mc = useCenter? 4000 : 0;
+  if(useCenter){px[0]=cx;py[0]=cy;vx[0]=0;vy[0]=0;m[0]=Mc;big[0]=1;idx=1;}
+
+  if(preset==='disk'){
+    for(let i=idx;i<n;i++){
+      const r=rand(40, Math.min(W,H)*0.42), a=rand(0,2*Math.PI);
+      px[i]=cx+Math.cos(a)*r; py[i]=cy+Math.sin(a)*r+gauss()*4;
+      m[i]=rand(0.5,1.5);
+      // 绕心切向速度(近圆轨道)
+      const vc=Math.sqrt((G*(Mc+ r*0.0))/r); // 主要由中心质量决定
+      vx[i]=-Math.sin(a)*vc + gauss()*0.3;
+      vy[i]= Math.cos(a)*vc + gauss()*0.3;
+    }
+  } else if(preset==='collapse'){
+    for(let i=idx;i<n;i++){
+      const r=Math.abs(gauss())*90, a=rand(0,2*Math.PI);
+      px[i]=cx+Math.cos(a)*r; py[i]=cy+Math.sin(a)*r;
+      m[i]=rand(0.5,1.5); vx[i]=gauss()*0.2; vy[i]=gauss()*0.2; // 几乎静止
+    }
+  } else if(preset==='collide'){
+    const off=Math.min(W,H)*0.22, half=Math.floor((n-idx)/2);
+    for(let k=0;k<n-idx;k++){const i=idx+k;
+      const side=k<half?-1:1;
+      const gx=cx+side*off, gy=cy - side*off*0.3;
+      const r=Math.abs(gauss())*55, a=rand(0,2*Math.PI);
+      px[i]=gx+Math.cos(a)*r; py[i]=gy+Math.sin(a)*r; m[i]=rand(0.5,1.5);
+      const vc=Math.sqrt(G*800/(r+20))*0.7;
+      vx[i]=-Math.sin(a)*vc*side + side*1.6;   // 团内自转 + 相向冲
+      vy[i]= Math.cos(a)*vc*side + side*0.5;
+    }
+  } else { // cloud
+    for(let i=idx;i<n;i++){px[i]=rand(0,W);py[i]=rand(0,H);m[i]=rand(0.5,1.5);vx[i]=gauss()*0.4;vy[i]=gauss()*0.4;}
+  }
+  ctx.clearRect(0,0,W,H);
+}
+
+// 鼠标引力源
+let mouse={x:0,y:0,down:false};
+addEventListener('mousedown',e=>{mouse.down=true;mouse.x=e.clientX;mouse.y=e.clientY;});
+addEventListener('mousemove',e=>{mouse.x=e.clientX;mouse.y=e.clientY;});
+addEventListener('mouseup',()=>mouse.down=false);
+
+const ax=new Float64Array(2000), ay=new Float64Array(2000);
+function physics(){
+  const G=P.G, eps2=P.eps*P.eps, dt=P.dt, n=N;
+  if(ax.length<n){/* grow */}
+  for(let i=0;i<n;i++){ax[i]=0;ay[i]=0;}
+  for(let i=0;i<n;i++){
+    const xi=px[i],yi=py[i],mi=m[i];
+    for(let j=i+1;j<n;j++){
+      const dx=px[j]-xi, dy=py[j]-yi;
+      const d2=dx*dx+dy*dy+eps2;
+      const inv=1/(d2*Math.sqrt(d2));   // d^-3
+      const fx=dx*inv, fy=dy*inv;
+      ax[i]+=fx*m[j]; ay[i]+=fy*m[j];
+      ax[j]-=fx*mi;   ay[j]-=fy*mi;
+    }
+  }
+  for(let i=0;i<n;i++){
+    let axx=ax[i]*G, ayy=ay[i]*G;
+    if(mouse.down){const dx=mouse.x-px[i],dy=mouse.y-py[i],d2=dx*dx+dy*dy+400;const inv=1/(d2*Math.sqrt(d2));const s=G*3000;axx+=dx*inv*s;ayy+=dy*inv*s;}
+    vx[i]+=axx*dt; vy[i]+=ayy*dt;
+  }
+  for(let i=0;i<n;i++){ if(big[i])continue; px[i]+=vx[i]*dt; py[i]+=vy[i]*dt; }
+}
+
+function draw(){
+  if($('trail').checked){ctx.fillStyle='rgba(5,7,13,0.16)';ctx.fillRect(0,0,W,H);}
+  else ctx.clearRect(0,0,W,H);
+  ctx.globalCompositeOperation='lighter';
+  for(let i=0;i<N;i++){
+    const sp=Math.hypot(vx[i],vy[i]);
+    if(big[i]){
+      const g=ctx.createRadialGradient(px[i],py[i],0,px[i],py[i],14);
+      g.addColorStop(0,'rgba(255,240,200,0.95)');g.addColorStop(1,'rgba(255,180,80,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(px[i],py[i],14,0,7);ctx.fill();continue;
+    }
+    // 颜色随速度:慢=蓝,中=白,快=金
+    const t=Math.min(1,sp/6);
+    const r=120+t*135, gg=150+t*90, b=255-t*130;
+    ctx.fillStyle=`rgba(${r|0},${gg|0},${b|0},0.9)`;
+    ctx.beginPath();ctx.arc(px[i],py[i],1.4,0,7);ctx.fill();
+  }
+  ctx.globalCompositeOperation='source-over';
+}
+
+let frames=0;
+function loop(){physics();draw();frames++;
+  if(frames%15===0)$('stat').textContent=`粒子 ${N} · G=${P.G} · 帧内两两受力 ${(N*(N-1)/2)|0} 次`;
+  requestAnimationFrame(loop);}
+
+// 预设按钮
+const pbtns={disk:'ps_disk',collapse:'ps_collapse',collide:'ps_collide',cloud:'ps_cloud'};
+function selectPreset(name){preset=name;Object.entries(pbtns).forEach(([k,id])=>$(id).classList.toggle('on',k===name));build();}
+$('ps_disk').onclick=()=>selectPreset('disk');
+$('ps_collapse').onclick=()=>selectPreset('collapse');
+$('ps_collide').onclick=()=>selectPreset('collide');
+$('ps_cloud').onclick=()=>selectPreset('cloud');
+$('restart').onclick=build;
+$('center').onchange=build;
+
+build();loop();
+</script>
+</body>
+</html>

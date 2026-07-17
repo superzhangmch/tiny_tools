@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shor 算法核心 · 分解 = 找周期</title>
+<style>
+  :root{--bg:#0f1420;--panel:#171d2e;--panel2:#1e263b;--ink:#e8ecf5;--muted:#93a0bd;
+    --line:#2b3450;--accent:#5e8bff;--accent2:#ffd166;--g:#42d6a4;--p:#ff6b8a;}
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0c111c,#0f1420);color:var(--ink);
+    font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:900px;margin:0 auto;padding:28px 20px 80px}
+  h1{font-size:25px;margin:0 0 4px}
+  .lead{color:var(--muted);margin:0 0 22px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:18px 20px;margin:0 0 18px}
+  h2{font-size:17px;margin:0 0 10px;display:flex;gap:9px;align-items:center}
+  h2 .n{background:var(--accent);color:#0b1020;width:26px;height:26px;border-radius:7px;display:grid;place-items:center;font-size:14px;font-weight:700}
+  canvas{background:var(--panel2);border-radius:10px;display:block;width:100%}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  select{background:#0c1120;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-family:inherit}
+  button{background:var(--accent);color:#0b1020;border:0;border-radius:9px;padding:8px 13px;font-weight:600;cursor:pointer;font-size:14px}
+  button.ghost{background:#26304d;color:var(--ink)}
+  code,.mono{font-family:"SF Mono",Menlo,monospace;background:#0c1120;padding:1px 6px;border-radius:5px;color:#cde0ff;font-size:13.5px}
+  .kv{background:#0c1120;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0;font-family:"SF Mono",monospace;font-size:13.5px;line-height:1.85;word-break:break-all}
+  .kv .lbl{color:var(--muted);font-family:-apple-system,sans-serif;font-size:12.5px}
+  .y{color:var(--accent2)}.g{color:var(--g)}.p{color:var(--p)}.ok{color:#42d6a4}.bad{color:#ff6b8a}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+  .step{background:#0c1120;border-left:3px solid var(--accent);padding:8px 12px;margin:8px 0;border-radius:0 8px 8px 0;font-size:13.5px}
+  b.big{font-size:17px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Shor 算法的心脏:分解 = 找周期</h1>
+  <p class="lead">选一个要分解的 N 和底数 a,亲眼看 <span class="mono">aˣ mod N</span> 的周期怎么冒出来,以及量子傅里叶变换如何把周期读成尖峰。</p>
+
+  <section>
+    <h2><span class="n">1</span>选数</h2>
+    <div class="row">
+      <span>要分解 N =</span>
+      <select id="N"></select>
+      <span>底数 a =</span>
+      <select id="a"></select>
+      <button class="ghost" id="randA">🎲 随机 a</button>
+    </div>
+    <div class="kv" id="gcdInfo"></div>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span>看周期:f(x) = aˣ mod N</h2>
+    <canvas id="cf" height="250"></canvas>
+    <div class="hint"><b>横轴 = 指数 x</b>(a 的几次方)　<b>纵轴 = aˣ mod N 的值</b>。每个点高度就是这次方的余数。<br>关键看<b>底色条带</b>:每个深浅交替的色块是<b>一个周期</b>,你会发现<b>每一块里的高低图案完全相同</b> —— 那个重复的宽度就是周期 r。🟢 绿点=值回到 1 的地方(每个周期的起点)。</div>
+    <div class="kv" id="periodInfo"></div>
+  </section>
+
+  <section>
+    <h2><span class="n">3</span>量子傅里叶变换:把周期读成尖峰</h2>
+    <canvas id="cd" height="200"></canvas>
+    <div class="hint">这是"周期梳子"的傅里叶谱。<b>尖峰出现在 L/r 的整数倍处</b> —— 量子机测一次就落在某个尖峰上,用连分数从峰的位置反推出 r。峰越尖,周期越确定。</div>
+    <div class="kv" id="dftInfo"></div>
+  </section>
+
+  <section>
+    <h2><span class="n">4</span>有了周期 r → 一步算出因子</h2>
+    <div class="step">
+      若 r 是偶数,且 <span class="mono">a^(r/2) ≢ −1 (mod N)</span>,则:<br>
+      因子 = <span class="mono">gcd(a^(r/2) − 1, N)</span> 和 <span class="mono">gcd(a^(r/2) + 1, N)</span>
+    </div>
+    <div class="kv" id="factorInfo"></div>
+    <p class="hint">这一步是<b>纯经典、飞快</b>的最大公约数。整个难点只在"找 r",而那正是量子加速之处。若 r 是奇数或落到 −1(演示里偶尔发生),换个 a 重试即可 —— 真实算法就是这么做的。</p>
+  </section>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const gcd=(a,b)=>{while(b){[a,b]=[b,a%b];}return a;};
+// 半素数列表
+const SEMI=[15,21,33,35,39,51,55,77,85,91,115,143,187,203,221,247];
+SEMI.forEach(v=>$('N').add(new Option(v,v)));
+$('N').value='21';
+
+function fillA(){
+  const N=+$('N').value; const sel=$('a'); sel.innerHTML='';
+  for(let a=2;a<N;a++) sel.add(new Option(a,a));
+  sel.value=Math.min(2, N-1); // default
+  // 选一个和 N 互质、且给出偶数周期的默认 a(尽量演示成功)
+  for(let a=2;a<N;a++){ if(gcd(a,N)===1){ sel.value=a; break; } }
+}
+function fseq(a,N,L){const f=new Array(L);f[0]=1;for(let x=1;x<L;x++)f[x]=(f[x-1]*a)%N;return f;}
+function order(a,N){let v=1;for(let r=1;r<=N;r++){v=(v*a)%N;if(v===1)return r;}return -1;}
+
+const L=128; // 采样长度
+function run(){
+  const N=+$('N').value, a=+$('a').value;
+  const g0=gcd(a,N);
+  const gcdEl=$('gcdInfo');
+  if(g0!==1){
+    gcdEl.innerHTML=`gcd(a, N) = gcd(${a}, ${N}) = <b class="ok">${g0}</b> ≠ 1<br><span class="lbl">运气爆棚:a 和 N 不互质,直接就是一个因子!</span> ${N} = ${g0} × ${N/g0}`;
+  } else {
+    gcdEl.innerHTML=`gcd(a, N) = gcd(${a}, ${N}) = 1 <span class="lbl">(互质,进入找周期流程)</span>`;
+  }
+  // f(x)
+  const f=fseq(a,N,L);
+  const r=order(a,N);
+  // 画 f
+  drawF(f,N,r);
+  $('periodInfo').innerHTML= r>0
+    ? `f(x)=${a}ˣ mod ${N} 的周期 <b class="y big">r = ${r}</b> <span class="lbl">(最小的 x 使 aˣ≡1)</span>　序列开头: ${f.slice(0,Math.min(r+1,14)).join(', ')}…`
+    : `未找到周期`;
+  // DFT of comb (1 at multiples of r)
+  drawDFT(r);
+  // factoring
+  factor(a,N,r,g0);
+}
+
+function drawF(f,N,r){
+  const cv=$('cf');const dpr=devicePixelRatio||1;const w=cv.clientWidth,h=260;
+  cv.width=w*dpr;cv.height=h*dpr;const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  const padL=42,padR=16,padT=22,padB=30;
+  const plotW=w-padL-padR, plotH=h-padT-padB;
+  // 显示范围:约 4 个周期,读起来清楚
+  const Ld = r>0 ? Math.min(L, Math.max(4*r+1, 12)) : L;
+  const X=x=>padL + x/(Ld-1)*plotW;
+  const Y=v=>padT + plotH - v/N*plotH;
+  // 周期底色条带
+  if(r>0){for(let k=0;k*r<Ld;k++){const x0=X(k*r), x1=X(Math.min((k+1)*r,Ld-1));
+      ctx.fillStyle=(k%2===0)?'rgba(94,139,255,0.09)':'rgba(255,209,102,0.07)';
+      ctx.fillRect(x0,padT,x1-x0,plotH);}}
+  // 网格 + y 刻度
+  ctx.font='11px monospace';ctx.textBaseline='middle';
+  const yticks=4;
+  for(let i=0;i<=yticks;i++){const v=Math.round(N*i/yticks);const yy=Y(v);
+    ctx.strokeStyle='#232c44';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(padL,yy);ctx.lineTo(w-padR,yy);ctx.stroke();
+    ctx.fillStyle='#93a0bd';ctx.textAlign='right';ctx.fillText(v,padL-6,yy);}
+  // x 刻度:整数指数
+  ctx.textBaseline='top';ctx.textAlign='center';
+  const xstep=Math.max(1,Math.ceil(Ld/16));
+  for(let x=0;x<Ld;x+=xstep){const xx=X(x);
+    ctx.strokeStyle='#1c2438';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(xx,padT);ctx.lineTo(xx,padT+plotH);ctx.stroke();
+    ctx.fillStyle='#93a0bd';ctx.fillText(x,xx,padT+plotH+5);}
+  // 轴标题
+  ctx.fillStyle='#cfe';ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  ctx.fillText('aˣ mod N',padL,padT-8);
+  ctx.textAlign='right';ctx.fillText('指数 x →',w-padR,h-6);
+  // 折线
+  ctx.strokeStyle='#5e8bff';ctx.lineWidth=2;ctx.beginPath();
+  for(let x=0;x<Ld;x++){const xx=X(x),yy=Y(f[x]);x===0?ctx.moveTo(xx,yy):ctx.lineTo(xx,yy);}
+  ctx.stroke();
+  // 数据点(回到1的用绿色大点)
+  for(let x=0;x<Ld;x++){const isReturn=(r>0&&x%r===0);
+    ctx.beginPath();ctx.arc(X(x),Y(f[x]),isReturn?4.2:2.8,0,7);
+    ctx.fillStyle=isReturn?'#42d6a4':'#8fb2ff';ctx.fill();
+    if(isReturn){ctx.strokeStyle='#0f1420';ctx.lineWidth=1.5;ctx.stroke();}}
+  // 周期跨度标注
+  if(r>0){ctx.strokeStyle='#ffd166';ctx.lineWidth=1.4;ctx.setLineDash([4,3]);
+    const ya=padT+8;ctx.beginPath();ctx.moveTo(X(0),ya);ctx.lineTo(X(r),ya);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#ffd166';ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText('周期 r = '+r, X(r/2), ya-4);}
+}
+
+function drawDFT(r){
+  const cv=$('cd');const dpr=devicePixelRatio||1;const w=cv.clientWidth,h=200;
+  cv.width=w*dpr;cv.height=h*dpr;const ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);const pad=30;
+  // comb: 1 at multiples of r
+  const comb=new Float64Array(L);for(let x=0;x<L;x++)comb[x]=(r>0&&x%r===0)?1:0;
+  // DFT magnitude
+  const mag=new Float64Array(L);let mx=0;
+  for(let k=0;k<L;k++){let re=0,im=0;for(let x=0;x<L;x++){const ang=-2*Math.PI*k*x/L;re+=comb[x]*Math.cos(ang);im+=comb[x]*Math.sin(ang);}
+    mag[k]=Math.hypot(re,im);if(mag[k]>mx)mx=mx>mag[k]?mx:mag[k];}
+  const X=k=>pad+k/(L-1)*(w-2*pad), Y=v=>h-pad-v/mx*(h-2*pad);
+  ctx.strokeStyle='#2b3450';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,h-pad);ctx.lineTo(w-pad,h-pad);ctx.moveTo(pad,pad);ctx.lineTo(pad,h-pad);ctx.stroke();
+  ctx.fillStyle='#93a0bd';ctx.font='11px monospace';ctx.fillText('|振幅|',pad+4,pad+2);ctx.fillText('频率 k →',w-pad-46,h-pad+16);
+  for(let k=0;k<L;k++){const tall=mag[k]>mx*0.5;
+    ctx.strokeStyle=tall?'#ffd166':'rgba(94,139,255,.4)';ctx.lineWidth=tall?2:1;
+    ctx.beginPath();ctx.moveTo(X(k),h-pad);ctx.lineTo(X(k),Y(mag[k]));ctx.stroke();}
+  // 标注峰间距 = L/r
+  if(r>0){const spacing=L/r;
+    ctx.fillStyle='#ffd166';ctx.font='12px sans-serif';
+    ctx.fillText(`尖峰间距 = L/r = ${L}/${r} ≈ ${spacing.toFixed(1)} → 从间距反推出 r`, pad+4, h-pad-6);}
+  $('dftInfo').innerHTML= r>0
+    ? `周期梳子的傅里叶谱:尖峰落在 <b class="y">k = 0, ${Math.round(L/r)}, ${Math.round(2*L/r)}, …</b>(间距 ≈ L/r = ${(L/r).toFixed(2)})。<span class="lbl">量子测一次 → 落在某尖峰 → 连分数解出 r。这正是 QFT 干的活。</span>`
+    : '';
+}
+
+function factor(a,N,r,g0){
+  const el=$('factorInfo');
+  if(g0!==1){el.innerHTML=`已由 gcd 直接得到因子:<b class="y">${N} = ${g0} × ${N/g0}</b>`;return;}
+  if(r<=0){el.innerHTML='未找到周期';return;}
+  if(r%2!==0){el.innerHTML=`周期 r=${r} 是<b class="bad">奇数</b>,此 a 不可用 → 换个 a 重试(🎲)。`;return;}
+  // a^(r/2) mod N
+  let h=1;for(let i=0;i<r/2;i++)h=(h*a)%N;
+  if(h===N-1){el.innerHTML=`a^(r/2) mod N = ${h} ≡ −1,此 a 不可用 → 换个 a 重试。`;return;}
+  const f1=gcd(h-1,N), f2=gcd(h+1,N);
+  el.innerHTML=
+    `r = ${r},  r/2 = ${r/2}<br>`+
+    `a^(r/2) mod N = ${a}^${r/2} mod ${N} = <b class="y">${h}</b><br>`+
+    `gcd(${h}−1, ${N}) = <b class="ok">${f1}</b>　　gcd(${h}+1, ${N}) = <b class="ok">${f2}</b><br>`+
+    `<b class="big">→ ${N} = ${f1} × ${f2}</b> ✔ 分解成功`;
+}
+
+$('N').onchange=()=>{fillA();run();};
+$('a').onchange=run;
+$('randA').onclick=()=>{const N=+$('N').value;const opts=[...$('a').options].map(o=>+o.value).filter(a=>gcd(a,N)===1);$('a').value=opts[Math.floor(Math.random()*opts.length)];run();};
+addEventListener('resize',run);
+fillA();run();
+</script>
+</body>
+</html>

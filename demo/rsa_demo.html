@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSA 图解 · 亲手生成密钥并加解密</title>
+<style>
+  :root{--bg:#0f1420;--panel:#171d2e;--panel2:#1e263b;--ink:#e8ecf5;--muted:#93a0bd;
+    --line:#2b3450;--accent:#5e8bff;--accent2:#ffd166;--pub:#42d6a4;--priv:#ff6b8a;}
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0c111c,#0f1420);color:var(--ink);
+    font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:900px;margin:0 auto;padding:30px 20px 80px}
+  h1{font-size:26px;margin:0 0 4px}
+  .lead{color:var(--muted);margin:0 0 24px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:20px 22px;margin:0 0 20px}
+  h2{font-size:18px;margin:0 0 12px;display:flex;gap:9px;align-items:center}
+  h2 .n{background:var(--accent);color:#0b1020;width:27px;height:27px;border-radius:7px;display:grid;place-items:center;font-size:14px;font-weight:700}
+  p{margin:9px 0}
+  .muted{color:var(--muted)}
+  code,.mono{font-family:"SF Mono",Menlo,monospace;background:#0c1120;padding:1px 6px;border-radius:5px;color:#cde0ff;font-size:13.5px}
+  select,input[type=text]{background:#0c1120;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-family:inherit}
+  input[type=text]{width:100%;font-size:15px}
+  button{background:var(--accent);color:#0b1020;border:0;border-radius:9px;padding:9px 15px;font-weight:600;cursor:pointer;font-size:14px}
+  button.ghost{background:#26304d;color:var(--ink)}
+  .btns{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}
+  .kv{background:#0c1120;border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin:11px 0;font-family:"SF Mono",monospace;font-size:13.5px;line-height:1.9;word-break:break-all}
+  .kv .lbl{color:var(--muted);font-family:-apple-system,sans-serif;font-size:12.5px;margin-right:6px}
+  .pub{color:var(--pub)}.priv{color:var(--priv)}.y{color:var(--accent2)}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;margin-left:6px}
+  .pill.p{background:#42d6a433;color:#7ff0c8}.pill.s{background:#ff6b8a33;color:#ffb3c3}.pill.pub{background:#26304d;color:#cfe}
+  .step{background:#0c1120;border-left:3px solid var(--accent);padding:8px 12px;margin:8px 0;border-radius:0 8px 8px 0;font-size:13.5px}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .ok{color:#42d6a4}.bad{color:#ff6b8a}
+  hr{border:0;border-top:1px solid var(--line);margin:13px 0}
+  table{width:100%;border-collapse:collapse;font-family:"SF Mono",monospace;font-size:12.5px;margin-top:8px}
+  td,th{border:1px solid var(--line);padding:4px 7px;text-align:center}
+  th{color:var(--muted);font-weight:600}
+  .big{font-size:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>RSA 图解 · 亲手玩一遍</h1>
+  <p class="lead">乘法容易、分解极难 —— 用这个不对称,造出「公钥加密、私钥解密」。用小质数便于观察,原理和 2048 位完全一致。</p>
+
+  <!-- 1 -->
+  <section>
+    <h2><span class="n">1</span>地基:乘法秒算,分解要命</h2>
+    <p>给你两个质数相乘,你瞬间得到答案;反过来给你乘积,让你还原出两个质数,只能挨个试。质数越大,这堵墙越高。</p>
+    <div class="row">
+      <span>试着分解这个数:</span>
+      <span class="mono big y" id="challenge"></span>
+      <button class="ghost" id="newChal">换一个</button>
+      <button class="ghost" id="factorIt">🐌 让电脑暴力分解</button>
+    </div>
+    <div class="kv" id="factorOut" style="display:none"></div>
+    <p class="muted">这里的数很小,电脑瞬间就分解了。但每多几十位,试除的次数就指数级暴涨 —— 2048 位的 n 分解需要超过宇宙年龄。</p>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2><span class="n">2</span>生成密钥对</h2>
+    <div class="row">
+      <span>选质数 p =</span>
+      <select id="p"></select>
+      <span>q =</span>
+      <select id="q"></select>
+      <span>公钥指数 e =</span>
+      <select id="e"></select>
+      <button id="genKey">🔑 生成密钥</button>
+    </div>
+    <div class="kv" id="keyOut"></div>
+    <div class="step">
+      公钥 <span class="pub">(n, e)</span> <span class="pill pub">公开</span> —— 谁都能拿去加密给你。<br>
+      私钥 <span class="priv">d</span> <span class="pill s">绝密</span> —— 只有你能解密。p、q、φ 用完必须销毁。
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section>
+    <h2><span class="n">3</span>加密 & 解密一段文字</h2>
+    <p class="muted">把文字按 UTF-8 拆成字节 <span class="mono">m</span>(每个 0–255),逐个算 <span class="mono">c = m^e mod n</span>;解密再逐个算 <span class="mono">m = c^d mod n</span>。</p>
+    <input type="text" id="msg" value="Hi RSA!">
+    <div class="btns">
+      <button id="encBtn">🔒 用公钥加密</button>
+      <button class="ghost" id="decBtn" disabled>🔓 用私钥解密</button>
+    </div>
+    <div id="encArea" style="display:none">
+      <div class="kv"><span class="lbl">密文(每字节一个数,用公钥算的):</span><br><span class="pub" id="cipher"></span></div>
+      <div id="tableWrap"></div>
+    </div>
+    <div id="decArea" style="display:none">
+      <div class="kv"><span class="lbl">私钥解密还原:</span> <span class="ok big" id="plain"></span></div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section>
+    <h2><span class="n">4</span>攻击者视角:为什么破不了</h2>
+    <p>窃听者手里有<b>公钥 (n, e)</b> 和<b>密文 c</b>。想解密就要私钥 <span class="priv">d</span>;算 d 需要 <span class="mono">φ(n)=(p−1)(q−1)</span>;而算 φ 就必须把 <span class="mono">n</span> 分解回 <span class="mono">p、q</span>。</p>
+    <div class="step">
+      ✅ 你(有 p、q):秒算 d → 解密<br>
+      ❌ 攻击者(只有 n):必须先分解 n → 大数分解难题,做不到
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="ghost" id="crackBtn">😈 模拟攻击者:从公钥暴力破出私钥</button>
+    </div>
+    <div class="kv" id="crackOut" style="display:none"></div>
+    <p class="muted">这里 n 小,攻击者也能分解出来 —— 说明「n 太小 = 不安全」。真实 RSA 的 n 有 2048~4096 位,这步就变成不可能。和 ECC 的离散对数一样,都是「正向易、反向难」的陷门。</p>
+  </section>
+
+  <p class="muted" style="text-align:center;font-size:13px">全部在浏览器里用 BigInt 真实运算 · 小质数便于观察,数学与真实 RSA 一致</p>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+// BigInt 工具
+const modpow=(b,e,m)=>{b%=m;if(b<0n)b+=m;let r=1n;while(e>0n){if(e&1n)r=r*b%m;b=b*b%m;e>>=1n;}return r;};
+const gcd=(a,b)=>{while(b){[a,b]=[b,a%b];}return a<0n?-a:a;};
+function modinv(a,m){let[old_r,r]=[a%m,m],[old_s,s]=[1n,0n];
+  while(r!==0n){const q=old_r/r;[old_r,r]=[r,old_r-q*r];[old_s,s]=[s,old_s-q*s];}
+  return ((old_s%m)+m)%m;}
+const PRIMES=[53n,59n,61n,67n,71n,73n,79n,83n,89n,97n,101n,103n,107n,109n,113n,127n];
+
+// ---- 1. 分解挑战 ----
+let chalP,chalQ,chal;
+function newChallenge(){
+  chalP=PRIMES[Math.floor(Math.random()*PRIMES.length)];
+  do{chalQ=PRIMES[Math.floor(Math.random()*PRIMES.length)];}while(chalQ===chalP);
+  chal=chalP*chalQ;$('challenge').textContent=chal.toString();$('factorOut').style.display='none';
+}
+$('newChal').onclick=newChallenge;
+$('factorIt').onclick=()=>{
+  const t0=performance.now();let f=null;
+  for(let i=2n;i*i<=chal;i++){if(chal%i===0n){f=i;break;}}
+  const ms=(performance.now()-t0).toFixed(2);
+  $('factorOut').style.display='block';
+  $('factorOut').innerHTML= f
+    ? `${chal} = <b class="y">${f}</b> × <b class="y">${chal/f}</b>　(试除 ${ms} ms 找到)`
+    : `${chal} 是质数?`;
+};
+
+// ---- 2. 密钥生成 ----
+PRIMES.forEach(p=>{const o1=new Option(p,p),o2=new Option(p,p);$('p').add(o1);$('q').add(o2);});
+$('p').value='61';$('q').value='53';
+[3n,5n,7n,11n,13n,17n,19n,23n,65537n].forEach(e=>$('e').add(new Option(e,e)));
+$('e').value='17';
+let KEY=null;
+function genKey(){
+  const p=BigInt($('p').value), q=BigInt($('q').value);
+  if(p===q){$('keyOut').innerHTML='<span class="bad">p 和 q 必须不同!</span>';KEY=null;return;}
+  const n=p*q, phi=(p-1n)*(q-1n), e=BigInt($('e').value);
+  if(gcd(e,phi)!==1n){$('keyOut').innerHTML=`<span class="bad">gcd(e, φ) ≠ 1,换一个 e(要和 φ=${phi} 互质)</span>`;KEY=null;return;}
+  const d=modinv(e,phi);
+  KEY={p,q,n,phi,e,d};
+  $('keyOut').innerHTML=
+    `<span class="lbl">① 两质数</span> p = ${p}<span class="pill s">绝密</span>　q = ${q}<span class="pill s">绝密</span><br>`+
+    `<span class="lbl">② 模数</span> n = p·q = <b class="pub">${n}</b><span class="pill pub">公开</span><br>`+
+    `<span class="lbl">③ 欧拉函数</span> φ(n) = (p−1)(q−1) = ${p-1n}×${q-1n} = <b>${phi}</b><span class="pill s">绝密</span><br>`+
+    `<span class="lbl">④ 公钥指数</span> e = <b class="pub">${e}</b><span class="pill pub">公开</span><br>`+
+    `<span class="lbl">⑤ 私钥指数</span> d = e⁻¹ mod φ = <b class="priv">${d}</b><span class="pill s">绝密</span>　<span class="lbl">(验证 e·d mod φ = ${(e*d)%phi})</span><br>`+
+    `<hr><span class="lbl">🟢 公钥</span> <b class="pub">(n=${n}, e=${e})</b>　　<span class="lbl">🔴 私钥</span> <b class="priv">d=${d}</b>`;
+  $('decBtn').disabled=true;$('encArea').style.display=$('decArea').style.display='none';
+}
+$('genKey').onclick=genKey;
+
+// ---- 3. 加解密 ----
+let CIPHER=null;
+$('encBtn').onclick=()=>{
+  if(!KEY){$('cipher').textContent='';alert('请先生成密钥(第2节)');return;}
+  const bytes=new TextEncoder().encode($('msg').value);
+  if(KEY.n<=255n){alert('n 太小,装不下一个字节(需 n>255)。请把 p、q 选大一点。');return;}
+  CIPHER=[...bytes].map(b=>modpow(BigInt(b),KEY.e,KEY.n));
+  $('cipher').textContent=CIPHER.join('  ');
+  let t='<table><tr><th>字符</th><th>字节 m</th><th>c = m^e mod n</th></tr>';
+  const chars=[...$('msg').value];let bi=0;
+  // 按字节展示(多字节字符会拆开,这里简单按字节列)
+  [...bytes].forEach((b,i)=>{t+=`<tr><td>${b<128?JSON.stringify(String.fromCharCode(b)):'·'}</td><td>${b}</td><td class="pub">${CIPHER[i]}</td></tr>`;});
+  t+='</table>';$('tableWrap').innerHTML=t;
+  $('encArea').style.display='block';$('decArea').style.display='none';$('decBtn').disabled=false;
+};
+$('decBtn').onclick=()=>{
+  if(!CIPHER)return;
+  const bytes=CIPHER.map(c=>Number(modpow(c,KEY.d,KEY.n)));
+  const txt=new TextDecoder().decode(new Uint8Array(bytes));
+  $('plain').textContent=txt;$('decArea').style.display='block';
+};
+
+// ---- 4. 攻击者破解 ----
+$('crackBtn').onclick=()=>{
+  if(!KEY){alert('请先生成密钥');return;}
+  const t0=performance.now();
+  let f=null;for(let i=2n;i*i<=KEY.n;i++){if(KEY.n%i===0n){f=i;break;}}
+  const p2=f,q2=KEY.n/f,phi2=(p2-1n)*(q2-1n),d2=modinv(KEY.e,phi2);
+  const ms=(performance.now()-t0).toFixed(2);
+  $('crackOut').style.display='block';
+  $('crackOut').innerHTML=
+    `<span class="lbl">攻击者只有公钥 (n=${KEY.n}, e=${KEY.e}),开始暴力分解 n…</span><br>`+
+    `分解成功:n = <b class="y">${p2}</b> × <b class="y">${q2}</b>　(${ms} ms)<br>`+
+    `→ φ = ${phi2} → 破出私钥 d = <b class="priv">${d2}</b> `+
+    (d2===KEY.d?'<span class="ok">✔ 和真私钥一致,已被攻破!</span>':'')+
+    `<br><span class="lbl">因为 n 太小,几毫秒就分解了。n 到 2048 位时,这一步 = 亿万年。</span>`;
+};
+
+// init
+newChallenge();genKey();
+</script>
+</body>
+</html>
