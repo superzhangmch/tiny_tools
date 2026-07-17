@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -59,7 +58,7 @@
 <body>
 <div class="wrap">
   <h1>椭圆曲线密码学 · 图解入门</h1>
-  <p class="lead">从「一条奇怪的曲线」到「你每天都在用的加密」。全程可以动手拖、点、拉。</p>
+  <p class="lead">从「一条奇怪的曲线」一路到「真正加解密一段文字」。9 节,全程可以动手拖、点、拉。</p>
 
   <!-- 1 -->
   <section>
@@ -251,7 +250,46 @@
     <p class="muted">有了这把共享密钥,双方就能用它做对称加密(AES 等)来传真正的消息。这套「非对称协商密钥 + 对称加密内容」就是 HTTPS、Signal、比特币钱包、SSH 背后的日常机制。ECC 的优势是:同等安全下,<b>256 位的 ECC 密钥 ≈ 3072 位的 RSA 密钥</b>,更短更快更省电。</p>
   </section>
 
-  <p class="muted" style="text-align:center;font-size:13px">本页所有运算都在浏览器里实时计算 · 用小素数便于观察,原理与真实 256 位曲线完全一致</p>
+  <!-- 8 -->
+  <section>
+    <h2><span class="n">8</span>真·加解密一段文字(P-256 + AES-GCM,浏览器原生)</h2>
+    <p>前 7 节用小素数讲原理。这一节切到<b>真实曲线 P-256</b>,用浏览器原生 Web Crypto,真正加解密你输入的文字。核心认知:<b>ECC 只负责协商密钥,真正加密正文的是 AES</b> —— 这套「非对称协商 + 对称加密」叫<b>混合加密 (ECIES)</b>。</p>
+    <div class="step">
+      🔒 Bob 加密:临时私钥 <span class="mono">r</span> → 临时公钥 <span class="mono">R=r·G</span>;共享密钥 = KDF(<span class="mono">r·A</span>);用它 AES 加密正文。发出 <span class="mono">R‖IV‖密文</span>。<br>
+      🔓 Alice 解密:用私钥 <span class="mono">a</span> 算 <span class="mono">a·R = r·A</span>,得到<b>同一把</b>密钥,AES 解密。
+    </div>
+    <div class="btns"><button id="genAlice">🔑 生成 Alice 密钥对</button></div>
+    <div class="kv badge" id="aliceInfo" style="display:none"></div>
+    <p class="muted" style="margin-top:14px">Bob 写消息并用 Alice 的公钥加密:</p>
+    <input type="text" id="msg8" value="椭圆曲线加密真好玩 🎉" style="width:100%;background:#0c1120;color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:10px 12px;font-size:15px">
+    <div class="btns" style="margin-top:10px">
+      <button id="enc8" disabled>🔒 加密</button>
+      <button class="ghost" id="dec8" disabled>🔓 用 Alice 私钥解密</button>
+    </div>
+    <div class="kv badge" id="encOut8" style="display:none"></div>
+    <div class="kv badge" id="decOut8" style="display:none"></div>
+    <p class="muted">窃听者截获 <span class="mono">R、IV、密文</span> 和公钥 <span class="mono">A</span>,唯独没有私钥 <span class="mono">a</span> 或临时私钥 <span class="mono">r</span> —— 想复现共享密钥就得解椭圆曲线离散对数(2¹²⁸),做不到。</p>
+  </section>
+
+  <!-- 9 -->
+  <section>
+    <h2><span class="n">9</span>落地 · 安全强度 · 抗量子</h2>
+    <p><b>用在哪:</b> HTTPS(TLS 1.3)、SSH、SCP、Signal、WireGuard、比特币/以太坊钱包,现在的密钥协商基本都用椭圆曲线(X25519 / P-256),身份签名用 ECDSA / Ed25519,正文用 AES-GCM 或 ChaCha20。</p>
+    <div style="overflow:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13.5px;margin:10px 0">
+      <tr style="color:var(--muted)"><th style="border:1px solid var(--line);padding:6px 9px;text-align:left"></th><th style="border:1px solid var(--line);padding:6px 9px">ECC</th><th style="border:1px solid var(--line);padding:6px 9px">RSA</th></tr>
+      <tr><td style="border:1px solid var(--line);padding:6px 9px">陷门难题</td><td style="border:1px solid var(--line);padding:6px 9px;text-align:center">椭圆曲线离散对数</td><td style="border:1px solid var(--line);padding:6px 9px;text-align:center">大数分解</td></tr>
+      <tr><td style="border:1px solid var(--line);padding:6px 9px">同等安全的密钥长度</td><td style="border:1px solid var(--line);padding:6px 9px;text-align:center"><b style="color:var(--q)">256 位</b></td><td style="border:1px solid var(--line);padding:6px 9px;text-align:center">3072 位</td></tr>
+      <tr><td style="border:1px solid var(--line);padding:6px 9px">正向(生成公钥/加密)</td><td style="border:1px solid var(--line);padding:6px 9px;text-align:center" colspan="2">快</td></tr>
+      <tr><td style="border:1px solid var(--line);padding:6px 9px">反向(反推私钥)</td><td style="border:1px solid var(--line);padding:6px 9px;text-align:center" colspan="2">经典计算机做不到(2¹²⁸)</td></tr>
+      <tr><td style="border:1px solid var(--line);padding:6px 9px">抗量子</td><td style="border:1px solid var(--line);padding:6px 9px;text-align:center" colspan="2"><span class="bad">❌ Shor 算法打穿</span></td></tr>
+    </table>
+    </div>
+    <div class="step"><b>安全强度:</b>256 位曲线的私钥空间是 <span class="mono">2²⁵⁶</span>,但最优攻击(Pollard's rho)只需 <span class="mono">√n = 2¹²⁸</span> —— 即「128 位安全级别」,约需上千倍宇宙年龄,经典计算机打不穿。前提是私钥<b>真随机</b>。</div>
+    <div class="step warn"><b>量子威胁:</b>Shor 算法能在多项式时间内解椭圆曲线离散对数,足够大的量子机会让 ECC/RSA 一起失效(加长密钥也救不回)。但那种量子机目前还不存在;应对方案是正在标准化的<b>后量子密码 (PQC)</b>。而 AES-256 只被量子减半、仍安全。</div>
+  </section>
+
+  <p class="muted" style="text-align:center;font-size:13px">第 1–7 节用小素数便于观察,第 8 节为真实 P-256 曲线;原理与真实 256 位曲线完全一致 · 全部运算在浏览器本地完成</p>
 </div>
 
 <script>
@@ -603,6 +641,60 @@ let FIELD={p:67,a:2,b:3,pts:[]};
     a=2+ (seed%9); b=2+ ((seed*3+5)%11); run();
   };
   window._refreshDH=run; run();
+})();
+
+/* ========== 8. 真·ECIES 加解密 (Web Crypto P-256 + AES-GCM) ========== */
+(function(){
+  const enc=new TextEncoder(), dec=new TextDecoder();
+  const hex=buf=>[...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const short=(h,n=22)=>h.length<=n*2?h:h.slice(0,n)+' … '+h.slice(-n);
+  const b64hex=b64=>{b64=b64.replace(/-/g,'+').replace(/_/g,'/');const s=atob(b64);let h='';for(let i=0;i<s.length;i++)h+=s.charCodeAt(i).toString(16).padStart(2,'0');return h;};
+  let aliceKeys=null, packet=null;
+  async function deriveKey(priv,pub){
+    const bits=await crypto.subtle.deriveBits({name:"ECDH",public:pub},priv,256);
+    const dig=await crypto.subtle.digest("SHA-256",bits);
+    const key=await crypto.subtle.importKey("raw",dig,{name:"AES-GCM"},false,["encrypt","decrypt"]);
+    return {key, shared:hex(bits), aes:hex(dig)};
+  }
+  const ga=$('genAlice'); if(!ga) return;
+  ga.onclick=async()=>{
+    aliceKeys=await crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"},true,["deriveBits"]);
+    const priv=await crypto.subtle.exportKey("jwk",aliceKeys.privateKey);
+    const pub=await crypto.subtle.exportKey("raw",aliceKeys.publicKey);
+    $('aliceInfo').innerHTML=
+      `<span style="color:var(--p)">私钥 a = ${short(b64hex(priv.d),16)}</span>　<b style="color:var(--p)">绝密</b><br>`+
+      `<span style="color:var(--q)">公钥 A = ${short(hex(pub),18)}</span>　<b class="muted">公开(曲线上的点 04‖x‖y)</b>`;
+    $('aliceInfo').style.display='block';
+    $('enc8').disabled=false; $('dec8').disabled=true;
+    $('encOut8').style.display=$('decOut8').style.display='none';
+  };
+  $('enc8').onclick=async()=>{
+    if(!aliceKeys){alert('请先生成 Alice 密钥对');return;}
+    const eph=await crypto.subtle.generateKey({name:"ECDH",namedCurve:"P-256"},true,["deriveBits"]);
+    const ephPriv=await crypto.subtle.exportKey("jwk",eph.privateKey);
+    const ephPub=await crypto.subtle.exportKey("raw",eph.publicKey);
+    const {key,shared,aes}=await deriveKey(eph.privateKey,aliceKeys.publicKey);
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,enc.encode($('msg8').value));
+    packet={ephPub,iv,ct};
+    $('encOut8').innerHTML=
+      `<span class="muted">① 临时私钥 r = ${short(b64hex(ephPriv.d),14)}（用完即弃）</span><br>`+
+      `<span style="color:var(--q)">② 临时公钥 R = r·G = ${short(hex(ephPub),16)}</span>（随密文发出）<br>`+
+      `<span style="color:var(--accent2)">③ 共享密钥 = KDF(r·A) → AES 密钥 = ${short(aes,18)}</span><br>`+
+      `<span style="color:#7ff0c8">④ 密文 = IV(${hex(iv)}) ‖ ${short(hex(ct),30)}</span>`;
+    $('encOut8').style.display='block'; $('dec8').disabled=false; $('decOut8').style.display='none';
+  };
+  $('dec8').onclick=async()=>{
+    if(!packet)return;
+    const ephPub=await crypto.subtle.importKey("raw",packet.ephPub,{name:"ECDH",namedCurve:"P-256"},true,[]);
+    const {key,aes}=await deriveKey(aliceKeys.privateKey,ephPub);
+    let out;
+    try{const p=await crypto.subtle.decrypt({name:"AES-GCM",iv:packet.iv},key,packet.ct);
+      out=`<span class="muted">Alice 用私钥算 a·R = r·A → 同一 AES 密钥 = ${short(aes,18)}</span><br>`+
+          `<span class="ok" style="font-size:16px">✔ 解密还原:${dec.decode(p)}</span>`;}
+    catch(e){out='<span class="bad">解密失败</span>';}
+    $('decOut8').innerHTML=out; $('decOut8').style.display='block';
+  };
 })();
 </script>
 </body>
