@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>引力波可视化 · 两个视角合一 · + / × 偏振 · 双星旋进</title>
+<style>
+  :root { --bg:#05060d; --panel:#111726; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5; --accent:#3ad0c4; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  .wrap { display:flex; gap:16px; padding:16px; align-items:flex-start; flex-wrap:wrap; }
+  .stage { display:flex; flex-direction:column; gap:14px; }
+  canvas { background:#02030a; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.55); }
+  .panel { width:290px; background:var(--panel); border:1px solid var(--line);
+    border-radius:12px; padding:16px; }
+  h1 { font-size:16px; margin:0 0 4px; }
+  .sub { font-size:12px; color:var(--dim); margin:0 0 14px; line-height:1.55; }
+  .grp { margin:13px 0; }
+  .grp label { display:block; font-size:12px; color:var(--dim); margin-bottom:6px; }
+  .modes { display:flex; gap:6px; flex-wrap:wrap; }
+  button { background:#1b2536; color:var(--txt); border:1px solid var(--line);
+    padding:7px 10px; border-radius:8px; font-size:12px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#03110f; border-color:var(--accent); font-weight:600; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .hint { font-size:11.5px; color:var(--dim); line-height:1.65; border-top:1px solid var(--line);
+    padding-top:12px; margin-top:14px; }
+  .eq { font-size:12px; color:#9bece2; background:#0a1018; border:1px solid var(--line);
+    border-radius:8px; padding:9px 11px; margin-top:8px; line-height:1.6; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="beam"  width="380" height="300"></canvas>
+    <canvas id="side"  width="620" height="240"></canvas>
+  </div>
+
+  <div class="panel">
+    <h1>引力波 · 时空的涟漪</h1>
+    <p class="sub"><b>同一束波,两个视角:</b><br>
+      上=<b>顺着波看</b>(波对着你飞来)→ 看完整的 ±偏振椭圆挤压,但传播藏进纵深、像原地往复。<br>
+      下=<b>侧着波看</b>(波向右传播)→ 看得到"越传越远",形变图案整列右移。</p>
+
+    <div class="eq">□ h<sub>μν</sub> = 0 &nbsp;(弱场,以光速 c 传播)</div>
+
+    <div class="grp" style="margin-top:16px">
+      <label>波源 / 偏振模式</label>
+      <div class="modes">
+        <button id="mPlus" class="on">＋ 偏振</button>
+        <button id="mCross">× 偏振</button>
+        <button id="mBinary">🌀 双星旋进(啁啾)</button>
+      </div>
+    </div>
+
+    <div class="grp">
+      <label>振幅(为看清已极度夸大) = <span id="aV">0.40</span></label>
+      <input type="range" id="amp" min="0.05" max="0.6" step="0.01" value="0.40">
+    </div>
+    <div class="grp" id="freqGrp">
+      <label>频率 = <span id="fV">0.4</span> Hz</label>
+      <input type="range" id="freq" min="0.1" max="1.2" step="0.05" value="0.4">
+    </div>
+    <div class="grp">
+      <label>波长(仅传播视角)λ = <span id="lV">200</span> px</label>
+      <input type="range" id="lam" min="100" max="340" step="10" value="200">
+    </div>
+
+    <div class="grp"><button id="pause">⏸ 暂停</button></div>
+
+    <div class="hint">
+      核心洞见:<b>任何行波,盯着一个点看都是"原地往复";铺开一片空间看才见"传播"。</b>
+      上下两图是同一束波、同一时刻,只是观察方向差 90°。<br>
+      引力波是<b>横波</b>,拉伸永远垂直于传播方向——所以"完整椭圆"和"可见传播"在 2D 里只能二选一。<br>
+      真实应变约 10⁻²¹,这里放大了约 10²⁰ 倍。
+    </div>
+  </div>
+</div>
+
+<script>
+const beam=document.getElementById('beam'), bx=beam.getContext('2d');
+const side=document.getElementById('side'), sx=side.getContext('2d');
+const BW=beam.width, BH=beam.height, cx=BW/2, cy=BH/2;
+const SW=side.width, SH=side.height;
+
+let mode='plus', running=true, amp=0.40, freq=0.4, lambda=200, phi=0, tau=0;
+
+// 上图:一圈圈质点
+const rings=[70,105,140];
+const rest=[];
+for(const R of rings){ const n=Math.round(R/7);
+  for(let i=0;i<n;i++){ const a=2*Math.PI*i/n; rest.push({x:R*Math.cos(a),y:R*Math.sin(a)}); } }
+
+// 下图:质点网格
+const cols=9, rows=3, gx0=55, gy0=70, dxg=(SW-110)/(cols-1), dyg=60, gr=15, rdots=10;
+
+// 偏振波形:给定相位 θ,返回 [h+, h×]
+function pol(theta,A){
+  if(mode==='cross') return [0, A*Math.cos(theta)];
+  if(mode==='binary') return [A*Math.cos(theta), A*Math.sin(theta)];
+  return [A*Math.cos(theta), 0];
+}
+
+function binaryState(dt){
+  tau += dt*0.16; if(tau>1.15) tau=0;
+  if(tau<0.92) return {f:0.3+2.6*Math.pow(tau,3), a:0.06+0.4*tau*tau};
+  return {f:3.0, a:0.46*Math.exp(-(tau-0.92)*22)};
+}
+
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  let A=amp, f=freq;
+  if(mode==='binary'){ const b=binaryState(running?dt:0); A=b.a; f=b.f; }
+  if(running) phi += 2*Math.PI*f*dt;
+  const k=2*Math.PI/lambda;
+
+  // ================= 上:顺着波看 =================
+  bx.fillStyle='#02030a'; bx.fillRect(0,0,BW,BH);
+  bx.strokeStyle='rgba(120,135,165,0.22)'; bx.lineWidth=1;
+  for(const R of rings){ bx.beginPath(); bx.arc(cx,cy,R,0,2*Math.PI); bx.stroke(); }
+  bx.strokeStyle='rgba(60,72,100,0.4)';
+  bx.beginPath(); bx.moveTo(cx-150,cy); bx.lineTo(cx+150,cy);
+  bx.moveTo(cx,cy-135); bx.lineTo(cx,cy+135); bx.stroke();
+
+  const [hp,hc]=pol(phi,A);
+  bx.fillStyle='#3ad0c4';
+  for(const p of rest){
+    const dx=0.5*(hp*p.x+hc*p.y), dy=0.5*(hc*p.x-hp*p.y);
+    bx.beginPath(); bx.arc(cx+p.x+dx, cy+p.y+dy, 3,0,2*Math.PI); bx.fill();
+  }
+  bx.strokeStyle='rgba(58,208,196,0.55)'; bx.lineWidth=1.5; bx.beginPath();
+  const Ro=rings[rings.length-1];
+  for(let i=0;i<=80;i++){ const a=2*Math.PI*i/80, x=Ro*Math.cos(a), y=Ro*Math.sin(a);
+    const dx=0.5*(hp*x+hc*y), dy=0.5*(hc*x-hp*y);
+    const X=cx+x+dx, Y=cy+y+dy; if(i===0)bx.moveTo(X,Y); else bx.lineTo(X,Y); }
+  bx.stroke();
+
+  if(mode==='binary'){ const ox=64,oy=52, sep=Math.max(5,26*(1-tau)), oa=phi/2;
+    bx.fillStyle='#ffd27f';
+    for(const s of[1,-1]){ bx.beginPath(); bx.arc(ox+s*sep*Math.cos(oa),oy+s*sep*Math.sin(oa),4.5,0,2*Math.PI); bx.fill(); }
+    bx.strokeStyle='rgba(255,210,127,0.25)'; bx.beginPath(); bx.arc(ox,oy,sep,0,2*Math.PI); bx.stroke(); }
+
+  bx.fillStyle='#7f8ca8'; bx.font='12px sans-serif';
+  bx.fillText('① 顺着波看 · 波对着你飞来', 12, BH-14);
+
+  // ================= 下:侧着波看 =================
+  sx.fillStyle='#02030a'; sx.fillRect(0,0,SW,SH);
+  // 顶部 h(x,t) 波形
+  sx.strokeStyle='#7fe9dd'; sx.lineWidth=1.4; sx.beginPath();
+  for(let X=0;X<=SW;X+=4){ const th=k*X-phi; const [p]=pol(th,A);
+    const use = (mode==='cross')? pol(th,A)[1] : p;
+    const Y=32 - use*26; if(X===0)sx.moveTo(X,Y); else sx.lineTo(X,Y); }
+  sx.stroke();
+
+  for(let c=0;c<cols;c++){
+    const Xc=gx0+c*dxg, th=k*Xc-phi, [sp,scr]=pol(th,A);
+    for(let rr=0;rr<rows;rr++){
+      const Yc=gy0+rr*dyg;
+      sx.strokeStyle='rgba(120,135,165,0.16)'; sx.lineWidth=1;
+      sx.beginPath(); sx.arc(Xc,Yc,gr,0,2*Math.PI); sx.stroke();
+      sx.fillStyle='#3ad0c4';
+      for(let i=0;i<rdots;i++){ const a=2*Math.PI*i/rdots, lx=gr*Math.cos(a), ly=gr*Math.sin(a);
+        const X=Xc+lx+0.5*scr*ly, Y=Yc+ly*(1+0.5*sp);   // +→竖向拉伸, ×→剪切
+        sx.beginPath(); sx.arc(X,Y,2.4,0,2*Math.PI); sx.fill(); }
+      sx.strokeStyle='rgba(58,208,196,0.5)'; sx.lineWidth=1.3; sx.beginPath();
+      for(let i=0;i<=44;i++){ const a=2*Math.PI*i/44, lx=gr*Math.cos(a), ly=gr*Math.sin(a);
+        const X=Xc+lx+0.5*scr*ly, Y=Yc+ly*(1+0.5*sp); if(i===0)sx.moveTo(X,Y); else sx.lineTo(X,Y); }
+      sx.stroke();
+    }
+  }
+  sx.strokeStyle='#556'; sx.fillStyle='#7f8ca8';
+  sx.beginPath(); sx.moveTo(gx0,SH-18); sx.lineTo(SW-gx0,SH-18); sx.stroke();
+  sx.beginPath(); sx.moveTo(SW-gx0,SH-18); sx.lineTo(SW-gx0-9,SH-22); sx.lineTo(SW-gx0-9,SH-14); sx.fill();
+  sx.font='12px sans-serif'; sx.fillText('② 侧着波看 · 向右传播 →', 12, SH-30);
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ---- 控件 ----
+function setMode(m,id){ mode=m; phi=0; tau=0;
+  ['mPlus','mCross','mBinary'].forEach(x=>document.getElementById(x).classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  document.getElementById('freqGrp').style.opacity=(m==='binary')?0.35:1;
+}
+document.getElementById('mPlus').onclick=()=>setMode('plus','mPlus');
+document.getElementById('mCross').onclick=()=>setMode('cross','mCross');
+document.getElementById('mBinary').onclick=()=>setMode('binary','mBinary');
+
+const ampEl=document.getElementById('amp'),aV=document.getElementById('aV');
+ampEl.oninput=()=>{amp=+ampEl.value;aV.textContent=amp.toFixed(2);};
+const fEl=document.getElementById('freq'),fV=document.getElementById('fV');
+fEl.oninput=()=>{freq=+fEl.value;fV.textContent=freq.toFixed(2);};
+const lEl=document.getElementById('lam'),lV=document.getElementById('lV');
+lEl.oninput=()=>{lambda=+lEl.value;lV.textContent=lambda;};
+document.getElementById('pause').onclick=e=>{running=!running;e.target.textContent=running?'⏸ 暂停':'▶ 继续';};
+</script>
+</body>
+</html>
