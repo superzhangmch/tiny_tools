@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>克拉尼图形 · 时域板振动真模拟(基尔霍夫双谐板)</title>
+<style>
+  :root { --bg:#0a0a0e; --panel:#16161f; --line:#2c2c3a; --txt:#ece6d8; --dim:#9a94a8; --accent:#e0b062; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  .wrap { padding:16px; }
+  .stage { position:relative; }
+  canvas { display:block; background:#050505; border-radius:12px;
+    box-shadow:0 8px 30px rgba(0,0,0,.55); cursor:crosshair; }
+  .panel { width:100%; max-width:560px; margin-top:14px; background:var(--panel);
+    border:1px solid var(--line); border-radius:12px; padding:16px; }
+  h1 { font-size:16px; margin:0 0 4px; }
+  .sub { font-size:12px; color:var(--dim); margin:0 0 14px; line-height:1.55; }
+  .grp { margin:12px 0; }
+  .grp label { display:block; font-size:12px; color:var(--dim); margin-bottom:6px; }
+  .modes { display:flex; gap:6px; flex-wrap:wrap; }
+  button { background:#242430; color:var(--txt); border:1px solid var(--line);
+    padding:7px 11px; border-radius:8px; font-size:12px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#1a1206; border-color:var(--accent); font-weight:600; }
+  input[type=range] { width:100%; accent-color:var(--accent); }
+  .meter { height:10px; background:#0c0c12; border:1px solid var(--line); border-radius:5px; overflow:hidden; }
+  .meter > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#5a7,#e0b062,#e06a4a); }
+  .hint { font-size:11.5px; color:var(--dim); line-height:1.65; border-top:1px solid var(--line);
+    padding-top:12px; margin-top:14px; }
+  .fps { position:absolute; top:8px; left:10px; font-size:11px; color:#e0b062;
+    background:rgba(0,0,0,.4); padding:2px 6px; border-radius:5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="c" width="560" height="560"></canvas>
+    <div class="fps" id="fps"></div>
+  </div>
+
+  <div class="panel">
+    <h1>克拉尼图形 · 时域板振动</h1>
+    <p class="sub">在板上一点施加频率 f 的"弓"驱动,时域求解板方程;撞上共振频率时板<b>自己</b>长出驻波,
+      面粉聚到节线成花纹。<b>点画布可移动激励点。</b></p>
+
+    <div class="grp">
+      <label>直接跳到共振模态(最省事,点了就出花纹)</label>
+      <div class="modes" id="presets">
+        <button data-m="2" data-n="1">2,1</button>
+        <button data-m="2" data-n="2">2,2</button>
+        <button data-m="3" data-n="1">3,1</button>
+        <button data-m="3" data-n="2">3,2</button>
+        <button data-m="4" data-n="2">4,2</button>
+        <button data-m="4" data-n="3">4,3</button>
+        <button data-m="5" data-n="3">5,3</button>
+        <button data-m="6" data-n="4">6,4</button>
+      </div>
+    </div>
+    <div class="grp">
+      <label>驱动频率 ω = <span id="fV">0.046</span> rad/步（也可手动扫,看振幅表找共振)</label>
+      <input type="range" id="freq" min="0.006" max="0.26" step="0.001" value="0.046">
+    </div>
+    <div class="grp">
+      <label>板的响应振幅(共振时飙升) <span id="ampNum" style="float:right;color:#e0b062"></span></label>
+      <div class="meter"><i id="ampBar"></i></div>
+    </div>
+    <div class="grp">
+      <div class="modes">
+        <button id="sweep">🎚 自动扫频</button>
+        <button id="whack">🔨 敲一下</button>
+        <button id="drive" class="on">🎻 弓驱动:开</button>
+      </div>
+    </div>
+    <div class="grp">
+      <div class="modes">
+        <button id="sprinkle">🌾 重撒面粉</button>
+        <button id="field">显示振动场</button>
+        <button id="pause">⏸ 暂停</button>
+      </div>
+    </div>
+
+    <div class="hint">
+      解的是 ∂²w/∂t² = −β∇⁴w − 2σ∂w/∂t + 弓(t)。∇⁴ = 拉普拉斯做两遍,边界用反射近似<b>自由边</b>。
+      这是<b>真时域模拟</b>——模态、共振频率都是演化出来的,不是我喂的公式;
+      面粉步长 ∝ 当地振幅,只在节线(不动处)停得住。<br>
+      网格 64×64 · 面粉 <span id="np">—</span> 粒
+    </div>
+  </div>
+</div>
+
+<script>
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const S=cv.width;
+
+// ---------- 板 FDTD ----------
+const G=64, NG=G*G, h=1;
+const beta=2.0, dt=0.14, sigma=0.004;     // 稳定: dt ≤ 1/(4√β) ≈ 0.177
+let w=new Float32Array(NG), wp=new Float32Array(NG), wn=new Float32Array(NG);
+let L=new Float32Array(NG), B=new Float32Array(NG), env=new Float32Array(NG);
+let dI=19, dJ=17;                          // 激励点(略偏心,能激发更多模态)
+let tstep=0, driveOn=true, freq=0.046, driveAmp=16;
+
+function lap(src,dst){                     // ∇²,边界反射(近似自由边)
+  for(let j=0;j<G;j++){ const jm=j>0?j-1:1, jp=j<G-1?j+1:G-2;
+    for(let i=0;i<G;i++){ const im=i>0?i-1:1, ip=i<G-1?i+1:G-2; const k=i+j*G;
+      dst[k]=src[im+j*G]+src[ip+j*G]+src[i+jm*G]+src[i+jp*G]-4*src[k]; } }
+}
+function stepPlate(){
+  lap(w,L); lap(L,B);
+  const c=dt*dt*beta, d=1+sigma*dt;
+  for(let k=0;k<NG;k++) wn[k]=(2*w[k]-wp[k]*(1-sigma*dt)-c*B[k])/d;
+  if(driveOn) wn[dI+dJ*G] += dt*dt*driveAmp*Math.sin(freq*tstep)/d;
+  const tmp=wp; wp=w; w=wn; wn=tmp;        // 轮换缓冲
+  tstep++;
+  for(let k=0;k<NG;k++){ const a=Math.abs(w[k]); env[k]+=(a-env[k])*0.06; }
+}
+function whack(){                          // 敲一下:中心加高斯凸起,激起多模态自由振
+  for(let j=0;j<G;j++)for(let i=0;i<G;i++){ const dx=i-dI,dy=j-dJ;
+    const b=6*Math.exp(-(dx*dx+dy*dy)/8); w[i+j*G]+=b; wp[i+j*G]+=b; }
+}
+
+// ---------- 面粉 ----------
+const NP=5200; const pxa=new Float32Array(NP), pya=new Float32Array(NP);
+const VIB=6, DRIFTK=14, STEPMAX=8;
+let gm=1e-3;                               // 振幅慢高水位(共振时才活跃,过后缓降)
+function sprinkle(){ for(let i=0;i<NP;i++){ pxa[i]=Math.random()*S; pya[i]=Math.random()*S; }
+  document.getElementById('np').textContent=NP; }
+sprinkle();
+function stepPowder(){
+  let cur=1e-9; for(let k=0;k<NG;k++) if(env[k]>cur)cur=env[k];
+  gm=Math.max(gm*0.997, cur);              // 缓降的最大值:没共振时面粉几乎不动
+  const invg=1/gm, sc=(G-1)/S;
+  for(let i=0;i<NP;i++){
+    const gi=Math.max(1,Math.min(G-2,(pxa[i]*sc)|0)), gj=Math.max(1,Math.min(G-2,(pya[i]*sc)|0));
+    const a=env[gi+gj*G]*invg;             // 相对振幅 0..1
+    // 沿振幅梯度往低处(节线)漂 + 正比于振幅的抖动
+    const gx=env[(gi+1)+gj*G]-env[(gi-1)+gj*G];
+    const gy=env[gi+(gj+1)*G]-env[gi+(gj-1)*G];
+    let sx=-DRIFTK*gx*invg + (Math.random()*2-1)*a*VIB;
+    let sy=-DRIFTK*gy*invg + (Math.random()*2-1)*a*VIB;
+    if(sx>STEPMAX)sx=STEPMAX; else if(sx<-STEPMAX)sx=-STEPMAX;
+    if(sy>STEPMAX)sy=STEPMAX; else if(sy<-STEPMAX)sy=-STEPMAX;
+    let x=pxa[i]+sx, y=pya[i]+sy;
+    if(x<0)x=-x; else if(x>S)x=2*S-x;
+    if(y<0)y=-y; else if(y>S)y=2*S-y;
+    pxa[i]=x; pya[i]=y;
+  }
+}
+
+// ---------- 振动场底图 ----------
+const fimg=ctx.createImageData(G,G); let showField=false;
+const foff=document.createElement('canvas'); foff.width=foff.height=G; const foc=foff.getContext('2d');
+function drawField(){
+  let mx=1e-6; for(let k=0;k<NG;k++){ const a=Math.abs(w[k]); if(a>mx)mx=a; }
+  const inv=1/mx, d=fimg.data;
+  for(let k=0;k<NG;k++){ let v=w[k]*inv; if(v>1)v=1; if(v<-1)v=-1; const p=k*4;
+    if(v>=0){ d[p]=40+120*v; d[p+1]=30+40*v; d[p+2]=25; }
+    else { d[p]=25; d[p+1]=30-10*v; d[p+2]=40-120*v; }
+    d[p+3]=200; }
+  foc.putImageData(fimg,0,0);
+}
+
+// ---------- 主循环 ----------
+let running=true, last=performance.now(), frames=0, fpsEl=document.getElementById('fps');
+const ampBar=document.getElementById('ampBar'), ampNum=document.getElementById('ampNum');
+let ampScaleMax=1;
+function loop(now){
+  if(running){ for(let s=0;s<40;s++) stepPlate(); stepPowder(); }
+
+  ctx.fillStyle='#050505'; ctx.fillRect(0,0,S,S);
+  if(showField){ drawField(); ctx.imageSmoothingEnabled=true; ctx.globalAlpha=0.9;
+    ctx.drawImage(foff,0,0,S,S); ctx.globalAlpha=1; }
+  ctx.fillStyle='rgba(238,230,208,0.9)';
+  for(let i=0;i<NP;i++) ctx.fillRect(pxa[i]-0.6, pya[i]-0.6, 1.7, 1.7);
+
+  // 振幅表(RMS)
+  let s2=0; for(let k=0;k<NG;k++) s2+=w[k]*w[k];
+  const rms=Math.sqrt(s2/NG); if(rms>ampScaleMax)ampScaleMax=rms; ampScaleMax*=0.999;
+  const pct=Math.min(100, 100*rms/(ampScaleMax+1e-6));
+  ampBar.style.width=pct.toFixed(0)+'%'; ampNum.textContent=rms.toFixed(2);
+
+  frames++; if(now-last>500){ fpsEl.textContent=(running?'▶':'⏸')+' ω='+freq.toFixed(3); frames=0; last=now; }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---------- 自动扫频 ----------
+let sweeping=false;
+setInterval(()=>{ if(sweeping && running){ freq+=0.0009; if(freq>0.26)freq=0.006;
+  fEl.value=freq; fV.textContent=freq.toFixed(3); } }, 60);
+
+// ---------- 交互 ----------
+function cell(e){ const r=cv.getBoundingClientRect();
+  const x=(e.clientX-r.left)*(S/r.width), y=(e.clientY-r.top)*(S/r.height);
+  dI=Math.max(1,Math.min(G-2,(x/S*G)|0)); dJ=Math.max(1,Math.min(G-2,(y/S*G)|0)); }
+cv.addEventListener('pointerdown',cell);
+
+const fEl=document.getElementById('freq'), fV=document.getElementById('fV');
+fEl.oninput=()=>{ freq=+fEl.value; fV.textContent=freq.toFixed(3); };
+
+// 预设:把驱动频率设到某个模态的理论共振 ω = √β·(kx²+ky²)
+const SB=Math.sqrt(beta), Gm1=G-1;
+document.querySelectorAll('#presets button').forEach(b=>{ b.onclick=()=>{
+  const m=+b.dataset.m, n=+b.dataset.n;
+  const kx=m*Math.PI/Gm1, ky=n*Math.PI/Gm1; freq=SB*(kx*kx+ky*ky);
+  fEl.value=freq; fV.textContent=freq.toFixed(3);
+  sweeping=false; document.getElementById('sweep').classList.remove('on');
+  document.querySelectorAll('#presets button').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+}; });
+document.getElementById('sweep').onclick=e=>{ sweeping=!sweeping; e.target.classList.toggle('on',sweeping); };
+document.getElementById('whack').onclick=whack;
+const driveBtn=document.getElementById('drive');
+driveBtn.onclick=()=>{ driveOn=!driveOn; driveBtn.classList.toggle('on',driveOn);
+  driveBtn.textContent='🎻 弓驱动:'+(driveOn?'开':'关'); };
+document.getElementById('sprinkle').onclick=sprinkle;
+const fieldBtn=document.getElementById('field');
+fieldBtn.onclick=()=>{ showField=!showField; fieldBtn.classList.toggle('on',showField); };
+document.getElementById('pause').onclick=e=>{running=!running;e.target.textContent=running?'⏸ 暂停':'▶ 继续';};
+</script>
+</body>
+</html>

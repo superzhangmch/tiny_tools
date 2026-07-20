@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>光学原理模拟 · 透镜折射 / 柏松亮斑(惠更斯-菲涅耳)</title>
+<style>
+  :root { --bg:#0b0f17; --panel:#141b28; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5; --accent:#ffcf5a; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  .wrap { max-width:730px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 10px; }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; }
+  .tabs button { background:#1b2536; color:var(--txt); border:1px solid var(--line);
+    padding:9px 15px; border-radius:9px; font-size:13px; cursor:pointer; }
+  .tabs button.on { background:var(--accent); color:#1a1206; border-color:var(--accent); font-weight:600; }
+  canvas { display:block; background:#02040a; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  .explain { background:#0e1522; border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; margin-top:12px; font-size:13px; line-height:1.6; color:#cdd8ee; }
+  .explain b.y { color:#ffd27f; } .explain b.g { color:#79ffa8; }
+  .ctrl { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-top:12px; }
+  .ctrl .row { display:flex; align-items:center; gap:12px; margin:8px 0; }
+  .ctrl label { font-size:12px; color:var(--dim); width:180px; }
+  input[type=range] { flex:1; accent-color:var(--accent); }
+  .val { width:82px; text-align:right; font-family:monospace; color:var(--accent); font-size:13px; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>光学原理模拟</h1>
+  <div class="tabs">
+    <button id="tabL" class="on">透镜 · 折射(Snell)</button>
+    <button id="tabP">柏松亮斑 · 衍射</button>
+  </div>
+  <canvas id="c" width="700" height="430"></canvas>
+  <div class="explain" id="explain"></div>
+
+  <div class="ctrl" id="ctrl-lens">
+    <div class="row"><label>光源类型</label>
+      <div><button id="srcPoint" class="on" style="background:#1b2536;color:#e2e9f7;border:1px solid #26324a;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;margin-right:6px">点光源(发散)</button><button id="srcPar" style="background:#1b2536;color:#e2e9f7;border:1px solid #26324a;padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer">平行光</button></div></div>
+    <div class="row"><label>物距(仅点光源有效)</label>
+      <input type="range" id="uu" min="120" max="1400" step="10" value="700"><span class="val" id="uuV">700</span></div>
+    <div class="row"><label>透镜曲率半径 R</label>
+      <input type="range" id="rc" min="120" max="420" step="5" value="180"><span class="val" id="rcV">180</span></div>
+    <div class="row"><label>折射率 n</label>
+      <input type="range" id="nn" min="1.2" max="2.0" step="0.01" value="1.50"><span class="val" id="nnV">1.50</span></div>
+    <div class="row"><label>入射角(仅平行光,可斜入射)</label>
+      <input type="range" id="ang" min="-18" max="18" step="0.5" value="0"><span class="val" id="angV">0°</span></div>
+  </div>
+
+  <div class="ctrl hide" id="ctrl-poisson">
+    <div class="row"><label>圆盘半径 a</label>
+      <input type="range" id="pa" min="20" max="70" step="2" value="40"><span class="val" id="paV">40</span></div>
+    <div class="row"><label>屏距 z</label>
+      <input type="range" id="pz" min="1200" max="5000" step="100" value="2500"><span class="val" id="pzV">2500</span></div>
+    <div class="row"><label>波长 λ</label>
+      <input type="range" id="pl" min="0.3" max="1.2" step="0.05" value="0.6"><span class="val" id="plV">0.60</span></div>
+  </div>
+</div>
+
+<script>
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+let mode='lens';
+const explainEl=document.getElementById('explain');
+
+// ==================== 透镜 · Snell 折射逐面追迹 ====================
+/*
+ * 关于"平行光为什么没精确汇聚到一个点" —— 这不是 bug,是真实的【球差 spherical aberration】。
+ *
+ * 为什么:
+ *  - 表面是球面。逐条 Snell 追迹时,越靠边缘的光线偏折越多、聚焦越靠近透镜;近轴光线聚得远。
+ *    于是它们交在一小段轴上,而不是一个点。
+ *  - 标注的焦点 F = R/[2(n-1)] 是【近轴(paraxial)焦点】,只有贴近光轴的小角度光线才精确聚到这里
+ *    (这个公式本身就是 sinθ≈θ 近似下推出来的)。近轴光→聚到 F;边缘光→提前聚焦。
+ *
+ * 怎样才能精确聚成一点:
+ *  - 只用近轴光(缩小孔径/光阑,只留中间一小束)→ 收缩并精确落到 F。
+ *  - 或把镜面做成【非球面】:按费马原理让所有光线光程相等的特殊曲面(单面聚焦平行光理论上是双曲面/
+ *    笛卡尔卵形面)→ 无球差聚成一点。真实高质量镜头就是用非球面或多片组合来消球差的。
+ *
+ * ── 人眼有没有这个问题?有,而且天生就有球差(还有色差、像散)。但用几招压得很好:
+ *  1) 角膜是非球面(中央陡、周边平/prolate)→ 周边光线不被过度偏折。
+ *  2) 晶状体是"渐变折射率(GRIN)":中心折射率高、边缘低,主动抵消球差(自然版 GRIN 镜头)。
+ *  3) 角膜(正球差)与年轻晶状体(负球差)符号相反、部分相消(年老失衡→像质下降)。
+ *  4) 瞳孔 = 光阑:亮处缩小(~2mm)挡掉边缘光→锐利(等于"收窄孔径聚到 F");
+ *     暗处放大(~7mm)放进边缘光→球差/色差变大→夜间看点光源发虚、带光晕(halo)。
+ *  残余像差在夜里瞳孔放大时最明显;近视手术的"波前像差"矫正、散光镜片对付的就是这一类。
+ */
+const LENS=(function(){
+  const cy=200, Lx=360, h=85;
+  let u=700, Rc=180, n=1.5, src='point', angDeg=0;   // angDeg=平行光入射角(可斜入射)
+  const refract=(dx,dy,nx,ny,eta)=>{                 // I 单位向量, N 单位法线
+    let cosi=-(dx*nx+dy*ny); if(cosi<0){nx=-nx;ny=-ny;cosi=-cosi;}
+    const s2=eta*eta*(1-cosi*cosi); if(s2>1)return null;   // 全反射
+    const ct=Math.sqrt(1-s2), tx=eta*dx+(eta*cosi-ct)*nx, ty=eta*dy+(eta*cosi-ct)*ny;
+    const L=Math.hypot(tx,ty); return [tx/L,ty/L];
+  };
+  function rc_isect(ox,oy,dx,dy,cx,cyc,R,far){       // 射线×圆, 取近/远交点(t>0)
+    const fx=ox-cx, fy=oy-cyc, b=2*(fx*dx+fy*dy), c=fx*fx+fy*fy-R*R, disc=b*b-4*c;
+    if(disc<0)return null; const sd=Math.sqrt(disc); const t1=(-b-sd)/2, t2=(-b+sd)/2;
+    const cand=[t1,t2].filter(t=>t>1e-3).sort((p,q)=>p-q); if(!cand.length)return null;
+    return far?cand[cand.length-1]:cand[0];
+  }
+  function trace(oy){
+    const T=2*(Rc-Math.sqrt(Rc*Rc-h*h));               // 中心厚度:两弧恰在孔径边缘相接(无 bowtie)
+    const fcx=Lx+(Rc-T/2), bcx=Lx-(Rc-T/2);            // 前/后球面圆心
+    let ox,oy0,dx,dy;
+    if(src==='parallel'){ const ar=angDeg*Math.PI/180; dx=Math.cos(ar); dy=Math.sin(ar);
+      const back=360; ox=Lx-back*dx; oy0=oy-back*dy; }                           // 平行光:可斜入射(oy=瞄准透镜平面的高度)
+    else { const sx=Lx-u; ox=sx; oy0=cy; dx=Lx-sx; dy=oy-cy; const L0=Math.hypot(dx,dy); dx/=L0; dy/=L0; } // 点光源发散
+    const pts=[[ox,oy0]];
+    let t=rc_isect(ox,oy0,dx,dy,fcx,cy,Rc,false); if(t===null){pts.push([ox+dx*1200,oy0+dy*1200]);return pts;}
+    let px=ox+dx*t, py=oy0+dy*t; if(Math.abs(py-cy)>h){pts.push([ox+dx*1200,oy0+dy*1200]);return pts;}
+    pts.push([px,py]);
+    let nx=(px-fcx)/Rc, ny=(py-cy)/Rc;
+    let r=refract(dx,dy,nx,ny,1/n); if(!r){pts.push([px+dx*1200,py+dy*1200]);return pts;} dx=r[0];dy=r[1];
+    t=rc_isect(px,py,dx,dy,bcx,cy,Rc,true); if(t===null){pts.push([px+dx*1200,py+dy*1200]);return pts;}
+    let qx=px+dx*t, qy=py+dy*t; pts.push([qx,qy]);
+    nx=(qx-bcx)/Rc; ny=(qy-cy)/Rc;
+    r=refract(dx,dy,nx,ny,n); if(!r){pts.push([qx+dx*1200,qy+dy*1200]);return pts;} dx=r[0];dy=r[1];
+    pts.push([qx+dx*1200,qy+dy*1200]);
+    return pts;
+  }
+  function lensShape(){
+    const T=2*(Rc-Math.sqrt(Rc*Rc-h*h));
+    const fcx=Lx+(Rc-T/2), bcx=Lx-(Rc-T/2);
+    ctx.beginPath();
+    for(let y=-h;y<=h;y+=4){const x=fcx-Math.sqrt(Math.max(0,Rc*Rc-y*y)); if(y===-h)ctx.moveTo(x,cy+y);else ctx.lineTo(x,cy+y);}
+    for(let y=h;y>=-h;y-=4){const x=bcx+Math.sqrt(Math.max(0,Rc*Rc-y*y)); ctx.lineTo(x,cy+y);}
+    ctx.closePath();
+  }
+  function draw(){
+    // 光轴
+    ctx.strokeStyle='#33405c';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(W,cy);ctx.stroke();
+    // 透镜
+    lensShape();ctx.fillStyle='rgba(120,180,255,0.14)';ctx.fill();ctx.strokeStyle='#7fb0ff';ctx.lineWidth=2;ctx.stroke();
+    // 焦点
+    const f=Rc/(2*(n-1));
+    ctx.fillStyle='#ffcf5a';for(const fx of [Lx+f,Lx-f]){ctx.beginPath();ctx.arc(fx,cy,3,0,7);ctx.fill();ctx.font='11px sans-serif';ctx.fillText('F',fx-4,cy-8);}
+    // 光源
+    if(src==='point'){ const sx=Lx-u; ctx.fillStyle='#ff8a5a';ctx.beginPath();ctx.arc(sx,cy,5,0,7);ctx.fill();
+      ctx.fillStyle='#cdd8ee';ctx.font='12px sans-serif';ctx.fillText('点光源(发散)',sx-8,cy-12); }
+    else { ctx.fillStyle='#cdd8ee';ctx.font='12px sans-serif';ctx.fillText('平行光 →',26,cy-h-8); }
+    // 光线
+    ctx.lineWidth=1;
+    for(let i=0;i<=12;i++){const oy=cy-h*0.9+i*(h*1.8/12);
+      const pts=trace(oy);
+      ctx.strokeStyle='rgba(255,207,90,0.7)';ctx.beginPath();
+      for(let kdx=0;kdx<pts.length;kdx++){const [x,y]=pts[kdx];kdx===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+      ctx.stroke();
+    }
+    // 会聚点 = 两条出射光线的交点(斜入射时在轴外)
+    {const p1=trace(cy-h*0.45), p2=trace(cy+h*0.45);
+     const A=p1[p1.length-2],B=p1[p1.length-1],C=p2[p2.length-2],Dp=p2[p2.length-1];
+     if(A&&B&&C&&Dp){const r1x=B[0]-A[0],r1y=B[1]-A[1],r2x=Dp[0]-C[0],r2y=Dp[1]-C[1];const den=r1x*r2y-r1y*r2x;
+       if(Math.abs(den)>1e-6){const t=((C[0]-A[0])*r2y-(C[1]-A[1])*r2x)/den, ix=A[0]+t*r1x, iy=A[1]+t*r1y;
+         if(ix>Lx&&ix<W-4&&iy>12&&iy<H-12){
+           if(src==='parallel'){ctx.strokeStyle='rgba(121,255,168,0.3)';ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(ix,44);ctx.lineTo(ix,H-44);ctx.stroke();ctx.setLineDash([]);}
+           ctx.fillStyle='#79ffa8';ctx.beginPath();ctx.arc(ix,iy,4,0,7);ctx.fill();
+           ctx.font='11px sans-serif';ctx.fillText(src==='parallel'?'焦平面上的会聚点':'实像点',ix+7,iy-8);}}}}
+    ctx.fillStyle='#8a99b5';ctx.font='12px sans-serif';
+    ctx.fillText('焦距 f = R / [2(n−1)] = '+f.toFixed(0)+' px',20,H-16);
+    explainEl.innerHTML=(src==='parallel'
+      ?`<b>平行光</b>:每条光线在<b class="y">前后两个球面</b>各按 <b class="y">Snell 定律</b> 弯折,会聚到<b class="g">焦平面</b>上一点——垂直入射落在焦点 F,<b>斜入射(调入射角)则落在轴外</b>(离轴 ≈ f·tanθ),这正是透镜给不同方向来的光成像的原理。斜太多时会聚点变模糊拖尾 = <b class="g">彗差</b>。`
+      :`<b>点光源(发散)</b>:发散光经两次折射后会聚成<b class="g">实像点</b>——它落在焦点 F <b>右边</b>(物距有限,像距>f),过了像点光线再次发散,这是正常的成像。切到平行光可看到精确聚焦到 F。`)
+      +`边缘光线偏折更多、略早聚焦(会聚点前后散开)就是<b class="g">球差</b>——真追迹自然长出来的。调 R(更弯)或 n(更密)→ f 变短。`;
+  }
+  return{setU:v=>u=v,setRc:v=>Rc=v,setN:v=>n=v,setSrc:v=>src=v,setAng:v=>angDeg=v,draw};
+})();
+
+// ==================== 柏松亮斑 · 惠更斯-菲涅耳 ====================
+const POI=(function(){
+  let a=40, z=2500, lam=0.6;
+  const off=document.createElement('canvas'), oc=off.getContext('2d');
+  let ready=false, imgW=340, imgH=340;
+  off.width=imgW; off.height=imgH;
+  function apod(r,Rmax){const r0=0.6*Rmax; return r<r0?1:Math.max(0,0.5+0.5*Math.cos(Math.PI*(r-r0)/(Rmax-r0)));}
+  function compute(){
+    const k=2*Math.PI/lam;
+    const Rmax=Math.max(150, a*3+90), dw=(2*Rmax)/126;
+    // 波前采样点(圆盘外, 带切趾) —— 惠更斯子波源
+    const U=[];
+    for(let v=-Rmax;v<=Rmax;v+=dw)for(let uu=-Rmax;uu<=Rmax;uu+=dw){
+      const rr2=uu*uu+v*v; if(rr2<a*a)continue; const rr=Math.sqrt(rr2); if(rr>Rmax)continue;
+      U.push(uu,v,apod(rr,Rmax));
+    }
+    // 屏上按半径 ρ 求强度(轴对称)
+    const Nr=90, rhoMax=a*2.4; const I=new Float64Array(Nr);
+    for(let ir=0;ir<Nr;ir++){const rho=rhoMax*ir/(Nr-1); let re=0,im=0;
+      for(let p=0;p<U.length;p+=3){const du=U[p]-rho, dv=U[p+1], w=U[p+2];
+        const dr=Math.sqrt(du*du+dv*dv+z*z), ph=k*dr; re+=w*Math.cos(ph)/dr; im+=w*Math.sin(ph)/dr;}
+      I[ir]=re*re+im*im;}
+    let mx=1e-30; for(const x of I) if(x>mx)mx=x;
+    // 渲染成 2D 图(半径→I)
+    const im=oc.createImageData(imgW,imgH), d=im.data, cxp=imgW/2, cyp=imgH/2, scl=rhoMax/(imgW/2);
+    for(let j=0;j<imgH;j++)for(let i=0;i<imgW;i++){
+      const rho=Math.hypot(i-cxp,j-cyp)*scl; const ir=Math.min(Nr-1,Math.round(rho/rhoMax*(Nr-1)));
+      let val=Math.sqrt(I[ir]/mx);           // 开方增强暗环可见
+      const p=(j*imgW+i)*4; d[p]=255*val; d[p+1]=245*val; d[p+2]=210*val; d[p+3]=255;
+    }
+    oc.putImageData(im,0,0);
+    // 存半径廓线供画图
+    POI._I=I; POI._mx=mx; POI._Nr=Nr; POI._rhoMax=rhoMax; ready=true;
+  }
+  function draw(){
+    if(!ready)compute();
+    ctx.fillStyle='#02040a';ctx.fillRect(0,0,W,H);
+    // 衍射图
+    const IX=30, IY=45, IS=300;
+    ctx.imageSmoothingEnabled=true; ctx.drawImage(off,IX,IY,IS,IS);
+    // 几何阴影边界(圆盘半影, ρ=a)
+    const rhoMax=POI._rhoMax; const rr=(a/rhoMax)*(IS/2);
+    ctx.strokeStyle='rgba(120,160,220,0.6)';ctx.setLineDash([4,4]);ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(IX+IS/2,IY+IS/2,rr,0,7);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#9cccff';ctx.font='12px sans-serif';ctx.fillText('几何阴影边缘(圆盘半径 a)',IX,IY-8);
+    ctx.fillStyle='#ffcf5a';ctx.fillText('← 阴影正中的亮斑 = 柏松/阿拉戈亮斑',IX+IS/2+8,IY+IS/2);
+    ctx.beginPath();ctx.arc(IX+IS/2,IY+IS/2,3,0,7);ctx.fillStyle='#fff';ctx.fill();
+    // 半径强度廓线
+    const gx=360, gy=60, gw=310, gh=300;
+    ctx.strokeStyle='#33405c';ctx.strokeRect(gx,gy,gw,gh);
+    ctx.fillStyle='#8a99b5';ctx.font='11px sans-serif';ctx.fillText('沿半径的强度 I(ρ)',gx+8,gy-6);
+    ctx.fillText('圆心 ρ=0',gx+4,gy+gh+14); ctx.fillText('边缘',gx+gw-30,gy+gh+14);
+    const I=POI._I, Nr=POI._Nr, mx=POI._mx;
+    ctx.strokeStyle='#ffcf5a';ctx.lineWidth=2;ctx.beginPath();
+    for(let i=0;i<Nr;i++){const X=gx+gw*i/(Nr-1), Y=gy+gh-(gh-10)*Math.min(1,I[i]/mx);i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y);}
+    ctx.stroke();
+    // 中心亮斑标注
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(gx, gy+gh-(gh-10)*Math.min(1,I[0]/mx),3,0,7);ctx.fill();
+    ctx.fillStyle='#ffd27f';ctx.font='11px sans-serif';ctx.fillText('↑ 圆心竟然是亮的',gx+6,gy+gh-(gh-10)*Math.min(1,I[0]/mx)-6);
+    explainEl.innerHTML=`<b>柏松亮斑,纯原理算出来的</b>:把圆盘挡住后<b class="y">剩下的波前</b>上每一点都当成一个<b class="y">惠更斯子波源</b>(次级球面波 e^{ikr}/r),`
+      +`在屏上把它们的<b>复振幅逐点叠加</b>再取模平方——代码里就是这么做的双重积分,没有任何"画个亮点"的作弊。`
+      +`结果:圆盘边缘一圈到圆心<b class="g">距离都相等、同相到达</b>,叠加相长 → 阴影正中出现<b class="y">亮斑</b>。`
+      +`几何光学(光走直线)预言这里应该全黑,泊松当年以此"反驳"波动说,阿拉戈一做实验却真看到亮斑——反而证明了光是波。调 a / z / λ 看亮斑与衍射环变化。`;
+  }
+  return{setA:v=>{a=v;ready=false;},setZ:v=>{z=v;ready=false;},setL:v=>{lam=v;ready=false;},draw};
+})();
+
+// ==================== 循环 & 控件 ====================
+function loop(){ if(mode==='lens'){ctx.fillStyle='#02040a';ctx.fillRect(0,0,W,H);LENS.draw();} else POI.draw();
+  requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+const tabL=document.getElementById('tabL'), tabP=document.getElementById('tabP');
+const cl=document.getElementById('ctrl-lens'), cp=document.getElementById('ctrl-poisson');
+tabL.onclick=()=>{mode='lens';tabL.classList.add('on');tabP.classList.remove('on');cl.classList.remove('hide');cp.classList.add('hide');};
+tabP.onclick=()=>{mode='poisson';tabP.classList.add('on');tabL.classList.remove('on');cp.classList.remove('hide');cl.classList.add('hide');};
+
+const bind=(id,vid,fmt,cb)=>{const el=document.getElementById(id),v=document.getElementById(vid);
+  el.oninput=()=>{cb(+el.value);v.textContent=fmt(+el.value);};};
+bind('uu','uuV',x=>''+x,LENS.setU);
+bind('rc','rcV',x=>''+x,LENS.setRc);
+bind('nn','nnV',x=>x.toFixed(2),LENS.setN);
+bind('ang','angV',x=>x.toFixed(1)+'°',LENS.setAng);
+const sp=document.getElementById('srcPoint'), spar=document.getElementById('srcPar');
+sp.onclick=()=>{LENS.setSrc('point');sp.style.background='#ffcf5a';sp.style.color='#1a1206';spar.style.background='#1b2536';spar.style.color='#e2e9f7';};
+spar.onclick=()=>{LENS.setSrc('parallel');spar.style.background='#ffcf5a';spar.style.color='#1a1206';sp.style.background='#1b2536';sp.style.color='#e2e9f7';};
+bind('pa','paV',x=>''+x,POI.setA);
+bind('pz','pzV',x=>''+x,POI.setZ);
+bind('pl','plV',x=>x.toFixed(2),POI.setL);
+</script>
+</body>
+</html>

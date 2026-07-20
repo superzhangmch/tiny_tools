@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>电子元件原理分解 · 载流子级别模拟</title>
+<style>
+  :root { --bg:#0b0f17; --panel:#141b28; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5;
+    --accent:#4da3ff; --hole:#ff6b6b; --elec:#5ab0ff; --ion:#c8b26a; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  .wrap { max-width:730px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 10px; }
+  .tabs { display:flex; gap:7px; margin-bottom:12px; flex-wrap:wrap; }
+  .tabs button { background:#1b2536; color:var(--txt); border:1px solid var(--line);
+    padding:8px 13px; border-radius:9px; font-size:12.5px; cursor:pointer; }
+  .tabs button.on { background:var(--accent); color:#04121f; border-color:var(--accent); font-weight:600; }
+  canvas { display:block; background:#02040a; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+  .explain { background:#0e1522; border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; margin-top:12px; font-size:13px; line-height:1.6; color:#cdd8ee; min-height:70px; }
+  .explain b.f { color:#79ffa8; } .explain b.r { color:#ff9a7a; } .explain b.y { color:#ffd27f; }
+  .ctrl { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-top:12px; }
+  .ctrl .row { display:flex; align-items:center; gap:12px; margin:8px 0; }
+  .ctrl label { font-size:12px; color:var(--dim); width:170px; }
+  input[type=range] { flex:1; accent-color:var(--accent); }
+  .val { width:74px; text-align:right; font-family:monospace; color:var(--accent); font-size:13px; }
+  .btns button { background:#1b2536; color:var(--txt); border:1px solid var(--line);
+    padding:6px 12px; border-radius:8px; font-size:12px; cursor:pointer; margin-right:6px; }
+  .btns button.on { background:var(--accent); color:#04121f; border-color:var(--accent); }
+  .legend { font-size:11.5px; color:var(--dim); margin-top:8px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; vertical-align:middle; margin:0 3px 0 10px; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>电子元件原理分解 · 载流子级别</h1>
+  <div class="tabs" id="tabs"></div>
+  <canvas id="c" width="688" height="410"></canvas>
+  <div class="explain" id="explain"></div>
+
+  <div class="ctrl" id="ctrl-diode">
+    <div class="row"><label>外加电压 V(P 相对 N)</label>
+      <input type="range" id="vbias" min="-2" max="0.85" step="0.01" value="0.7"><span class="val" id="vbiasV">0.70 V</span></div>
+    <div class="legend"><span class="dot" style="background:var(--hole)"></span>空穴(P区多子,+)
+      <span class="dot" style="background:var(--elec)"></span>电子(N区多子,−)
+      <span class="dot" style="background:var(--ion)"></span>耗尽区固定离子</div>
+  </div>
+
+  <div class="ctrl hide" id="ctrl-bjt">
+    <div class="row"><label>基极电流 I<sub>B</sub></label>
+      <input type="range" id="ib" min="0" max="10" step="0.1" value="3"><span class="val" id="ibV">3.0 µA</span></div>
+    <div class="row"><label>电流放大倍数 β</label>
+      <input type="range" id="beta" min="20" max="200" step="5" value="100"><span class="val" id="betaV">100</span></div>
+    <div class="legend">黄闪 = 电子在薄基区复合(= I<sub>B</sub> 来源)</div>
+  </div>
+
+  <div class="ctrl hide" id="ctrl-mosfet">
+    <div class="row"><label>栅源电压 V<sub>GS</sub>(阈值≈1.5V)</label>
+      <input type="range" id="vgs" min="0" max="5" step="0.05" value="0"><span class="val" id="vgsV">0.00 V</span></div>
+    <div class="row"><label>漏源电压 V<sub>DS</sub></label>
+      <input type="range" id="vds" min="0" max="5" step="0.05" value="2"><span class="val" id="vdsV">2.00 V</span></div>
+    <div class="legend">栅极被绝缘层隔开,<b>只靠电场</b>控制沟道;栅极电流≈0。</div>
+  </div>
+
+  <div class="ctrl hide" id="ctrl-led">
+    <div class="row"><label>正向驱动(电流)</label>
+      <input type="range" id="drive" min="0" max="1" step="0.01" value="0.5"><span class="val" id="driveV">0.50</span></div>
+    <div class="row"><label>带隙(决定颜色)</label>
+      <input type="range" id="hue" min="0" max="280" step="1" value="0"><span class="val" id="hueV">红</span></div>
+    <div class="legend">电子空穴复合时把能量以<b>光子</b>释放;能量=带隙→颜色。</div>
+  </div>
+
+  <div class="ctrl hide" id="ctrl-rc">
+    <div class="row"><label>电阻 R</label>
+      <input type="range" id="rr" min="1" max="10" step="0.5" value="4"><span class="val" id="rrV">4.0</span></div>
+    <div class="row"><label>电容 C</label>
+      <input type="range" id="cc" min="1" max="10" step="0.5" value="3"><span class="val" id="ccV">3.0</span></div>
+    <div class="row btns"><label>开关</label>
+      <div><button id="charge" class="on">🔌 充电</button><button id="discharge">🔋 放电</button><button id="rcreset">复位</button></div></div>
+    <div class="legend">τ = R·C(时间常数):约 1τ 充到 63%,5τ 基本充满。</div>
+  </div>
+
+  <div class="ctrl hide" id="ctrl-osc">
+    <div class="row"><label>振荡频率</label>
+      <input type="range" id="freq" min="0.4" max="3" step="0.05" value="1.2"><span class="val" id="freqV">1.20</span></div>
+    <div class="legend">红/蓝 = 辐射电场正负,一圈圈以光速外传;沿天线轴无辐射、垂直方向最强。</div>
+  </div>
+</div>
+
+<script>
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+const HOLE='#ff6b6b', ELEC='#5ab0ff', ION='#c8b26a';
+let mode='diode';
+
+// ==================== 二极管 / PN 结 ====================
+const D=(function(){
+  const xL=40,xR=560,Xj=300,top=60,bot=250, Vt=0.026,Is=1e-9;
+  let V=0.7; const holes=[],elecs=[],crossers=[],flashes=[];
+  for(let i=0;i<150;i++) holes.push({x:xL+Math.random()*(Xj-xL),y:top+Math.random()*(bot-top)});
+  for(let i=0;i<150;i++) elecs.push({x:Xj+Math.random()*(xR-Xj),y:top+Math.random()*(bot-top)});
+  const depHalf=()=>6+84*Math.sqrt(Math.max(0,(0.75-V))/2.75);
+  const current=()=>Is*(Math.exp(V/Vt)-1);
+  const inorm=()=>{const Iref=Is*(Math.exp(0.72/Vt)-1);return Math.max(0,Math.min(1,current()/Iref));};
+  function step(){
+    const dh=depHalf(),pE=Xj-dh,nE=Xj+dh;
+    for(const h of holes){h.x+=(Math.random()*2-1)*2;h.y+=(Math.random()*2-1)*2;
+      h.x=Math.max(xL+6,Math.min(pE-3,h.x));h.y=Math.max(top+4,Math.min(bot-4,h.y));}
+    for(const e of elecs){e.x+=(Math.random()*2-1)*2;e.y+=(Math.random()*2-1)*2;
+      e.x=Math.max(nE+3,Math.min(xR-6,e.x));e.y=Math.max(top+4,Math.min(bot-4,e.y));}
+    const r=inorm(),sp=Math.round(r*4);
+    for(let s=0;s<sp;s++){crossers.push({x:pE,y:top+Math.random()*(bot-top),vx:2+r*3,t:'h'});
+      crossers.push({x:nE,y:top+Math.random()*(bot-top),vx:-(2+r*3),t:'e'});}
+    for(let i=crossers.length-1;i>=0;i--){const c=crossers[i];c.x+=c.vx;
+      if((c.t==='h'&&c.x>Xj+dh*0.6)||(c.t==='e'&&c.x<Xj-dh*0.6)){flashes.push({x:c.x,y:c.y,life:1});crossers.splice(i,1);}}
+    for(let i=flashes.length-1;i>=0;i--){flashes[i].life-=0.08;if(flashes[i].life<=0)flashes.splice(i,1);}
+    if(crossers.length>400)crossers.splice(0,crossers.length-400);
+  }
+  function draw(){
+    const dh=depHalf(),pE=Xj-dh,nE=Xj+dh;
+    ctx.fillStyle='rgba(255,107,107,0.07)';ctx.fillRect(xL,top,Xj-xL,bot-top);
+    ctx.fillStyle='rgba(90,176,255,0.07)';ctx.fillRect(Xj,top,xR-Xj,bot-top);
+    ctx.fillStyle='rgba(200,178,106,0.10)';ctx.fillRect(pE,top,dh*2,bot-top);
+    ctx.strokeStyle='rgba(200,178,106,0.5)';ctx.setLineDash([4,4]);ctx.strokeRect(pE,top,dh*2,bot-top);ctx.setLineDash([]);
+    ctx.font='11px monospace';ctx.fillStyle='rgba(200,178,106,0.85)';
+    for(let x=pE+8;x<Xj;x+=22)for(let y=top+14;y<bot;y+=26)ctx.fillText('−',x,y);
+    for(let x=Xj+6;x<nE;x+=22)for(let y=top+14;y<bot;y+=26)ctx.fillText('+',x,y);
+    for(const h of holes){ctx.fillStyle=HOLE;ctx.beginPath();ctx.arc(h.x,h.y,3,0,7);ctx.fill();}
+    for(const e of elecs){ctx.fillStyle=ELEC;ctx.beginPath();ctx.arc(e.x,e.y,3,0,7);ctx.fill();}
+    for(const c of crossers){ctx.fillStyle=c.t==='h'?HOLE:ELEC;ctx.beginPath();ctx.arc(c.x,c.y,3,0,7);ctx.fill();}
+    for(const f of flashes){ctx.fillStyle='rgba(255,230,120,'+f.life+')';ctx.beginPath();ctx.arc(f.x,f.y,5*f.life+2,0,7);ctx.fill();}
+    ctx.fillStyle='#ff9a9a';ctx.font='bold 15px sans-serif';ctx.fillText('P 型',xL+70,bot+26);
+    ctx.fillStyle='#9cccff';ctx.fillText('N 型',Xj+130,bot+26);
+    ctx.fillStyle=ION;ctx.font='12px sans-serif';ctx.fillText('耗尽区',Xj-22,top-8);
+    const r=inorm();
+    ctx.strokeStyle='#6b7793';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(xL,bot+40);ctx.lineTo(xL,bot+70);ctx.lineTo(xR,bot+70);ctx.lineTo(xR,bot+40);ctx.stroke();
+    if(r>0.02){const t=(performance.now()/300)%1;ctx.fillStyle='#79ffa8';
+      for(let k=0;k<8;k++){const p=((k/8)+t)%1,px=xR-(xR-xL)*p,py=bot+70;
+        ctx.beginPath();ctx.moveTo(px,py-4);ctx.lineTo(px-8,py);ctx.lineTo(px,py+4);ctx.fill();}}
+    ctx.fillStyle='#cdd8ee';ctx.font='12px sans-serif';
+    ctx.fillText('电池: P端 '+(V>=0?'+':'−')+' / N端 '+(V>=0?'−':'+')+'   V='+V.toFixed(2)+'V',xL+150,bot+64);
+    // I-V
+    const gx=590,gy=70,gw=88,gh=190;
+    ctx.strokeStyle='#33405c';ctx.lineWidth=1;ctx.strokeRect(gx,gy,gw,gh);
+    const y0=gy+gh*0.72;ctx.strokeStyle='#556';ctx.beginPath();ctx.moveTo(gx,y0);ctx.lineTo(gx+gw,y0);ctx.stroke();
+    const Vmin=-2,Vmax=0.85,Iref=Is*(Math.exp(0.78/Vt)-1);
+    ctx.strokeStyle='#4da3ff';ctx.lineWidth=2;ctx.beginPath();
+    for(let i=0;i<=60;i++){const vv=Vmin+(Vmax-Vmin)*i/60,ii=Is*(Math.exp(vv/Vt)-1),X=gx+gw*(vv-Vmin)/(Vmax-Vmin);
+      let Y=y0-(gh*0.68)*Math.max(-0.06,Math.min(1,ii/Iref));i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y);}
+    ctx.stroke();
+    const ii=current(),X=gx+gw*(V-Vmin)/(Vmax-Vmin),Y=y0-(gh*0.68)*Math.max(-0.06,Math.min(1,ii/Iref));
+    ctx.fillStyle='#ffd27f';ctx.beginPath();ctx.arc(X,Y,4,0,7);ctx.fill();
+    ctx.fillStyle='#8a99b5';ctx.font='10px sans-serif';ctx.fillText('I–V',gx+34,gy-4);
+  }
+  function explain(){const r=inorm();
+    if(V>0.45&&r>0.05)return`<b class="f">正向偏置</b>:外加电场抵消内建电场 → <b class="f">耗尽区变窄</b>,空穴与电子涌过结、相互<b class="f">复合</b>(黄闪)→ 电流哗哗流,二极管<b class="f">导通</b>。I–V 曲线在约 0.6–0.7V 处"膝盖"式突然上翘 = 硅二极管导通压降。`;
+    if(V>0.15)return`<b>弱正偏</b>:还没越过内建势垒(~0.7V),只有极少载流子过得去,电流很小。继续加大电压看它"突然导通"。`;
+    return`<b class="r">反向偏置</b>:外加电场与内建电场同向 → <b class="r">耗尽区变宽</b>,多子被拉离结区,几乎无电流 → <b class="r">不导通</b>。这就是单向导电性。`;}
+  return{setV:v=>V=v,step,draw,explain};
+})();
+
+// ==================== 三极管 / NPN ====================
+/*
+ * 【附注】E、C 电流一样大吗? —— 几乎一样,但不完全相等。
+ *
+ *   I_E = I_C + I_B   (基尔霍夫电流定律:进出三极管的电流守恒)
+ *   发射极电流 = 集电极电流 + 基极电流。
+ *
+ * 对着电子看:
+ *   - 发射极喷出全部电子           = I_E
+ *   - 极小一撮在基区复合/漏掉(黄闪) = I_B
+ *   - 剩下绝大多数冲到集电极        = I_C
+ *   所以 "喷出的" = "到达的" + "漏掉的",即 I_E = I_C + I_B。
+ *
+ * 因为 I_B 很小(≈ I_C 的 1/β),所以 I_E 只比 I_C 大一点点:
+ *   - 例:I_B≈6.9、I_C=690 → I_E=696.9 µA,比 I_C 大约多 1%。
+ *   - 比值 α = I_C / I_E = β/(β+1) ≈ 0.99。
+ * 工程上常近似 I_E ≈ I_C;严格说三者关系是 E 最大 > C > B 最小,且恒有 E = C + B。
+ * (β = I_C/I_B 是电流放大倍数;α = I_C/I_E 接近 1。两者关系:β = α/(1-α)。)
+ */
+const B=(function(){
+  const xL=50,x1=250,x2=305,xR=600,top=70,bot=250;
+  let Ib=3,beta=100;const elecs=[],holes=[],flashes=[];
+  for(let i=0;i<40;i++)holes.push({x:x1+Math.random()*(x2-x1),y:top+Math.random()*(bot-top)});
+  function step(){
+    for(const h of holes){h.x+=(Math.random()*2-1)*1.5;h.y+=(Math.random()*2-1)*1.5;
+      h.x=Math.max(x1+3,Math.min(x2-3,h.x));h.y=Math.max(top+4,Math.min(bot-4,h.y));}
+    const sp=Ib<=0?0:Math.min(8,Math.max(1,Math.round(Ib*0.7)));   // 限每帧新增(而非删最老的),电子才能流到最右
+    for(let s=0;s<sp;s++){elecs.push({x:xL+10,y:top+20+Math.random()*(bot-top-40),vx:3.2,
+      recomb:Math.random()<1/(beta+1),rx:x1+Math.random()*(x2-x1)});}
+    for(let i=elecs.length-1;i>=0;i--){const e=elecs[i];e.x+=e.vx;e.y+=(Math.random()*2-1)*1.2;
+      if(e.recomb&&e.x>=e.rx){flashes.push({x:e.x,y:e.y,life:1});elecs.splice(i,1);continue;}
+      if(e.x>xR-8)elecs.splice(i,1);}
+    for(let i=flashes.length-1;i>=0;i--){flashes[i].life-=0.07;if(flashes[i].life<=0)flashes.splice(i,1);}
+    if(elecs.length>2400)elecs.splice(0,elecs.length-2400);   // 安全上限调高:正常不触发,让电子完整流到集电极右端
+  }
+  function draw(){
+    ctx.fillStyle='rgba(90,176,255,0.08)';ctx.fillRect(xL,top,x1-xL,bot-top);
+    ctx.fillStyle='rgba(255,107,107,0.10)';ctx.fillRect(x1,top,x2-x1,bot-top);
+    ctx.fillStyle='rgba(90,176,255,0.06)';ctx.fillRect(x2,top,xR-x2,bot-top);
+    ctx.strokeStyle='rgba(120,140,170,0.4)';ctx.strokeRect(x1,top,x2-x1,bot-top);
+    for(const h of holes){ctx.fillStyle=HOLE;ctx.beginPath();ctx.arc(h.x,h.y,3,0,7);ctx.fill();}
+    for(const e of elecs){ctx.fillStyle=ELEC;ctx.beginPath();ctx.arc(e.x,e.y,2.6,0,7);ctx.fill();}
+    for(const f of flashes){ctx.fillStyle='rgba(255,230,120,'+f.life+')';ctx.beginPath();ctx.arc(f.x,f.y,5*f.life+2,0,7);ctx.fill();}
+    ctx.fillStyle='#9cccff';ctx.font='bold 14px sans-serif';ctx.fillText('发射极 E',xL+70,bot+24);
+    ctx.fillStyle='#8a99b5';ctx.font='11px sans-serif';ctx.fillText('电子的"源头"',xL+58,bot+40);
+    ctx.fillStyle='#ff9a9a';ctx.font='12px sans-serif';ctx.fillText('基区 B(薄)',x1-26,top-8);
+    ctx.fillStyle='#9cccff';ctx.font='bold 14px sans-serif';ctx.fillText('集电极 C',x2+120,bot+24);
+    ctx.fillStyle='#8a99b5';ctx.font='11px sans-serif';ctx.fillText('收集大电流(输出)',x2+108,bot+40);
+    // 基极驱动电池(可上下拖):注入基极的电流 ∝ I_B
+    const bbx=(x1+x2)/2, bbY=16, bbW=46, bbH=30;
+    ctx.strokeStyle='#6b7793';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(bbx,bbY+bbH);ctx.lineTo(bbx,top);ctx.stroke();
+    ctx.fillStyle='#243049';ctx.fillRect(bbx-bbW/2,bbY,bbW,bbH);
+    ctx.fillStyle='#ffd27f';ctx.fillRect(bbx-bbW/2,bbY+bbH*(1-Ib/10),bbW,bbH*Ib/10);
+    ctx.strokeStyle='#8a99b5';ctx.strokeRect(bbx-bbW/2,bbY,bbW,bbH);
+    ctx.fillStyle='#cdd8ee';ctx.font='10px sans-serif';ctx.fillText('↕拖动=调 I_B',bbx-bbW/2-6,bbY-4);
+    if(Ib>0){const tt=(performance.now()/250)%1, nAr=Math.max(1,Math.round(Ib/2));ctx.fillStyle='#ffd27f';
+      for(let kk=0;kk<nAr;kk++){const p=((kk/nAr)+tt)%1, py=bbY+bbH+(top-(bbY+bbH))*p;
+        ctx.beginPath();ctx.moveTo(bbx-3,py);ctx.lineTo(bbx,py+5);ctx.lineTo(bbx+3,py);ctx.fill();}}
+    const Ic=beta*Ib,Ie=(beta+1)*Ib;
+    // 顶部:输入/输出的大白话标注
+    ctx.font='bold 12px sans-serif';ctx.fillStyle='#ffd27f';ctx.fillText('① 输入:小电流 I_B',(x1+x2)/2+34,26);
+    ctx.font='11px sans-serif';ctx.fillStyle='#8a99b5';ctx.fillText('(你拧的旋钮 / 控制信号)',(x1+x2)/2+34,42);
+    ctx.font='bold 12px sans-serif';ctx.fillStyle='#79ffa8';ctx.fillText('② 输出:大电流 I_C',x2+92,top+2);
+    ctx.font='11px sans-serif';ctx.fillStyle='#8a99b5';ctx.fillText('= β×I_B(被放大 β 倍)',x2+92,top+18);
+    // 数值
+    ctx.font='13px monospace';
+    ctx.fillStyle='#ffd27f';ctx.fillText('I_B = '+Ib.toFixed(1)+' µA   ← 小(输入)',56,bot+58);
+    ctx.fillStyle='#79ffa8';ctx.fillText('I_C = β·I_B = '+Ic.toFixed(0)+' µA   ← 大(输出)',260,bot+58);
+    ctx.fillStyle='#9cccff';ctx.font='12px monospace';ctx.fillText('I_E = I_B + I_C = '+Ie.toFixed(0)+' µA',56,bot+78);
+    // 通俗类比
+    ctx.fillStyle='#cdd8ee';ctx.font='12px sans-serif';
+    ctx.fillText('通俗讲:轻拧一个小阀门(I_B)→ 放出一大股水(I_C);小电流"指挥"大电流 = 放大。',56,bot+100);
+    if(Ib<=0){ctx.fillStyle='#ff9a7a';ctx.font='bold 13px sans-serif';ctx.fillText('I_B=0 → 截止:集电极没电流,像断开的开关',300,bot+78);}
+  }
+  function explain(){if(Ib<=0)return`<b class="r">截止(关)</b>:基极这个"小旋钮"不给电流,集电极这条"大水管"就没水——三极管像<b>断开的开关</b>。把基极电流拧上去试试。`;
+    return`<b>一句话</b>:你从<b class="y">基极 B</b> 灌一个<b class="y">小电流 I<sub>B</sub>(输入)</b>,三极管就在<b class="g">集电极 C</b> 放出一个大 β 倍的<b class="g">大电流 I<sub>C</sub>(输出)</b>——<b>小的指挥大的,这就是"放大"</b>。<br>`
+      +`<b>为什么能这样</b>:发射极(电子源头)朝<b>又薄又轻掺杂</b>的基区喷大量电子;基区太薄,绝大多数电子来不及在里面"损耗"就被集电极抽走 = 大电流 I<sub>C</sub>;只有约 1/(β+1) 在基区被消耗、需要基极补上 = 小电流 I<sub>B</sub>。所以 <b class="g">I<sub>C</sub> = β·I<sub>B</sub></b>。`;}
+  return{setIb:v=>Ib=v,setBeta:v=>beta=v,step,draw,explain};
+})();
+
+// ==================== MOSFET (N沟道增强型) ====================
+const M=(function(){
+  const xL=60,xR=628,subTop=150,subBot=300;
+  const sL=80,sR=210,dL=478,dR=608,njTop=150,njBot=210;
+  const gL=220,gR=468,oxY=140,oxH=8,gY=108,gH=26,chY=152;
+  let Vgs=0,Vds=2;const Vth=1.5;
+  const holes=[];for(let i=0;i<130;i++)holes.push({x:xL+Math.random()*(xR-xL),y:subTop+Math.random()*(subBot-subTop)});
+  const flow=[];
+  const on=()=>Vgs>Vth, str=()=>Math.max(0,Vgs-Vth);
+  const Id=()=>on()?str()*Math.min(Vds,str())*7:0;
+  function step(){
+    const depDepth=Math.min(60,Vgs*13);
+    for(const h of holes){h.x+=(Math.random()*2-1)*1.8;h.y+=(Math.random()*2-1)*1.8;
+      h.x=Math.max(xL+5,Math.min(xR-5,h.x));h.y=Math.max(subTop+4,Math.min(subBot-4,h.y));
+      if(Vgs>0&&h.x>gL&&h.x<gR&&h.y<subTop+depDepth)h.y=subTop+depDepth;}  // 栅下表面耗尽
+    if(on()&&Vds>0){const r=Id()/60,sp=Math.max(0,Math.round(r*4));
+      for(let s=0;s<sp;s++)flow.push({x:sR-4,y:chY+(Math.random()*2-1)*4,vx:2+r*3});}
+    for(let i=flow.length-1;i>=0;i--){flow[i].x+=flow[i].vx;if(flow[i].x>dL+4)flow.splice(i,1);}
+    if(flow.length>300)flow.splice(0,flow.length-300);
+  }
+  function draw(){
+    ctx.fillStyle='rgba(255,107,107,0.07)';ctx.fillRect(xL,subTop,xR-xL,subBot-subTop);      // P 衬底
+    ctx.fillStyle='rgba(90,176,255,0.14)';ctx.fillRect(sL,njTop,sR-sL,njBot-njTop);           // S N+
+    ctx.fillStyle='rgba(90,176,255,0.14)';ctx.fillRect(dL,njTop,dR-dL,njBot-njTop);           // D N+
+    ctx.fillStyle='rgba(180,180,200,0.30)';ctx.fillRect(gL,oxY,gR-gL,oxH);                    // 氧化层(绝缘)
+    ctx.fillStyle='rgba(230,200,120,0.9)';ctx.fillRect(gL,gY,gR-gL,gH);                       // 栅金属
+    // 可拖的电池(液位 ∝ Vgs)+ 导线连到栅
+    const gcx=(gL+gR)/2, batY=30, batW=54, batH=34;
+    ctx.strokeStyle='#6b7793';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(gcx,batY+batH);ctx.lineTo(gcx,gY);ctx.stroke();
+    ctx.fillStyle='#243049';ctx.fillRect(gcx-batW/2,batY,batW,batH);
+    ctx.fillStyle='#ffd27f';ctx.fillRect(gcx-batW/2, batY+batH*(1-Vgs/5), batW, batH*Vgs/5);
+    ctx.strokeStyle='#8a99b5';ctx.strokeRect(gcx-batW/2,batY,batW,batH);
+    ctx.fillStyle='#cdd8ee';ctx.font='11px sans-serif';ctx.fillText('↕拖动=调栅压',gcx-batW/2-6,batY-6);
+    ctx.fillStyle='#1a1206';ctx.font='bold 12px monospace';ctx.fillText(Vgs.toFixed(1)+'V',gcx-15,batY+batH/2+4);
+    // 栅上 + 电荷 ∝ Vgs
+    ctx.fillStyle='#3a2e10';ctx.font='12px monospace';
+    const nq=Math.round(Vgs*3);
+    for(let k=0;k<nq;k++)ctx.fillText('+',gL+12+k*((gR-gL-20)/Math.max(1,nq)),gY+18);
+    // 电场线:从栅(+)穿过绝缘层向下伸进沟道,把电子往上"吸"——密度/长度 ∝ Vgs
+    if(Vgs>0){const strong=Math.min(1,Vgs/3);ctx.strokeStyle='rgba(120,200,255,'+(0.25+0.55*strong)+')';ctx.lineWidth=1.4;
+      const nf=Math.round(3+Vgs*2);
+      for(let k=0;k<nf;k++){const fx=gL+22+k*((gR-gL-44)/Math.max(1,nf-1));
+        ctx.beginPath();ctx.moveTo(fx,oxY+oxH);ctx.lineTo(fx,chY+7);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(fx-3,chY+2);ctx.lineTo(fx,chY+7);ctx.lineTo(fx+3,chY+2);ctx.stroke();}}
+    // 沟道
+    if(on()){const n=Math.round(str()*10);ctx.fillStyle=ELEC;
+      for(let k=0;k<n*3;k++)ctx.beginPath(),ctx.arc(sR+Math.random()*(dL-sR),chY+(Math.random()*2-1)*4,2.4,0,7),ctx.fill();}
+    else{ctx.fillStyle='rgba(200,178,106,0.25)';ctx.fillRect(sR,oxY+oxH,dL-sR,18);
+      ctx.fillStyle='#c8b26a';ctx.font='12px sans-serif';ctx.fillText('无沟道(耗尽,不导通)',gL+40,chY+8);}
+    for(const h of holes){ctx.fillStyle=HOLE;ctx.beginPath();ctx.arc(h.x,h.y,2.8,0,7);ctx.fill();}
+    for(const f of flow){ctx.fillStyle=ELEC;ctx.beginPath();ctx.arc(f.x,f.y,2.6,0,7);ctx.fill();}
+    ctx.fillStyle='#cdd8ee';ctx.font='13px sans-serif';
+    ctx.fillText('S 源',sL+30,njBot+22);ctx.fillText('G 栅(金属)',gL+70,gY-8);
+    ctx.fillText('D 漏',dL+30,njBot+22);ctx.fillText('P 衬底 (B)',xL+10,subBot-8);
+    ctx.fillStyle='#180f00';ctx.font='11px sans-serif';ctx.fillText('绝缘层(SiO₂)',gL+82,oxY+oxH-1);
+    ctx.font='13px monospace';ctx.fillStyle=on()?'#79ffa8':'#ff9a7a';
+    ctx.fillText('I_D = '+Id().toFixed(0)+' (相对值)   栅极电流 I_G ≈ 0',80,subTop-16);
+  }
+  function explain(){if(!on())return`<b class="r">V<sub>GS</sub> 低于阈值(~1.5V)</b>:栅极正电压先把衬底表面的空穴推开(耗尽),但还不足以吸来电子 → S、D 之间没有导电沟道 → <b class="r">不导通</b>(截止)。`;
+    return`<b class="f">V<sub>GS</sub> 超过阈值</b>:栅极(隔着绝缘层)的正电场把电子吸到表面,形成一层 <b class="f">n 型反型沟道</b>连通源漏;此时 V<sub>DS</sub> 就能驱动电子 S→D 流动 = <b class="f">I<sub>D</sub></b>。关键:栅极被<b>绝缘层</b>隔开,<b class="y">只靠电压(电场)控制,几乎不吃电流</b>(与三极管靠基极电流不同)。`;}
+  return{setVgs:v=>Vgs=v,setVds:v=>Vds=v,step,draw,explain};
+})();
+
+// ==================== LED ====================
+const L=(function(){
+  const xL=60,xR=560,Xj=310,top=70,bot=250;
+  let drive=0.5,hue=0;const holes=[],elecs=[],crossers=[],photons=[];
+  for(let i=0;i<120;i++)holes.push({x:xL+Math.random()*(Xj-xL),y:top+Math.random()*(bot-top)});
+  for(let i=0;i<120;i++)elecs.push({x:Xj+Math.random()*(xR-Xj),y:top+Math.random()*(bot-top)});
+  const col=()=>`hsl(${hue},90%,60%)`;
+  function step(){
+    for(const h of holes){h.x+=(Math.random()*2-1)*2;h.y+=(Math.random()*2-1)*2;
+      h.x=Math.max(xL+6,Math.min(Xj-14,h.x));h.y=Math.max(top+4,Math.min(bot-4,h.y));}
+    for(const e of elecs){e.x+=(Math.random()*2-1)*2;e.y+=(Math.random()*2-1)*2;
+      e.x=Math.max(Xj+14,Math.min(xR-6,e.x));e.y=Math.max(top+4,Math.min(bot-4,e.y));}
+    const sp=Math.round(drive*5);
+    for(let s=0;s<sp;s++){const y=top+Math.random()*(bot-top);
+      crossers.push({x:Xj-14,y,vx:2+drive*3,t:'h'});crossers.push({x:Xj+14,y:top+Math.random()*(bot-top),vx:-(2+drive*3),t:'e'});}
+    for(let i=crossers.length-1;i>=0;i--){const c=crossers[i];c.x+=c.vx;
+      if((c.t==='h'&&c.x>Xj)||(c.t==='e'&&c.x<Xj)){
+        photons.push({x:Xj,y:c.y,vx:(Math.random()*2-1)*1.5,vy:-2-Math.random()*2,life:1});crossers.splice(i,1);}}
+    for(let i=photons.length-1;i>=0;i--){const p=photons[i];p.x+=p.vx;p.y+=p.vy;p.life-=0.02;if(p.life<=0)photons.splice(i,1);}
+    if(crossers.length>400)crossers.splice(0,crossers.length-400);
+  }
+  function draw(){
+    // 发光晕
+    const g=ctx.createRadialGradient(Xj,top+90,0,Xj,top+90,90+drive*120);
+    g.addColorStop(0,`hsla(${hue},90%,65%,${0.10+drive*0.35})`);g.addColorStop(1,'transparent');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba(255,107,107,0.06)';ctx.fillRect(xL,top,Xj-xL,bot-top);
+    ctx.fillStyle='rgba(90,176,255,0.06)';ctx.fillRect(Xj,top,xR-Xj,bot-top);
+    for(const h of holes){ctx.fillStyle=HOLE;ctx.beginPath();ctx.arc(h.x,h.y,3,0,7);ctx.fill();}
+    for(const e of elecs){ctx.fillStyle=ELEC;ctx.beginPath();ctx.arc(e.x,e.y,3,0,7);ctx.fill();}
+    for(const c of crossers){ctx.fillStyle=c.t==='h'?HOLE:ELEC;ctx.beginPath();ctx.arc(c.x,c.y,3,0,7);ctx.fill();}
+    for(const p of photons){ctx.fillStyle=`hsla(${hue},95%,70%,${p.life})`;ctx.beginPath();ctx.arc(p.x,p.y,3,0,7);ctx.fill();}
+    ctx.fillStyle='#ff9a9a';ctx.font='bold 14px sans-serif';ctx.fillText('P',xL+90,bot+24);
+    ctx.fillStyle='#9cccff';ctx.fillText('N',Xj+120,bot+24);
+    ctx.fillStyle=col();ctx.font='13px sans-serif';ctx.fillText('⚡ 复合 → 光子(光)',Xj-60,bot+24);
+    // ---- 能带图:颜色由带隙 Eg 决定 ----
+    const bx=430,bw=150,bTop=284,bBot=386,mid=(bTop+bBot)/2;
+    const gapH=16+(hue/280)*66;                     // 带隙高度 ∝ 选定颜色/带隙
+    const cb=mid-gapH/2, vb=mid+gapH/2;
+    ctx.strokeStyle='#33405c';ctx.lineWidth=1;ctx.strokeRect(bx,bTop,bw,bBot-bTop);
+    ctx.fillStyle='rgba(90,176,255,0.12)';ctx.fillRect(bx+6,bTop+6,bw-12,cb-bTop-6);
+    ctx.fillStyle='rgba(255,107,107,0.12)';ctx.fillRect(bx+6,vb,bw-12,bBot-vb-6);
+    ctx.strokeStyle='#5ab0ff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(bx+8,cb);ctx.lineTo(bx+bw-8,cb);ctx.stroke();
+    ctx.strokeStyle='#ff6b6b';ctx.beginPath();ctx.moveTo(bx+8,vb);ctx.lineTo(bx+bw-8,vb);ctx.stroke();
+    ctx.fillStyle='#9cccff';ctx.font='10px sans-serif';ctx.fillText('导带',bx+10,cb-4);
+    ctx.fillStyle='#ff9a9a';ctx.fillText('价带',bx+10,vb+13);
+    // 电子从导带落到价带(动画), 释放光子 = Eg
+    const p=(performance.now()/700)%1, ex=bx+bw*0.4, ey=cb+(vb-cb)*Math.min(1,p*1.3);
+    ctx.strokeStyle='#5ab0ff';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(ex,cb);ctx.lineTo(ex,vb);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=ELEC;ctx.beginPath();ctx.arc(ex,ey,4,0,7);ctx.fill();
+    // 光子波(颜色=Eg)
+    ctx.strokeStyle=col();ctx.lineWidth=2;ctx.beginPath();
+    for(let i=0;i<=40;i++){const X=ex+8+i*2.0, Y=mid+Math.sin(i*0.6)*4;i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y);}
+    ctx.stroke();
+    ctx.fillStyle=col();ctx.font='11px sans-serif';ctx.fillText('hν = Eg → 颜色',bx+bw-4,bTop-4);
+    ctx.fillStyle='#8a99b5';ctx.fillText('带隙越大 → 光子能量越高 → 越偏蓝紫',bx-4,bBot+14);
+  }
+  function explain(){return`<b class="f">LED = 正向导通的二极管</b>,但用的是<b>直接带隙</b>半导体:电子和空穴在结区<b class="f">复合</b>时,把能量直接变成一个<b class="y">光子(光)</b>而不是热。电流越大 → 复合越多 → 越亮。光子能量 = 材料<b>带隙</b>,带隙大出蓝紫光、带隙小出红光——拖"带隙"滑块看颜色变化。`;}
+  return{setDrive:v=>drive=v,setHue:v=>hue=v,step,draw,explain};
+})();
+
+// ==================== 电容 · RC ====================
+const R=(function(){
+  const Vsrc=5;let Vc=0,Rr=4,Cc=3,state='charge';const hist=[];
+  const dots=[];for(let i=0;i<40;i++)dots.push(Math.random());   // 导线电子相位
+  const tau=()=>Rr*Cc*0.06;
+  const I=()=>(state==='charge'?(Vsrc-Vc):(state==='discharge'?-Vc:0))/Rr;
+  function step(){
+    const dt=0.03,t=tau();
+    if(state==='charge')Vc+=(Vsrc-Vc)*dt/t;
+    else if(state==='discharge')Vc+=(0-Vc)*dt/t;
+    hist.push(Vc);if(hist.length>360)hist.shift();
+    const spd=Math.min(0.05,Math.abs(I())*0.02);const dir=I()>=0?1:-1;
+    for(let i=0;i<dots.length;i++){dots[i]=(dots[i]+spd*dir+1)%1;}
+  }
+  function draw(){
+    const bx=70,by=90,cw=520,chh=160;   // 电路矩形回路
+    // 导线回路
+    ctx.strokeStyle='#6b7793';ctx.lineWidth=3;
+    ctx.strokeRect(bx,by,cw,chh);
+    // 电池(左边)
+    ctx.strokeStyle='#cdd8ee';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(bx,by+chh*0.4);ctx.lineTo(bx+0,by+chh*0.4);ctx.stroke();
+    ctx.fillStyle='#cdd8ee';ctx.font='12px sans-serif';ctx.fillText('电池 '+Vsrc+'V',bx-40,by+chh*0.5+40);
+    ctx.fillRect(bx-4,by+chh*0.45,8,4);ctx.fillRect(bx-8,by+chh*0.55,16,3);
+    // 电阻(顶边,锯齿)
+    ctx.strokeStyle='#ffd27f';ctx.lineWidth=3;ctx.beginPath();
+    const rzx=bx+cw*0.35,rw=110;ctx.moveTo(rzx,by);for(let k=0;k<=6;k++)ctx.lineTo(rzx+rw*k/6,by+(k%2?-9:9));ctx.lineTo(rzx+rw,by);ctx.stroke();
+    ctx.fillStyle='#ffd27f';ctx.font='12px sans-serif';ctx.fillText('R='+Rr.toFixed(1),rzx+30,by-16);
+    // 电容(右边两板)
+    const px=bx+cw,pyc=by+chh*0.5;
+    ctx.strokeStyle='#5ab0ff';ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(px-24,pyc-30);ctx.lineTo(px-24,pyc+30);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(px+0,pyc-30);ctx.lineTo(px+0,pyc+30);ctx.stroke();
+    ctx.fillStyle='#5ab0ff';ctx.font='12px sans-serif';ctx.fillText('C='+Cc.toFixed(1),px-30,pyc+52);
+    // 极板电荷 ∝ Vc
+    const nq=Math.round(Vc/Vsrc*10);ctx.font='13px monospace';
+    ctx.fillStyle='#ff8a8a';for(let k=0;k<nq;k++)ctx.fillText('+',px-40,pyc-28+k*6);
+    ctx.fillStyle='#8ab8ff';for(let k=0;k<nq;k++)ctx.fillText('−',px+8,pyc-28+k*6);
+    // 导线里的电子(沿回路的四条边动)
+    ctx.fillStyle='#79ffdd';
+    for(const d of dots){let x,y;const p=d*2*(cw+chh);
+      if(p<cw){x=bx+p;y=by;}else if(p<cw+chh){x=bx+cw;y=by+(p-cw);}
+      else if(p<2*cw+chh){x=bx+cw-(p-cw-chh);y=by+chh;}else{x=bx;y=by+chh-(p-2*cw-chh);}
+      if(Math.abs(I())>0.02){ctx.beginPath();ctx.arc(x,y,2.5,0,7);ctx.fill();}}
+    // Vc(t) 曲线
+    const gx=70,gy=280,gw=540,gh=100;
+    ctx.strokeStyle='#33405c';ctx.lineWidth=1;ctx.strokeRect(gx,gy,gw,gh);
+    ctx.strokeStyle='#33405c';ctx.setLineDash([3,3]);
+    const y63=gy+gh*(1-0.63);ctx.beginPath();ctx.moveTo(gx,y63);ctx.lineTo(gx+gw,y63);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#8a99b5';ctx.font='10px sans-serif';ctx.fillText('63%',gx+2,y63-3);ctx.fillText('Vc(t)',gx+gw-40,gy+12);
+    ctx.strokeStyle='#5ab0ff';ctx.lineWidth=2;ctx.beginPath();
+    for(let i=0;i<hist.length;i++){const X=gx+gw*i/360,Y=gy+gh*(1-hist[i]/Vsrc);i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y);}
+    ctx.stroke();
+    ctx.fillStyle='#cdd8ee';ctx.font='13px monospace';
+    ctx.fillText('Vc = '+Vc.toFixed(2)+' V   I = '+I().toFixed(2)+'   τ=R·C',gx+120,gy-8);
+  }
+  function explain(){return`<b>电容充放电</b>:充电时电子在导线里堆到极板上、板间电压 Vc 按 <b class="f">Vc=V(1−e^(−t/τ))</b> 升高——一开始电流大(斜率陡),越充越满、电流越小(指数放缓)。放电则反过来 <b class="r">Vc=V·e^(−t/τ)</b>。<b class="y">τ=R·C</b> 是时间常数:约 1τ 充到 63%,5τ 基本充满。调 R、C 看曲线快慢变化。`;}
+  return{setR:v=>Rr=v,setC:v=>Cc=v,setState:s=>state=s,reset:()=>{Vc=0;hist.length=0;},step,draw,explain};
+})();
+
+// ==================== 振荡电路 · 天线辐射 ====================
+const OSC=(function(){
+  let freq=1.2; const ax=150, ay=H/2;
+  const GW=172,GH=102,off=document.createElement('canvas');off.width=GW;off.height=GH;
+  const oc=off.getContext('2d'),img=oc.createImageData(GW,GH);let t=0;
+  function step(){t+=0.14*freq;}
+  function draw(){
+    const k=0.055*freq,d=img.data;
+    for(let j=0;j<GH;j++)for(let i=0;i<GW;i++){
+      const X=i/GW*W,Y=j/GH*H,dx=X-ax,dy=Y-ay,r=Math.hypot(dx,dy);
+      const sinT=Math.abs(dx)/(r+1e-6);
+      let E=sinT/(0.18+r/150)*Math.cos(k*r-t);if(E>1)E=1;if(E<-1)E=-1;
+      const p=(j*GW+i)*4;
+      if(E>=0){d[p]=30+210*E;d[p+1]=24;d[p+2]=24;}else{d[p]=24;d[p+1]=24;d[p+2]=30-210*E;}
+      d[p+3]=255;}
+    oc.putImageData(img,0,0);ctx.imageSmoothingEnabled=true;ctx.drawImage(off,0,0,W,H);
+    const s=Math.sin(t);
+    ctx.strokeStyle='#dfe7f5';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(ax,ay-60);ctx.lineTo(ax,ay+60);ctx.stroke();
+    ctx.font='14px monospace';
+    ctx.fillStyle=s>=0?'#ff8a8a':'#8ab8ff';ctx.fillText(s>=0?'+':'−',ax-4,ay-42);
+    ctx.fillStyle=s>=0?'#8ab8ff':'#ff8a8a';ctx.fillText(s>=0?'−':'+',ax-4,ay+50);
+    ctx.fillStyle='#79ffdd';ctx.beginPath();ctx.arc(ax,ay-s*40,4,0,7);ctx.fill();
+    ctx.fillStyle='#cdd8ee';ctx.font='12px sans-serif';ctx.fillText('天线',ax+8,ay-64);
+    // LC 腔:C(电场)与 L(磁场)能量此消彼长
+    ctx.fillStyle='rgba(13,20,32,0.8)';ctx.fillRect(14,H-96,124,82);ctx.strokeStyle='#33405c';ctx.strokeRect(14,H-96,124,82);
+    ctx.fillStyle='#8a99b5';ctx.font='11px sans-serif';ctx.fillText('LC 振荡腔',22,H-82);
+    const ce=Math.cos(t)**2,le=Math.sin(t)**2;
+    ctx.fillStyle='#5ab0ff';ctx.fillRect(34,H-26,20,-44*ce);ctx.fillStyle='#ffd27f';ctx.fillRect(98,H-26,20,-44*le);
+    ctx.fillStyle='#9cccff';ctx.font='10px sans-serif';ctx.fillText('C电场',30,H-14);ctx.fillStyle='#ffd27f';ctx.fillText('L磁场',94,H-14);
+  }
+  function explain(){return`<b class="f">振荡电路 → 电磁波</b>:LC 谐振腔里电场(电容)和磁场(电感)的能量<b>此消彼长</b>,产生高频<b>交流电流</b>;接到<b>天线</b>后电荷沿天线<b class="y">上下往复振荡</b>(加速的电荷)→ 向外<b class="f">辐射电磁波</b>。图中颜色是辐射场(红正/蓝负),一圈圈以光速传出;注意沿天线<b>竖直方向几乎不辐射</b>、水平最强(偶极子 sinθ 方向图)。这就是无线电发射原理,也接回了麦克斯韦波。`;}
+  return{setFreq:v=>freq=v,step,draw,explain};
+})();
+
+// ==================== 主循环 & 标签 ====================
+const MOD={diode:D,bjt:B,mosfet:M,led:L,rc:R,osc:OSC};
+const explainEl=document.getElementById('explain');
+function loop(){ctx.fillStyle='#02040a';ctx.fillRect(0,0,W,H);
+  const m=MOD[mode];m.step();m.draw();explainEl.innerHTML=m.explain();requestAnimationFrame(loop);}
+requestAnimationFrame(loop);
+
+const TABS=[['diode','二极管·PN结'],['bjt','三极管·NPN'],['mosfet','MOSFET·场效应'],['led','LED·发光'],['rc','电容·RC'],['osc','振荡·天线']];
+const tabsEl=document.getElementById('tabs');
+TABS.forEach(([id,label])=>{const b=document.createElement('button');b.textContent=label;b.dataset.m=id;
+  if(id===mode)b.classList.add('on');b.onclick=()=>{mode=id;
+    tabsEl.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.m===id));
+    TABS.forEach(([mid])=>document.getElementById('ctrl-'+mid).classList.toggle('hide',mid!==id));};
+  tabsEl.appendChild(b);});
+
+// 控件
+const bind=(id,vid,fmt,cb)=>{const el=document.getElementById(id),v=document.getElementById(vid);
+  el.oninput=()=>{cb(+el.value);if(v)v.textContent=fmt(+el.value);};};
+bind('vbias','vbiasV',x=>x.toFixed(2)+' V',D.setV);
+bind('ib','ibV',x=>x.toFixed(1)+' µA',B.setIb);
+bind('beta','betaV',x=>''+x,B.setBeta);
+bind('vgs','vgsV',x=>x.toFixed(2)+' V',M.setVgs);
+bind('vds','vdsV',x=>x.toFixed(2)+' V',M.setVds);
+bind('drive','driveV',x=>x.toFixed(2),L.setDrive);
+bind('hue','hueV',x=>x<40?'红':x<80?'黄绿':x<160?'绿':x<210?'青':'蓝紫',L.setHue);
+bind('rr','rrV',x=>x.toFixed(1),R.setR);
+bind('cc','ccV',x=>x.toFixed(1),R.setC);
+bind('freq','freqV',x=>x.toFixed(2),OSC.setFreq);
+const cB=document.getElementById('charge'),dB=document.getElementById('discharge');
+cB.onclick=()=>{R.setState('charge');cB.classList.add('on');dB.classList.remove('on');};
+dB.onclick=()=>{R.setState('discharge');dB.classList.add('on');cB.classList.remove('on');};
+document.getElementById('rcreset').onclick=()=>R.reset();
+
+// 在画面上上下拖动 = 调栅压(MOSFET)/ 基极电流(三极管),形象化替代滑块
+let dragging=false;
+function dragCtl(e){const r=cv.getBoundingClientRect();const y=(e.clientY-r.top)*(H/r.height);
+  if(mode==='mosfet'){let v=5*(1-(y-30)/(300-30));v=Math.max(0,Math.min(5,v));M.setVgs(v);
+    const el=document.getElementById('vgs'),vv=document.getElementById('vgsV');el.value=v;vv.textContent=v.toFixed(2)+' V';}
+  else if(mode==='bjt'){let v=10*(1-(y-16)/(250-16));v=Math.max(0,Math.min(10,v));B.setIb(v);
+    const el=document.getElementById('ib'),vv=document.getElementById('ibV');el.value=v;vv.textContent=v.toFixed(1)+' µA';}}
+cv.addEventListener('pointerdown',e=>{if(mode==='mosfet'||mode==='bjt'){dragging=true;dragCtl(e);}});
+cv.addEventListener('pointermove',e=>{if(dragging&&(mode==='mosfet'||mode==='bjt'))dragCtl(e);});
+window.addEventListener('pointerup',()=>dragging=false);
+</script>
+</body>
+</html>
