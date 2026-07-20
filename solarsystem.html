@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>太阳系 · N 体引力模拟 (纯牛顿)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#05070d; color:#e6edf3;
+    font:14px/1.5 -apple-system,"PingFang SC","Segoe UI",sans-serif;
+    display:flex; flex-direction:column; align-items:center; padding:16px; }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  .sub { color:#8b949e; font-size:12px; margin-bottom:12px; max-width:820px; }
+  #stage { position:relative; }
+  canvas { background:#02030a; border:1px solid #23272e; border-radius:8px; display:block; cursor:crosshair; }
+  #hud { position:absolute; left:10px; top:10px; padding:6px 10px; background:rgba(0,0,0,.5);
+    border-radius:6px; font-size:12px; color:#cdd9e5; pointer-events:none; white-space:pre; font-variant-numeric:tabular-nums; }
+  #sel { position:absolute; right:10px; top:10px; padding:8px 12px; background:rgba(0,0,0,.6);
+    border-radius:8px; font-size:12px; color:#cdd9e5; min-width:150px; }
+  #sel b { color:#58a6ff; }
+  .row2 { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; max-width:820px; justify-content:center; }
+  button { background:#21262d; color:#e6edf3; border:1px solid #30363d; border-radius:6px;
+    padding:6px 12px; font-size:13px; cursor:pointer; } button:hover { background:#30363d; }
+  button.on { background:#1f6feb; border-color:#1f6feb; }
+  .panel { margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:10px 18px; width:820px; max-width:100%; }
+  .ctrl { display:flex; flex-direction:column; gap:3px; }
+  .ctrl label { font-size:12px; color:#8b949e; display:flex; justify-content:space-between; }
+  .ctrl label b { color:#58a6ff; font-weight:600; }
+  .ctrl.dim { opacity:.4; }
+  input[type=range]{ width:100%; accent-color:#58a6ff; }
+  .tip { color:#6e7681; font-size:12px; margin-top:12px; width:820px; max-width:100%; }
+</style>
+</head>
+<body>
+  <h1>太阳系 · N 体引力模拟</h1>
+  <div class="sub">底层只有牛顿万有引力 <b>F = G·m₁m₂/r²</b> + 辛积分(能量守恒)。全 N 体:行星彼此也相互吸引。<b>点选一颗星 → 从它拖出箭头设新速度</b>;或用右侧滑块改它的质量。看系统怎么演化。</div>
+
+  <div id="stage">
+    <canvas id="c" width="820" height="640"></canvas>
+    <div id="hud"></div>
+    <div id="sel">未选中<br><span style="color:#6e7681">点一颗星试试</span></div>
+  </div>
+
+  <div class="row2">
+    <button id="playBtn" class="on">⏸ 暂停</button>
+    <button id="resetBtn">↻ 重置太阳系</button>
+    <button id="trailBtn" class="on">轨迹</button>
+    <button id="comBtn" class="on">跟随质心</button>
+    <button id="addBtn">＋ 加星(空白处拖)</button>
+  </div>
+
+  <div class="panel">
+    <div class="ctrl"><label>模拟速度 <b id="vSpd">3</b></label>
+      <input id="cSpd" type="range" min="1" max="12" step="1" value="3"></div>
+    <div class="ctrl" id="wrapMass"><label>选中星质量 ×<b id="vMass">1.0</b></label>
+      <input id="cMass" type="range" min="0" max="100" step="1" value="50"></div>
+    <div class="ctrl"><label>轨迹长度 <b id="vTrail">450</b></label>
+      <input id="cTrail" type="range" min="0" max="1200" step="50" value="450"></div>
+  </div>
+
+  <div class="tip">
+    <b>改速度:</b> 点中一颗星(出现白圈),按住从它往外拖 → 松手把速度设成那个箭头(方向+大小);微微一点只选中不改速度。<br>
+    <b>改质量:</b> 选中后拖"质量×"滑块。把某行星质量调到几百倍 → 它变成第二个引力中心,轨道被撕乱甚至甩飞。<br>
+    <b>加星:</b> 点"＋加星"后在空白处按住拖一下,松手生成一颗带初速的新星。<br>
+    <span style="color:#586069">G=1;辛(leapfrog)积分,长期能量几乎不漂移。HUD 显示总能量,守恒说明积分可信。</span>
+  </div>
+
+<script>
+"use strict";
+const C=document.getElementById('c'), g=C.getContext('2d');
+const W=C.width, H=C.height;
+const hud=document.getElementById('hud'), selBox=document.getElementById('sel');
+const G_CONST=1, dt=0.02, eps=4;
+
+let bodies=[], sel=-1, running=true, showTrail=true, followCOM=true, trailLen=450;
+let subSteps=3, addMode=false, frame=0;
+let ox=0, oy=0;  // 画面偏移(跟随质心)
+
+function makeSystem(){
+  const cx=0, cy=0, Msun=20000;
+  const defs=[
+    {r:0,   m:Msun, R:15, c:'#ffd54a', name:'太阳'},
+    {r:70,  m:0.3,  R:3,  c:'#b7b7b7', name:'水'},
+    {r:108, m:0.8,  R:4.5,c:'#e8c07a', name:'金'},
+    {r:152, m:1.0,  R:5,  c:'#4aa3ff', name:'地'},
+    {r:205, m:0.5,  R:4,  c:'#ff6b4a', name:'火'},
+    {r:275, m:8,    R:9,  c:'#e0a060', name:'木'},
+    {r:345, m:5,    R:7.5,c:'#d9c58a', name:'土'},
+  ];
+  bodies=[];
+  let ang=0.6;
+  for(const d of defs){
+    let x=cx, y=cy, vx=0, vy=0;
+    if(d.r>0){
+      x=cx+d.r*Math.cos(ang); y=cy+d.r*Math.sin(ang);
+      const v=Math.sqrt(G_CONST*Msun/d.r);          // 圆轨道速度
+      vx=-v*Math.sin(ang); vy=v*Math.cos(ang);       // 垂直于半径
+      ang+=2.2;
+    }
+    bodies.push({x,y,vx,vy,m:d.m,origM:d.m,R:d.R,origR:d.R,c:d.c,name:d.name,ax:0,ay:0,trail:[]});
+  }
+  // 令总动量为零(太阳反向补偿),整个系统不整体漂移
+  let px=0,py=0; for(const b of bodies){ px+=b.m*b.vx; py+=b.m*b.vy; }
+  bodies[0].vx-=px/bodies[0].m; bodies[0].vy-=py/bodies[0].m;
+  sel=-1; updateSelBox();
+}
+
+function computeAccel(){
+  for(const b of bodies){ b.ax=0; b.ay=0; }
+  for(let i=0;i<bodies.length;i++){
+    for(let j=i+1;j<bodies.length;j++){
+      const a=bodies[i], b=bodies[j];
+      const dx=b.x-a.x, dy=b.y-a.y, r2=dx*dx+dy*dy+eps*eps, d=Math.sqrt(r2);
+      const inv3=1/(r2*d);
+      a.ax+=G_CONST*b.m*dx*inv3; a.ay+=G_CONST*b.m*dy*inv3;
+      b.ax-=G_CONST*a.m*dx*inv3; b.ay-=G_CONST*a.m*dy*inv3;
+    }
+  }
+}
+function step(){                                     // leapfrog (kick-drift-kick)
+  computeAccel();
+  for(const b of bodies){ b.vx+=b.ax*dt*0.5; b.vy+=b.ay*dt*0.5; b.x+=b.vx*dt; b.y+=b.vy*dt; }
+  computeAccel();
+  for(const b of bodies){ b.vx+=b.ax*dt*0.5; b.vy+=b.ay*dt*0.5; }
+}
+
+function totalEnergy(){
+  let ke=0,pe=0;
+  for(const b of bodies) ke+=0.5*b.m*(b.vx*b.vx+b.vy*b.vy);
+  for(let i=0;i<bodies.length;i++)for(let j=i+1;j<bodies.length;j++){
+    const a=bodies[i],b=bodies[j]; const d=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2+eps*eps);
+    pe-=G_CONST*a.m*b.m/d;
+  }
+  return ke+pe;
+}
+function com(){ let mx=0,my=0,M=0; for(const b of bodies){ mx+=b.m*b.x; my+=b.m*b.y; M+=b.m; } return [mx/M,my/M]; }
+
+// ---- 渲染 ----
+function draw(){
+  g.clearRect(0,0,W,H);
+  if(followCOM){ const [cmx,cmy]=com(); ox=W/2-cmx; oy=H/2-cmy; } else { ox=W/2; oy=H/2; }
+  // 轨迹
+  if(showTrail){
+    for(const b of bodies){
+      if(b.trail.length<2) continue;
+      g.lineWidth=1; g.beginPath();
+      for(let k=0;k<b.trail.length;k++){ const p=b.trail[k]; const X=p[0]+ox,Y=p[1]+oy; k===0?g.moveTo(X,Y):g.lineTo(X,Y); }
+      g.strokeStyle=b.c+'66'; g.stroke();
+    }
+  }
+  // 星体
+  for(let i=0;i<bodies.length;i++){
+    const b=bodies[i], X=b.x+ox, Y=b.y+oy;
+    if(i===0){ const gr=g.createRadialGradient(X,Y,2,X,Y,b.R*2.2);
+      gr.addColorStop(0,'#fff2b0'); gr.addColorStop(0.5,b.c); gr.addColorStop(1,'rgba(255,213,74,0)');
+      g.fillStyle=gr; g.beginPath(); g.arc(X,Y,b.R*2.2,0,6.2832); g.fill(); }
+    g.fillStyle=b.c; g.beginPath(); g.arc(X,Y,b.R,0,6.2832); g.fill();
+    if(i===sel){ g.strokeStyle='#fff'; g.lineWidth=1.5; g.beginPath(); g.arc(X,Y,b.R+5,0,6.2832); g.stroke(); }
+  }
+  // 拖拽速度箭头
+  if(aiming && sel>=0){
+    const b=bodies[sel], X=b.x+ox, Y=b.y+oy;
+    g.strokeStyle='#fff'; g.lineWidth=1.5; g.beginPath(); g.moveTo(X,Y); g.lineTo(mx,my); g.stroke();
+    g.fillStyle='#fff'; g.beginPath(); g.arc(mx,my,3,0,6.2832); g.fill();
+  }
+  if(addMode && aiming){
+    g.strokeStyle='#7ee787'; g.lineWidth=1.5; g.beginPath(); g.moveTo(ax0,ay0); g.lineTo(mx,my); g.stroke();
+    g.fillStyle='#7ee787'; g.beginPath(); g.arc(ax0,ay0,4,0,6.2832); g.fill();
+  }
+  hud.textContent=`星数 ${bodies.length}   总能量 ${totalEnergy().toFixed(0)} (应基本恒定)`;
+}
+
+function recordTrails(){
+  for(const b of bodies){ b.trail.push([b.x,b.y]); if(b.trail.length>trailLen) b.trail.shift(); }
+}
+
+function loop(){
+  if(running){ for(let s=0;s<subSteps;s++) step(); frame++; if(frame%1===0) recordTrails(); }
+  draw(); requestAnimationFrame(loop);
+}
+
+// ---- 交互 ----
+const $=id=>document.getElementById(id);
+let aiming=false, mx=0, my=0, ax0=0, ay0=0, wasRunning=true;
+function pos(e){ const r=C.getBoundingClientRect(); return [(e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height)]; }
+function pick(sx,sy){ let best=-1,bd=1e9;
+  for(let i=0;i<bodies.length;i++){ const X=bodies[i].x+ox,Y=bodies[i].y+oy; const d=(X-sx)**2+(Y-sy)**2;
+    if(d<Math.max(120,(bodies[i].R+8)**2) && d<bd){ bd=d; best=i; } } return best; }
+
+C.addEventListener('mousedown',e=>{
+  const [sx,sy]=pos(e); mx=sx; my=sy;
+  if(addMode){ ax0=sx; ay0=sy; aiming=true; return; }
+  const i=pick(sx,sy);
+  if(i>=0){ sel=i; aiming=true; wasRunning=running; running=false; updateSelBox(); syncMassSlider(); }
+});
+window.addEventListener('mousemove',e=>{ if(!aiming)return; const [sx,sy]=pos(e); mx=sx; my=sy; });
+window.addEventListener('mouseup',e=>{
+  if(!aiming){ return; } aiming=false;
+  if(addMode){
+    const wx=ax0-ox, wy=ay0-oy;                          // 世界坐标
+    const vx=(mx-ax0)*0.06, vy=(my-ay0)*0.06;
+    bodies.push({x:wx,y:wy,vx,vy,m:10,origM:10,R:4.5,origR:4.5,c:'#7ee787',name:'新星',ax:0,ay:0,trail:[]});
+    addMode=false; $('addBtn').classList.remove('on');
+    return;
+  }
+  if(sel>=0){
+    const b=bodies[sel], X=b.x+ox, Y=b.y+oy;
+    const dvx=mx-X, dvy=my-Y;
+    if(Math.hypot(dvx,dvy)>6){ b.vx=dvx*0.06; b.vy=dvy*0.06; }   // 拖得够远才改速度
+    running=wasRunning;
+    updateSelBox();
+  }
+});
+
+function speedOf(b){ return Math.hypot(b.vx,b.vy); }
+function updateSelBox(){
+  if(sel<0){ selBox.innerHTML='未选中<br><span style="color:#6e7681">点一颗星试试</span>'; $('wrapMass').classList.add('dim'); return; }
+  const b=bodies[sel]; $('wrapMass').classList.remove('dim');
+  selBox.innerHTML=`<b>${b.name}</b><br>质量 ${b.m.toFixed(1)}<br>速度 ${speedOf(b).toFixed(2)}<br><span style="color:#6e7681">拖箭头改速度 / 滑块改质量</span>`;
+}
+function syncMassSlider(){ if(sel<0)return; const b=bodies[sel];
+  const mult=b.m/b.origM; const v=Math.round(50+25*Math.log10(mult)); $('cMass').value=Math.max(0,Math.min(100,v)); $('vMass').textContent=mult.toFixed(1); }
+
+function bindRange(id,lbl,fn,fmt){ const e=$(id),o=$(lbl);
+  const u=()=>{fn(parseFloat(e.value)); o.textContent=fmt(parseFloat(e.value));}; e.addEventListener('input',u); u(); }
+bindRange('cSpd','vSpd', v=>{subSteps=v;}, v=>v.toFixed(0));
+bindRange('cTrail','vTrail', v=>{trailLen=v; for(const b of bodies) if(b.trail.length>trailLen) b.trail=b.trail.slice(-trailLen);}, v=>v.toFixed(0));
+$('cMass').addEventListener('input',e=>{ if(sel<0)return; const b=bodies[sel];
+  const mult=Math.pow(10,(parseFloat(e.value)-50)/25); b.m=b.origM*mult; b.R=b.origR*Math.cbrt(mult);
+  $('vMass').textContent=mult.toFixed(mult<10?1:0); updateSelBox(); });
+
+$('playBtn').onclick=e=>{running=!running; e.target.textContent=running?'⏸ 暂停':'▶ 播放'; e.target.classList.toggle('on',running);};
+$('resetBtn').onclick=makeSystem;
+$('trailBtn').onclick=e=>{showTrail=!showTrail; e.target.classList.toggle('on',showTrail);};
+$('comBtn').onclick=e=>{followCOM=!followCOM; e.target.classList.toggle('on',followCOM);};
+$('addBtn').onclick=e=>{addMode=!addMode; e.target.classList.toggle('on',addMode);};
+
+makeSystem(); loop();
+</script>
+</body>
+</html>

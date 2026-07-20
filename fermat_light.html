@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>费马最短时间 / 最小作用量 · 光尝试所有路径</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0d1117; color:#e6edf3;
+    font:14px/1.5 -apple-system,"PingFang SC","Segoe UI",sans-serif;
+    display:flex; flex-direction:column; align-items:center; padding:16px; }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  .sub { color:#8b949e; font-size:12px; margin-bottom:12px; max-width:840px; }
+  canvas { background:#05070a; border:1px solid #30363d; border-radius:8px; display:block; }
+  #main { cursor:grab; }
+  .lower { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin-top:12px; }
+  .lbl { color:#8b949e; font-size:12px; margin:0 2px 3px; }
+  .row2 { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; justify-content:center; }
+  button { background:#21262d; color:#e6edf3; border:1px solid #30363d; border-radius:6px;
+    padding:6px 12px; font-size:13px; cursor:pointer; } button:hover { background:#30363d; }
+  button.on { background:#1f6feb; border-color:#1f6feb; }
+  .seg { display:inline-flex; border:1px solid #30363d; border-radius:6px; overflow:hidden; }
+  .seg button { border:none; border-radius:0; } .seg button.on { background:#1f6feb; }
+  .panel { margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+    gap:10px 18px; width:840px; max-width:100%; }
+  .ctrl { display:flex; flex-direction:column; gap:3px; }
+  .ctrl label { font-size:12px; color:#8b949e; display:flex; justify-content:space-between; }
+  .ctrl label b { color:#58a6ff; font-weight:600; }
+  input[type=range]{ width:100%; accent-color:#58a6ff; }
+  .tip { color:#6e7681; font-size:12px; margin-top:12px; width:840px; max-width:100%; }
+  code{ background:#161b22; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+  <h1>费马最短时间 / 最小作用量 · 光尝试所有路径</h1>
+  <div class="sub">光从 A 到 B。灰线=所有候选路径,金线=<b>用时最短</b>那条(自动满足斯涅尔定律)。右下"相位箭头"揭示<b>为什么</b>:只有最短时间附近的箭头方向一致、叠加起来,其余相互抵消。拖动 A、B。</div>
+
+  <canvas id="main" width="760" height="340"></canvas>
+
+  <div class="lower">
+    <div>
+      <div class="lbl">用时 T vs 穿越点位置(费马:极小值处就是实际光路)</div>
+      <canvas id="curve" width="360" height="200"></canvas>
+    </div>
+    <div>
+      <div class="lbl">相位箭头首尾相接(费曼路径积分)· 合矢量²=光强</div>
+      <canvas id="phasor" width="360" height="200"></canvas>
+    </div>
+  </div>
+
+  <div class="row2">
+    <div class="seg" id="modeSeg">
+      <button data-m="refract" class="on">折射(两种介质)</button>
+      <button data-m="reflect">反射(镜面)</button>
+    </div>
+    <span id="snell" style="color:#3fb950;font-variant-numeric:tabular-nums"></span>
+  </div>
+
+  <div class="panel">
+    <div class="ctrl" id="wrapN1"><label>上方折射率 n₁ <b id="vN1">1.0</b></label>
+      <input id="cN1" type="range" min="1" max="2.5" step="0.05" value="1.0"></div>
+    <div class="ctrl" id="wrapN2"><label>下方折射率 n₂ <b id="vN2">1.5</b></label>
+      <input id="cN2" type="range" min="1" max="2.5" step="0.05" value="1.5"></div>
+    <div class="ctrl"><label>波长 λ(小→经典光线,大→波动/衍射) <b id="vLam">0.10</b></label>
+      <input id="cLam" type="range" min="0.02" max="0.6" step="0.01" value="0.1"></div>
+    <div class="ctrl"><label>候选路径数 <b id="vNp">160</b></label>
+      <input id="cNp" type="range" min="20" max="400" step="10" value="160"></div>
+  </div>
+
+  <div class="tip">
+    <b>看斯涅尔涌现</b>:拖 n₂ 或拖 A/B,金线始终是用时最短那条,绿字实时验证 <code>n₁sinθ₁ = n₂sinθ₂</code>。<br>
+    <b>看"为什么是它"</b>:相位箭头里,最短时间附近相位变化最慢(驻定)→ 箭头几乎平行、叠成一大段直线;远处相位飞转→箭头卷成圈相互抵消。<b>合矢量几乎全部来自最短路径的邻域</b>。<br>
+    <b>看经典↔波动</b>:波长 λ 调小 → 驻定区变窄 → 只剩一条光线(几何光学,费马严格成立,即 ℏ→0 的经典极限);λ 调大 → 邻近路径也参与 → 波动/衍射显现。
+  </div>
+
+<script>
+"use strict";
+const M=document.getElementById('main'), g=M.getContext('2d');
+const CV=document.getElementById('curve'), cg=CV.getContext('2d');
+const PH=document.getElementById('phasor'), pg=PH.getContext('2d');
+const W=M.width, H=M.height, yI=180;   // 界面 y
+
+let mode='refract', n1=1.0, n2=1.5, lam=0.10, nPaths=160;
+let A={x:150,y:70}, B={x:610,y:300};
+
+const $=id=>document.getElementById(id);
+// 某条穿越点 x 的总用时(光程 = n·距离,c=1 => T=n·d)
+function timeAt(x){
+  const d1=Math.hypot(x-A.x, yI-A.y);
+  const d2=Math.hypot(x-B.x, yI-B.y);
+  if(mode==='refract') return d1*n1 + d2*n2;
+  return (d1+d2)*n1;                       // 反射:同介质
+}
+function findMinX(){
+  let bx=0,bt=Infinity;
+  for(let x=0;x<=W;x+=0.5){ const t=timeAt(x); if(t<bt){bt=t;bx=x;} }
+  // 精修
+  for(let x=bx-1;x<=bx+1;x+=0.02){ const t=timeAt(x); if(t<bt){bt=t;bx=x;} }
+  return bx;
+}
+
+function draw(){
+  g.clearRect(0,0,W,H);
+  // 介质/界面
+  if(mode==='refract'){
+    g.fillStyle='rgba(74,163,255,0.06)'; g.fillRect(0,0,W,yI);
+    g.fillStyle='rgba(255,213,74,0.07)'; g.fillRect(0,yI,W,H-yI);
+  } else { g.fillStyle='rgba(74,163,255,0.05)'; g.fillRect(0,0,W,H); }
+  g.strokeStyle='#3a4048'; g.lineWidth= mode==='reflect'?3:1;
+  g.beginPath(); g.moveTo(0,yI); g.lineTo(W,yI); g.stroke();
+  if(mode==='reflect'){ g.strokeStyle='#565d66'; for(let x=0;x<W;x+=12){ g.beginPath(); g.moveTo(x,yI); g.lineTo(x-6,yI+6); g.stroke(); } }
+
+  // 候选路径(灰)
+  g.lineWidth=1;
+  for(let k=0;k<=nPaths;k++){
+    const x=k/nPaths*W;
+    g.strokeStyle='rgba(139,148,158,0.18)';
+    g.beginPath(); g.moveTo(A.x,A.y); g.lineTo(x,yI); g.lineTo(B.x,B.y); g.stroke();
+  }
+  // 最短时间路径(金)
+  const mx=findMinX();
+  g.strokeStyle='#ffd54a'; g.lineWidth=2.5;
+  g.beginPath(); g.moveTo(A.x,A.y); g.lineTo(mx,yI); g.lineTo(B.x,B.y); g.stroke();
+  // 法线
+  g.strokeStyle='#4b5563'; g.setLineDash([4,4]); g.beginPath(); g.moveTo(mx,yI-40); g.lineTo(mx,yI+40); g.stroke(); g.setLineDash([]);
+  // A,B
+  for(const [p,c,name] of [[A,'#7ee787','A'],[B,'#ff9ee0','B']]){
+    g.fillStyle=c; g.beginPath(); g.arc(p.x,p.y,7,0,6.2832); g.fill();
+    g.fillStyle='#0d1117'; g.font='bold 11px sans-serif'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(name,p.x,p.y);
+  }
+  g.textAlign='left'; g.textBaseline='alphabetic';
+
+  // 角度 & 斯涅尔验证
+  const d1=Math.hypot(mx-A.x, yI-A.y), d2=Math.hypot(mx-B.x, yI-B.y);
+  const s1=Math.abs(mx-A.x)/d1, s2=Math.abs(mx-B.x)/d2;   // sinθ = 水平/斜边
+  const th1=Math.asin(s1)*180/Math.PI, th2=Math.asin(s2)*180/Math.PI;
+  if(mode==='refract'){
+    $('snell').textContent=`θ₁=${th1.toFixed(1)}°  θ₂=${th2.toFixed(1)}°   n₁sinθ₁=${(n1*s1).toFixed(3)}  n₂sinθ₂=${(n2*s2).toFixed(3)}  ✓`;
+  } else {
+    $('snell').textContent=`入射角=${th1.toFixed(1)}°  反射角=${th2.toFixed(1)}°  (应相等) ✓`;
+  }
+
+  drawCurve(mx);
+  drawPhasor(mx);
+}
+
+function drawCurve(mx){
+  const CW=CV.width, CH=CV.height, m=8;
+  cg.clearRect(0,0,CW,CH);
+  let tmin=Infinity,tmax=-Infinity;
+  for(let k=0;k<=200;k++){ const t=timeAt(k/200*W); tmin=Math.min(tmin,t); tmax=Math.max(tmax,t); }
+  const X=x=> m+x/W*(CW-2*m);
+  const Y=t=> CH-m-(t-tmin)/(tmax-tmin+1e-9)*(CH-2*m);
+  cg.strokeStyle='#30363d'; cg.beginPath(); cg.moveTo(m,m); cg.lineTo(m,CH-m); cg.lineTo(CW-m,CH-m); cg.stroke();
+  cg.strokeStyle='#58a6ff'; cg.lineWidth=2; cg.beginPath();
+  for(let k=0;k<=200;k++){ const x=k/200*W, t=timeAt(x); const px=X(x),py=Y(t); k===0?cg.moveTo(px,py):cg.lineTo(px,py); }
+  cg.stroke();
+  // 极小点
+  cg.fillStyle='#ffd54a'; cg.beginPath(); cg.arc(X(mx),Y(timeAt(mx)),4,0,6.2832); cg.fill();
+  cg.strokeStyle='rgba(255,213,74,.4)'; cg.setLineDash([3,3]); cg.beginPath(); cg.moveTo(X(mx),m); cg.lineTo(X(mx),CH-m); cg.stroke(); cg.setLineDash([]);
+  cg.fillStyle='#6e7681'; cg.font='10px sans-serif'; cg.fillText('穿越点 x →',CW-70,CH-2); cg.fillText('用时 T',3,12);
+}
+
+function drawPhasor(mx){
+  const PW=PH.width, PHt=PH.height;
+  pg.clearRect(0,0,PW,PHt);
+  const Ns=Math.max(40,nPaths);
+  // 相位 φ = 2π (T - Tmin)/λ ;只有相位差有意义
+  let tmin=Infinity; const Ts=[];
+  for(let k=0;k<=Ns;k++){ const t=timeAt(k/Ns*W); Ts.push(t); tmin=Math.min(tmin,t); }
+  const L=Math.min(PW,PHt)*0.42/ (Ns/40+1);   // 箭头长度(随数量缩放)
+  const step=(Math.min(PW,PHt)*0.9)/Ns;
+  // 首尾相接
+  let x=PW*0.16, y=PHt*0.5, x0=x, y0=y;
+  // 找驻定点(相位变化最慢)附近索引,用于高亮
+  const mIdx=Math.round(mx/W*Ns);
+  for(let k=0;k<Ns;k++){
+    const phi=2*Math.PI*(Ts[k]-tmin)/lam;
+    const near=Math.abs(k-mIdx)<Ns*0.06;
+    pg.strokeStyle= near ? '#ffd54a' : 'rgba(88,166,255,0.7)';
+    pg.lineWidth= near?2:1;
+    const nx=x+step*Math.cos(phi), ny=y+step*Math.sin(phi);
+    pg.beginPath(); pg.moveTo(x,y); pg.lineTo(nx,ny); pg.stroke();
+    x=nx; y=ny;
+  }
+  // 合矢量
+  pg.strokeStyle='#f85149'; pg.lineWidth=2.5;
+  pg.beginPath(); pg.moveTo(x0,y0); pg.lineTo(x,y); pg.stroke();
+  pg.fillStyle='#f85149'; pg.beginPath(); pg.arc(x,y,3,0,6.2832); pg.fill();
+  const R=Math.hypot(x-x0,y-y0);
+  pg.fillStyle='#6e7681'; pg.font='10px sans-serif';
+  pg.fillText('红=合矢量(∝振幅), 金=最短时间邻域', 6, PHt-6);
+  pg.fillText('强度 ∝ '+(R*R/1000).toFixed(1), 6, 14);
+}
+
+// ---- 交互 ----
+let drag=null;
+function pos(e){ const r=M.getBoundingClientRect(); return {x:(e.clientX-r.left)*(W/r.width), y:(e.clientY-r.top)*(H/r.height)}; }
+M.addEventListener('mousedown',e=>{ const p=pos(e);
+  if(Math.hypot(p.x-A.x,p.y-A.y)<14) drag=A; else if(Math.hypot(p.x-B.x,p.y-B.y)<14) drag=B; });
+window.addEventListener('mousemove',e=>{ if(!drag)return; const p=pos(e);
+  drag.x=Math.max(10,Math.min(W-10,p.x));
+  // 折射:A 在上、B 在下;反射:都在上
+  if(drag===A) drag.y=Math.max(10,Math.min(yI-12,p.y));
+  else drag.y= mode==='refract' ? Math.max(yI+12,Math.min(H-10,p.y)) : Math.max(10,Math.min(yI-12,p.y));
+  draw(); });
+window.addEventListener('mouseup',()=>drag=null);
+
+function bindRange(id,lbl,fn,fmt){ const e=$(id),o=$(lbl);
+  const u=()=>{fn(parseFloat(e.value)); o.textContent=fmt(parseFloat(e.value)); draw();}; e.addEventListener('input',u); o.textContent=fmt(parseFloat(e.value)); }
+bindRange('cN1','vN1', v=>n1=v, v=>v.toFixed(2));
+bindRange('cN2','vN2', v=>n2=v, v=>v.toFixed(2));
+bindRange('cLam','vLam', v=>lam=v, v=>v.toFixed(2));
+bindRange('cNp','vNp', v=>nPaths=v, v=>v.toFixed(0));
+
+document.querySelectorAll('#modeSeg [data-m]').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); mode=b.dataset.m;
+    $('wrapN2').style.opacity = mode==='refract'?1:0.4;
+    if(mode==='reflect'){ B.y=Math.min(B.y,yI-12); } else { B.y=Math.max(B.y,yI+12); }
+    draw(); };
+});
+
+draw();
+</script>
+</body>
+</html>
