@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>悬链线 · 两种做法对比 (几何约束 vs 真受力分析)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0d1117; color:#e6edf3;
+    font:14px/1.5 -apple-system,"PingFang SC","Segoe UI",sans-serif;
+    display:flex; flex-direction:column; align-items:center; padding:18px; }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  .sub { color:#8b949e; font-size:12px; margin-bottom:12px; max-width:760px; }
+  #stage { position:relative; }
+  canvas { background:#05070a; border:1px solid #30363d; border-radius:8px; display:block; }
+  #hud { position:absolute; left:10px; top:10px; padding:6px 10px; background:rgba(0,0,0,.55);
+    border-radius:6px; font-size:12px; color:#cdd9e5; pointer-events:none; font-variant-numeric:tabular-nums; white-space:pre; }
+  .legend { display:flex; gap:16px; margin-top:8px; font-size:12px; color:#8b949e; align-items:center; flex-wrap:wrap; }
+  .sw { display:inline-block; width:16px; height:3px; vertical-align:middle; margin-right:5px; border-radius:2px; }
+  .row2 { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button { background:#21262d; color:#e6edf3; border:1px solid #30363d; border-radius:6px;
+    padding:6px 12px; font-size:13px; cursor:pointer; } button:hover { background:#30363d; }
+  button.on { background:#1f6feb; border-color:#1f6feb; }
+  .panel { margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:10px 18px; width:760px; max-width:100%; }
+  .ctrl { display:flex; flex-direction:column; gap:3px; }
+  .ctrl label { font-size:12px; color:#8b949e; display:flex; justify-content:space-between; }
+  .ctrl label b { color:#58a6ff; font-weight:600; }
+  input[type=range]{ width:100%; accent-color:#58a6ff; }
+  .tip { color:#6e7681; font-size:12px; margin-top:12px; width:760px; max-width:100%; }
+  code { background:#161b22; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+  <h1>悬链线 · 两种做法并排对比</h1>
+  <div class="sub">同样的端点、绳长、重力,两根绳同时跑:一根用<b>几何约束</b>(PBD,不算力),一根用<b>真·受力分析</b>(每段弹簧张力 ΣF=ma)。看它们都落到解析 cosh 上,并观察真受力版能画出<b>张力分布</b>。</div>
+
+  <div id="stage">
+    <canvas id="c" width="760" height="440"></canvas>
+    <div id="hud"></div>
+  </div>
+  <div class="legend">
+    <span><span class="sw" style="background:#3fb950"></span>解析 cosh (ground truth)</span>
+    <span><span class="sw" style="background:#f0883e"></span>几何约束 PBD (不算力)</span>
+    <span><span class="sw" style="background:linear-gradient(90deg,#3c6eff,#ff5a5a)"></span>真受力弹簧绳 (颜色=张力大小)</span>
+  </div>
+
+  <div style="margin-top:10px">
+    <div style="color:#8b949e;font-size:12px;margin-bottom:2px">真受力绳的张力分布(沿绳:两端高、最低点小 → 经典悬链线结论,水平分量恒定)</div>
+    <canvas id="tprof" width="760" height="110"></canvas>
+  </div>
+
+  <div class="row2">
+    <button id="playBtn" class="on">⏸ 暂停</button>
+    <button id="resetBtn">↻ 重置</button>
+    <button id="kickBtn">💨 扰动</button>
+    <button id="pbdBtn" class="on">显示 PBD</button>
+    <button id="sprBtn" class="on">显示 弹簧绳</button>
+  </div>
+
+  <div class="panel">
+    <div class="ctrl"><label>绳长 (相对端点距离) <b id="vLen">1.60×</b></label>
+      <input id="cLen" type="range" min="1.01" max="2.6" step="0.01" value="1.6"></div>
+    <div class="ctrl"><label>节点数 <b id="vN">40</b></label>
+      <input id="cN" type="range" min="8" max="90" step="1" value="40"></div>
+    <div class="ctrl"><label>重力 <b id="vG">0.35</b></label>
+      <input id="cG" type="range" min="0.05" max="1" step="0.05" value="0.35"></div>
+    <div class="ctrl"><label>PBD 刚度 (约束迭代) <b id="vK">40</b></label>
+      <input id="cK" type="range" min="2" max="120" step="1" value="40"></div>
+    <div class="ctrl"><label>弹簧劲度 k (小→拉伸垂到线下方) <b id="vKs">120</b></label>
+      <input id="cKs" type="range" min="8" max="400" step="2" value="120"></div>
+  </div>
+
+  <div class="tip">
+    <b>核心对比:</b> 两根绳算法完全不同,静止后却重合在同一条绿线上 —— 说明"几何约束"和"真受力"在刚性极限下等价。<br>
+    把<b>弹簧劲度 k 调小</b>:真受力绳会因自重被<b>拉长</b>、垂到绿线<b>下方</b>(真实弹性绳的效果);调大 k → 升回绿线(逼近不可伸长)。<br>
+    张力分布图:两端张力最大(要吊起整根绳的重量),最低点张力最小且只剩水平分量 —— 这正是悬链线的力学特征。<br>
+    <span style="color:#586069">PBD:只积分重力 + 几何投影锁段长(不求张力)。弹簧绳:每段 F=k·(长−原长) 显式求和,ΣF=ma,含阻尼与子步积分。</span>
+  </div>
+
+<script>
+"use strict";
+const C=document.getElementById('c'), g=C.getContext('2d');
+const W=C.width, H=C.height;
+const TP=document.getElementById('tprof'), tg=TP.getContext('2d');
+const hud=document.getElementById('hud');
+
+let N=40, lenMul=1.6, gravity=0.35, iters=40, kSpring=120;
+let running=true, showPBD=true, showSpr=true;
+const cDamp=2.0, subSteps=12, dt=0.025, vDampSub=0.996; // 弹簧绳积分参数(dt 放大, 子步减半)
+
+let ax0=170, ay0=110, ax1=590, ay1=110; // 端点锚
+let restLen=1, ropeLen=1;
+// PBD
+let px,py,pox,poy;
+// 弹簧绳
+let qx,qy,qvx,qvy, tens, sfx, sfy;   // sfx/sfy = 复用的力缓冲(避免每帧分配)
+
+function init(){
+  const span=Math.hypot(ax1-ax0, ay1-ay0);
+  ropeLen=span*lenMul; restLen=ropeLen/(N-1);
+  px=new Float32Array(N); py=new Float32Array(N); pox=new Float32Array(N); poy=new Float32Array(N);
+  qx=new Float32Array(N); qy=new Float32Array(N); qvx=new Float32Array(N); qvy=new Float32Array(N);
+  tens=new Float32Array(N-1);
+  sfx=new Float32Array(N); sfy=new Float32Array(N);
+  // 初始就摆成下垂形状(而非水平压缩直线),避免约束猛撑开时上下屈曲成锯齿
+  const sag=Math.max(0,(ropeLen-span))*0.75;
+  for(let i=0;i<N;i++){ const t=i/(N-1);
+    const X=ax0+(ax1-ax0)*t, Y=ay0+(ay1-ay0)*t + 4*sag*t*(1-t);
+    px[i]=X; py[i]=Y; pox[i]=X; poy[i]=Y;
+    qx[i]=X; qy[i]=Y; qvx[i]=0; qvy[i]=0;
+  }
+}
+let grab=-1;                              // 被鼠标提着的节点(-1=无)
+const pin=i=> i===0||i===N-1||i===grab;   // 端点 + 被提的点 都固定
+
+// ---- PBD:Verlet + 距离约束(不算力) ----
+function stepPBD(){
+  const damp=0.99;
+  for(let i=0;i<N;i++){ if(pin(i))continue;
+    const vx=(px[i]-pox[i])*damp, vy=(py[i]-poy[i])*damp;
+    pox[i]=px[i]; poy[i]=py[i]; px[i]+=vx; py[i]+=vy+gravity;
+  }
+  for(let k=0;k<iters;k++){
+    for(let i=0;i<N-1;i++){
+      const dx=px[i+1]-px[i], dy=py[i+1]-py[i], d=Math.hypot(dx,dy)||1e-6;
+      const diff=(d-restLen)/d*0.5, mx=dx*diff, my=dy*diff;
+      if(!pin(i)){ px[i]+=mx; py[i]+=my; }
+      if(!pin(i+1)){ px[i+1]-=mx; py[i+1]-=my; }
+    }
+    px[0]=ax0; py[0]=ay0; px[N-1]=ax1; py[N-1]=ay1;
+  }
+}
+
+// ---- 弹簧绳:真·受力分析 ΣF=ma ----
+function stepSpring(){
+  const fx=sfx, fy=sfy;
+  for(let i=0;i<N;i++){ fx[i]=0; fy[i]=gravity; }   // 重力(m=1),缓冲复用
+  for(let i=0;i<N-1;i++){
+    const dx=qx[i+1]-qx[i], dy=qy[i+1]-qy[i], d=Math.hypot(dx,dy)||1e-6;
+    const ux=dx/d, uy=dy/d;
+    const stretch=d-restLen;
+    const fsMag=kSpring*stretch;                     // 张力 (胡克)
+    // 沿绳方向的相对速度 → 阻尼(dashpot)
+    const rel=(qvx[i+1]-qvx[i])*ux+(qvy[i+1]-qvy[i])*uy;
+    const fMag=fsMag+cDamp*rel;
+    const Fx=fMag*ux, Fy=fMag*uy;
+    fx[i]+=Fx; fy[i]+=Fy; fx[i+1]-=Fx; fy[i+1]-=Fy;
+    tens[i]=Math.abs(fsMag);                          // 记录张力大小
+  }
+  for(let i=0;i<N;i++){ if(pin(i)){ qvx[i]=0; qvy[i]=0; continue; }
+    qvx[i]=(qvx[i]+fx[i]*dt)*vDampSub;                // a=F/m, m=1
+    qvy[i]=(qvy[i]+fy[i]*dt)*vDampSub;
+    qx[i]+=qvx[i]*dt; qy[i]+=qvy[i]*dt;
+  }
+  qx[0]=ax0; qy[0]=ay0; qx[N-1]=ax1; qy[N-1]=ay1;
+}
+
+// ---- 解析悬链线拟合(ground truth) ----
+function fitCatenary(x1,y1,x2,y2,L){
+  const Y1=-y1, Y2=-y2, d=x2-x1, v=Y2-Y1;
+  if(d===0||L<=Math.hypot(d,v)) return null;
+  const rhs=Math.sqrt(Math.max(1e-9,L*L-v*v));
+  let lo=1e-3, hi=1e7; const f=a=>2*a*Math.sinh(d/(2*a))-rhs;
+  if(f(lo)<0) return null;
+  for(let it=0;it<80;it++){ const mid=Math.sqrt(lo*hi); if(f(mid)>0) lo=mid; else hi=mid; }
+  const a=Math.sqrt(lo*hi);
+  const p=Math.atanh(Math.max(-0.999999,Math.min(0.999999,v/L)));
+  const x0=(x1+x2)/2-a*p, c=Y1-a*Math.cosh((x1-x0)/a);
+  return {a,x0,c};
+}
+
+function ropeLength(xa,ya){ let s=0; for(let i=0;i<N-1;i++) s+=Math.hypot(xa[i+1]-xa[i],ya[i+1]-ya[i]); return s; }
+
+function tColor(t,tmin,tmax){ const n=Math.max(0,Math.min(1,(t-tmin)/(tmax-tmin+1e-9)));
+  return `rgb(${Math.round(60+195*n)},110,${Math.round(230-190*n)})`; }
+
+const $=id=>document.getElementById(id);
+function render(){
+  g.clearRect(0,0,W,H);
+  // 解析 cosh
+  const fit=fitCatenary(ax0,ay0,ax1,ay1,ropeLen);
+  let errP=0,errS=0;
+  if(fit){
+    g.strokeStyle='#3fb950'; g.lineWidth=6; g.globalAlpha=0.45; g.beginPath();
+    const xa=Math.min(ax0,ax1), xb=Math.max(ax0,ax1);
+    for(let X=xa;X<=xb;X+=2){ const Y=-(fit.c+fit.a*Math.cosh((X-fit.x0)/fit.a)); X===xa?g.moveTo(X,Y):g.lineTo(X,Y); }
+    g.stroke(); g.globalAlpha=1;
+    for(let i=0;i<N;i++){ const Y=-(fit.c+fit.a*Math.cosh((px[i]-fit.x0)/fit.a)); errP=Math.max(errP,Math.abs(py[i]-Y)); }
+    for(let i=0;i<N;i++){ const Y=-(fit.c+fit.a*Math.cosh((qx[i]-fit.x0)/fit.a)); errS=Math.max(errS,Math.abs(qy[i]-Y)); }
+  }
+  // 弹簧绳(按张力着色)
+  let tmin=Infinity,tmax=-Infinity; for(let i=0;i<N-1;i++){ tmin=Math.min(tmin,tens[i]); tmax=Math.max(tmax,tens[i]); }
+  if(showSpr){
+    g.lineWidth=3;
+    for(let i=0;i<N-1;i++){ g.strokeStyle=tColor(tens[i],tmin,tmax);
+      g.beginPath(); g.moveTo(qx[i],qy[i]); g.lineTo(qx[i+1],qy[i+1]); g.stroke(); }
+  }
+  // PBD 绳
+  if(showPBD){
+    g.strokeStyle='#f0883e'; g.lineWidth=2; g.beginPath();
+    for(let i=0;i<N;i++){ i===0?g.moveTo(px[i],py[i]):g.lineTo(px[i],py[i]); } g.stroke();
+  }
+  // 端点手柄
+  g.fillStyle='#58a6ff';
+  for(const i of [0,N-1]){ g.beginPath(); g.arc(ax0*(i===0)+ax1*(i!==0), i===0?ay0:ay1,7,0,6.2832); g.fill(); }
+
+  // 张力分布图
+  tg.clearRect(0,0,TP.width,TP.height);
+  const tw=TP.width, th=TP.height;
+  tg.strokeStyle='#30363d'; tg.beginPath(); tg.moveTo(30,th-16); tg.lineTo(tw-6,th-16); tg.stroke();
+  tg.fillStyle='#6e7681'; tg.font='11px sans-serif'; tg.fillText('张力',4,14); tg.fillText('沿绳 →',tw-52,th-4);
+  if(tmax>tmin){
+    tg.lineWidth=2; tg.beginPath();
+    for(let i=0;i<N-1;i++){ const x=30+i/(N-2)*(tw-36); const y=(th-16)-(tens[i]-tmin)/(tmax-tmin)*(th-28);
+      i===0?tg.moveTo(x,y):tg.lineTo(x,y); }
+    tg.strokeStyle='#ff5a5a'; tg.stroke();
+    // 点
+    for(let i=0;i<N-1;i++){ const x=30+i/(N-2)*(tw-36); const y=(th-16)-(tens[i]-tmin)/(tmax-tmin)*(th-28);
+      tg.fillStyle=tColor(tens[i],tmin,tmax); tg.fillRect(x-1.5,y-1.5,3,3); }
+  }
+
+  const lenP=ropeLength(px,py), lenS=ropeLength(qx,qy);
+  hud.textContent =
+    `目标绳长 ${ropeLen.toFixed(0)}px   节点 ${N}\n`+
+    `PBD:   实际长 ${lenP.toFixed(1)}   吻合误差 ${errP.toFixed(2)}px\n`+
+    `弹簧绳: 实际长 ${lenS.toFixed(1)}   吻合误差 ${errS.toFixed(2)}px\n`+
+    `弹簧张力 最小 ${tmin.toFixed(1)} → 最大 ${tmax.toFixed(1)}`;
+}
+
+function frame(){
+  if(running){ stepPBD(); for(let s=0;s<subSteps;s++) stepSpring(); }
+  render(); requestAnimationFrame(frame);
+}
+
+// ---- 交互:抓住任意节点提着走(端点或中间任意点),两根绳一起被提 ----
+function pos(e){ const r=C.getBoundingClientRect(); return [(e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height)]; }
+function nearestNode(mx,my){ let best=-1,bd=256;   // 16px 半径内
+  for(let i=0;i<N;i++){ const d=Math.min((px[i]-mx)**2+(py[i]-my)**2,(qx[i]-mx)**2+(qy[i]-my)**2);
+    if(d<bd){bd=d;best=i;} } return best; }
+C.addEventListener('mousedown',e=>{ const [mx,my]=pos(e); grab=nearestNode(mx,my); if(grab>=0) C.style.cursor='grabbing'; });
+window.addEventListener('mousemove',e=>{ if(grab<0)return; const [mx,my]=pos(e);
+  px[grab]=pox[grab]=mx; py[grab]=poy[grab]=my;          // PBD:跟随鼠标且不注入速度
+  qx[grab]=mx; qy[grab]=my; qvx[grab]=0; qvy[grab]=0;     // 弹簧绳:同上
+  if(grab===0){ax0=mx;ay0=my;} if(grab===N-1){ax1=mx;ay1=my;} }); // 若提的是端点,同步锚点(绿线跟随)
+window.addEventListener('mouseup',()=>{ grab=-1; C.style.cursor='grab'; });
+
+function bindRange(id,lbl,fn,fmt){ const e=$(id),o=$(lbl);
+  const u=()=>{fn(parseFloat(e.value)); o.textContent=fmt(parseFloat(e.value));}; e.addEventListener('input',u); u(); }
+bindRange('cLen','vLen', v=>{lenMul=v; init();}, v=>v.toFixed(2)+'×');
+bindRange('cN','vN', v=>{N=v; init();}, v=>v.toFixed(0));
+bindRange('cG','vG', v=>{gravity=v;}, v=>v.toFixed(2));
+bindRange('cK','vK', v=>{iters=v;}, v=>v.toFixed(0));
+bindRange('cKs','vKs', v=>{kSpring=v;}, v=>v.toFixed(0));
+
+$('playBtn').onclick=e=>{running=!running; e.target.textContent=running?'⏸ 暂停':'▶ 播放'; e.target.classList.toggle('on',running);};
+$('resetBtn').onclick=init;
+$('kickBtn').onclick=()=>{ for(let i=1;i<N-1;i++){ px[i]+=(Math.random()-0.5)*40; qvx[i]+=(Math.random()-0.5)*30; qvy[i]-=Math.random()*30; } };
+$('pbdBtn').onclick=e=>{showPBD=!showPBD; e.target.classList.toggle('on',showPBD);};
+$('sprBtn').onclick=e=>{showSpr=!showSpr; e.target.classList.toggle('on',showSpr);};
+
+init(); frame();
+</script>
+</body>
+</html>

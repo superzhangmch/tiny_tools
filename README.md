@@ -4,7 +4,7 @@
 - 汉字笔画检索 bihua.html
 - 找字：根据拼音与笔顺找字 py_bh_find.html
 - 成语检索、成语接龙 chengyu_search.html
-- 物理模拟（只给最底层定律，让公式自己涌现）: windtunnel.html / idealgas.html / blackbody.html / catenary.html
+- 物理模拟（只给最底层定律，让公式自己涌现）: windtunnel.html / idealgas.html / blackbody.html / catenary.html / catenary_compare.html / cloth3d.html
   
 
 ### 物理模拟：从最基本的物理定律出发，让宏观公式自己涌现
@@ -18,6 +18,10 @@
   - 空腔驻波模式 + 热库，Metropolis 蒙特卡洛。切"经典"看**紫外灾难**，切"量子（能量成块 hν）"看**普朗克谱**涌现；含维恩位移、斯特藩-玻尔兹曼。物理自检见 bb_check.js。
 - **悬链线 catenary.html** [online](https://superzhangmch.github.io/tiny_tools/catenary.html)
   - 纯牛顿绳子（Verlet + 张力约束）。绳子晃动静止后自动落在解析 cosh 曲线（ground truth）上，误差 <1px。可拖端点、扰动。
+- **悬链线·两种做法对比 catenary_compare.html** [online](https://superzhangmch.github.io/tiny_tools/catenary_compare.html)
+  - 同一条绳并排跑：几何约束（PBD，不算力）vs 真·受力分析（每段弹簧张力 ΣF=ma）。两者都落到同一条 cosh 上，验证刚性极限下等价；真受力版实时画出张力分布。可鼠标提任意点扰动。
+- **布料垂坠 cloth3d.html** [online](https://superzhangmch.github.io/tiny_tools/cloth3d.html)
+  - 绳子升到二维的 3D 质点弹簧网格（PBD，结构/抗剪/抗弯三种边）。场景：两角/四角悬挂、搭在横杆、落在球上、提起一点。可旋转视角、开风。
 
 ### 《说文解字》检索: shuowenjiezi_search.html
 - [online](https://superzhangmch.github.io/tiny_tools/shuowenjiezi_search.html)

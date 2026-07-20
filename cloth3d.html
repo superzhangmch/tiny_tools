@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>布料垂坠 · 3D 质点弹簧网格 (PBD)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0d1117; color:#e6edf3;
+    font:14px/1.5 -apple-system,"PingFang SC","Segoe UI",sans-serif;
+    display:flex; flex-direction:column; align-items:center; padding:18px; }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  .sub { color:#8b949e; font-size:12px; margin-bottom:12px; max-width:760px; }
+  #stage { position:relative; }
+  canvas { background:#070b11; border:1px solid #30363d; border-radius:8px; display:block; cursor:grab; }
+  #hud { position:absolute; left:10px; top:10px; padding:6px 10px; background:rgba(0,0,0,.5);
+    border-radius:6px; font-size:12px; color:#cdd9e5; pointer-events:none; white-space:pre; }
+  .row2 { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; max-width:780px; justify-content:center; }
+  button { background:#21262d; color:#e6edf3; border:1px solid #30363d; border-radius:6px;
+    padding:6px 12px; font-size:13px; cursor:pointer; } button:hover { background:#30363d; }
+  button.on { background:#1f6feb; border-color:#1f6feb; }
+  .seg { display:inline-flex; border:1px solid #30363d; border-radius:6px; overflow:hidden; }
+  .seg button { border:none; border-radius:0; } .seg button.on { background:#1f6feb; }
+  .panel { margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:10px 18px; width:760px; max-width:100%; }
+  .ctrl { display:flex; flex-direction:column; gap:3px; }
+  .ctrl label { font-size:12px; color:#8b949e; display:flex; justify-content:space-between; }
+  .ctrl label b { color:#58a6ff; font-weight:600; }
+  input[type=range]{ width:100%; accent-color:#58a6ff; }
+  .tip { color:#6e7681; font-size:12px; margin-top:12px; width:760px; max-width:100%; }
+</style>
+</head>
+<body>
+  <h1>布料垂坠 · 3D 质点弹簧网格</h1>
+  <div class="sub">和绳子同一套物理,升到二维:每个质点连上下左右(结构)+对角(抗剪)+隔一个(抗弯)。重力 + 约束 + 碰撞 → 褶皱自己形成。<b>鼠标拖动旋转视角</b>。</div>
+
+  <div id="stage">
+    <canvas id="c" width="760" height="480"></canvas>
+    <div id="hud"></div>
+  </div>
+
+  <div class="row2">
+    <span style="color:#6e7681">场景:</span>
+    <div class="seg" id="sceneSeg">
+      <button data-s="corner2" class="on">两角悬挂</button>
+      <button data-s="corner4">四角桌布</button>
+      <button data-s="rod">搭在横杆</button>
+      <button data-s="sphere">落在球上</button>
+      <button data-s="pinch">提起一点</button>
+    </div>
+  </div>
+  <div class="row2">
+    <button id="playBtn" class="on">⏸ 暂停</button>
+    <button id="resetBtn">↻ 重置</button>
+    <button id="windBtn">🌬 风</button>
+    <button id="wireBtn">线框</button>
+  </div>
+
+  <div class="panel">
+    <div class="ctrl"><label>网格分辨率 <b id="vG">28</b></label>
+      <input id="cG" type="range" min="10" max="42" step="1" value="28"></div>
+    <div class="ctrl"><label>重力 <b id="vGr">0.9</b></label>
+      <input id="cGr" type="range" min="0.1" max="2" step="0.1" value="0.9"></div>
+    <div class="ctrl"><label>硬挺度 (约束迭代) <b id="vK">14</b></label>
+      <input id="cK" type="range" min="2" max="40" step="1" value="14"></div>
+  </div>
+
+  <div class="tip">
+    切场景看不同垂坠:<b>两角/四角</b>被 pin 住的点不动,布在重力下自己找到最省势能的曲面;<b>横杆/球</b>是碰撞体,布落下被推到其表面之外,形成对称褶皱。<br>
+    <b>硬挺度</b>低 = 软塌(丝绸),高 = 挺括(帆布)。开<b>风</b>看布料飘动。拖鼠标转视角。<br>
+    <span style="color:#586069">PBD:Verlet 积分重力 + 迭代投影满足"每条边保持原长"(结构/抗剪/抗弯三种边),再做碰撞投影。</span>
+  </div>
+
+<script>
+"use strict";
+const C=document.getElementById('c'), ctx=C.getContext('2d');
+const W=C.width, H=C.height, hud=document.getElementById('hud');
+
+let G=28, gravity=0.9, iters=14;
+let running=true, wind=false, wire=false, scene='corner2';
+let yaw=0.6, pitch=0.25;
+
+// 质点:pos, prev (Verlet), pinned
+let px,py,pz, ox,oy,oz, pinned, N=0;
+// 约束
+let cA,cB,cR, nCon=0;
+let obstacle=null;   // {type, ...}
+let frameCnt=0;
+
+const spacing=0.16;  // 网格间距(世界单位)
+
+function idx(i,j){ return j*G+i; }
+
+function build(){
+  N=G*G;
+  px=new Float32Array(N); py=new Float32Array(N); pz=new Float32Array(N);
+  ox=new Float32Array(N); oy=new Float32Array(N); oz=new Float32Array(N);
+  pinned=new Uint8Array(N);
+  obstacle=null;
+  const half=(G-1)*spacing/2;
+
+  // 初始摆放 + pin + 障碍(按场景)
+  for(let j=0;j<G;j++)for(let i=0;i<G;i++){
+    const k=idx(i,j); let X,Y,Z;
+    if(scene==='corner2'||scene==='pinch'){        // 竖直挂帘
+      X=i*spacing-half; Y=half - j*spacing + 1.2; Z=(Math.random()-0.5)*0.02;
+    }else{                                          // 水平铺开(桌布/横杆/球)
+      X=i*spacing-half; Y=1.6; Z=j*spacing-half;
+    }
+    px[k]=X;py[k]=Y;pz[k]=Z; ox[k]=X;oy[k]=Y;oz[k]=Z;
+  }
+  if(scene==='corner2'){ pinned[idx(0,0)]=1; pinned[idx(G-1,0)]=1; }
+  if(scene==='pinch'){ pinned[idx((G>>1),0)]=1; }
+  if(scene==='corner4'){ pinned[idx(0,0)]=1; pinned[idx(G-1,0)]=1; pinned[idx(0,G-1)]=1; pinned[idx(G-1,G-1)]=1; }
+  if(scene==='rod')    obstacle={type:'cyl', y:0.4, z:0.0, r:0.5, floor:-1.2};
+  if(scene==='sphere') obstacle={type:'sph', x:0, y:0.2, z:0, r:0.7, floor:-1.2};
+  if(scene==='corner4') obstacle={type:'floor', floor:-1.4};
+
+  // 约束边:结构 + 抗剪 + 抗弯
+  const A=[],B=[],R=[];
+  const add=(a,b)=>{ const dx=px[a]-px[b],dy=py[a]-py[b],dz=pz[a]-pz[b];
+    A.push(a);B.push(b);R.push(Math.hypot(dx,dy,dz)); };
+  for(let j=0;j<G;j++)for(let i=0;i<G;i++){
+    if(i+1<G) add(idx(i,j),idx(i+1,j));            // 结构 →
+    if(j+1<G) add(idx(i,j),idx(i,j+1));            // 结构 ↓
+    if(i+1<G&&j+1<G){ add(idx(i,j),idx(i+1,j+1)); add(idx(i+1,j),idx(i,j+1)); } // 抗剪 ✕
+    if(i+2<G) add(idx(i,j),idx(i+2,j));            // 抗弯 →→
+    if(j+2<G) add(idx(i,j),idx(i,j+2));            // 抗弯 ↓↓
+  }
+  cA=Int32Array.from(A); cB=Int32Array.from(B); cR=Float32Array.from(R); nCon=cA.length;
+}
+
+function collide(k){
+  if(!obstacle) return;
+  const o=obstacle;
+  if(o.type==='cyl'){                    // 沿 x 轴的横杆,截面在 y-z
+    const dy=py[k]-o.y, dz=pz[k]-o.z, d=Math.hypot(dy,dz);
+    if(d<o.r && d>1e-6){ const s=o.r/d; py[k]=o.y+dy*s; pz[k]=o.z+dz*s; }
+  }else if(o.type==='sph'){
+    const dx=px[k]-o.x, dy=py[k]-o.y, dz=pz[k]-o.z, d=Math.hypot(dx,dy,dz);
+    if(d<o.r && d>1e-6){ const s=o.r/d; px[k]=o.x+dx*s; py[k]=o.y+dy*s; pz[k]=o.z+dz*s; }
+  }
+  if(o.floor!==undefined && py[k]<o.floor) py[k]=o.floor;
+}
+
+function step(){
+  frameCnt++;
+  const damp=0.99;
+  const wx = wind ? (0.35+0.2*Math.sin(frameCnt*0.05)) : 0;
+  const wz = wind ? (0.15*Math.sin(frameCnt*0.03)) : 0;
+  const dt2=1;
+  for(let k=0;k<N;k++){ if(pinned[k]) continue;
+    let vx=(px[k]-ox[k])*damp, vy=(py[k]-oy[k])*damp, vz=(pz[k]-oz[k])*damp;
+    ox[k]=px[k]; oy[k]=py[k]; oz[k]=pz[k];
+    px[k]+=vx + wx*0.01*dt2;
+    py[k]+=vy - gravity*0.01*dt2;
+    pz[k]+=vz + wz*0.01*dt2;
+  }
+  for(let it=0;it<iters;it++){
+    for(let c=0;c<nCon;c++){
+      const a=cA[c], b=cB[c];
+      let dx=px[b]-px[a], dy=py[b]-py[a], dz=pz[b]-pz[a];
+      const d=Math.hypot(dx,dy,dz)||1e-6;
+      const diff=(d-cR[c])/d*0.5;
+      dx*=diff; dy*=diff; dz*=diff;
+      const pa=pinned[a], pb=pinned[b];
+      if(!pa && !pb){ px[a]+=dx;py[a]+=dy;pz[a]+=dz; px[b]-=dx;py[b]-=dy;pz[b]-=dz; }
+      else if(!pa && pb){ px[a]+=2*dx;py[a]+=2*dy;pz[a]+=2*dz; }
+      else if(pa && !pb){ px[b]-=2*dx;py[b]-=2*dy;pz[b]-=2*dz; }
+    }
+    for(let k=0;k<N;k++) if(!pinned[k]) collide(k);
+  }
+}
+
+// ---- 3D → 2D ----
+const focal=760, camDist=4.2, scale=1;
+function project(x,y,z){
+  const cy=Math.cos(yaw), sy=Math.sin(yaw);
+  let X=cy*x + sy*z, Z=-sy*x + cy*z;      // 绕 Y
+  const cp=Math.cos(pitch), sp=Math.sin(pitch);
+  let Y=cp*y - sp*Z; Z=sp*y + cp*Z;       // 绕 X
+  Z+=camDist;
+  const s=focal/Math.max(0.1,Z);
+  return [W/2 + X*s*scale, H/2 - Y*s*scale, Z];
+}
+
+const light=(()=>{ const l=[0.4,0.75,-0.5]; const n=Math.hypot(...l); return [l[0]/n,l[1]/n,l[2]/n]; })();
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  // 障碍
+  drawObstacle();
+
+  // 收集三角面 (每格两片),画家算法按深度排序
+  const tris=[];
+  for(let j=0;j<G-1;j++)for(let i=0;i<G-1;i++){
+    const a=idx(i,j), b=idx(i+1,j), c=idx(i+1,j+1), d=idx(i,j+1);
+    tris.push([a,b,c]); tris.push([a,c,d]);
+  }
+  const P=new Array(N);
+  for(let k=0;k<N;k++) P[k]=project(px[k],py[k],pz[k]);
+
+  const items=tris.map(t=>{
+    const z=(P[t[0]][2]+P[t[1]][2]+P[t[2]][2])/3; return {t,z};
+  });
+  items.sort((p,q)=>q.z-p.z);
+
+  for(const {t} of items){
+    const [a,b,c]=t;
+    // 法线(世界坐标)用于光照
+    const ux=px[b]-px[a], uy=py[b]-py[a], uz=pz[b]-pz[a];
+    const vx=px[c]-px[a], vy=py[c]-py[a], vz=pz[c]-pz[a];
+    let nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+    const nl=Math.hypot(nx,ny,nz)||1e-6; nx/=nl;ny/=nl;nz/=nl;
+    let sh=Math.abs(nx*light[0]+ny*light[1]+nz*light[2]);
+    sh=0.28+0.72*sh;
+    const front = nz<0;                    // 正/背面不同色调,便于看褶皱
+    const base = front ? [90,150,235] : [70,110,180];
+    const r=Math.round(base[0]*sh), gg=Math.round(base[1]*sh), bl=Math.round(base[2]*sh);
+    ctx.beginPath();
+    ctx.moveTo(P[a][0],P[a][1]); ctx.lineTo(P[b][0],P[b][1]); ctx.lineTo(P[c][0],P[c][1]); ctx.closePath();
+    if(wire){ ctx.strokeStyle=`rgb(${r},${gg},${bl})`; ctx.lineWidth=0.6; ctx.stroke(); }
+    else { ctx.fillStyle=`rgb(${r},${gg},${bl})`; ctx.fill(); }
+  }
+  // pin 点
+  ctx.fillStyle='#f0883e';
+  for(let k=0;k<N;k++) if(pinned[k]){ const p=P[k]; ctx.beginPath(); ctx.arc(p[0],p[1],4,0,6.2832); ctx.fill(); }
+
+  hud.textContent=`场景 ${scene}   质点 ${N}   约束 ${nCon}\n拖动=旋转视角  ·  yaw ${(yaw).toFixed(2)} pitch ${(pitch).toFixed(2)}`;
+}
+
+function drawObstacle(){
+  if(!obstacle) return; const o=obstacle;
+  ctx.strokeStyle='#4b5563'; ctx.fillStyle='rgba(75,85,99,0.35)';
+  if(o.type==='cyl'){
+    // 画横杆:沿 x 的一段圆柱,用两端圆环 + 连线近似
+    for(const xend of [-2.2,2.2]){
+      ctx.beginPath();
+      for(let a=0;a<=32;a++){ const th=a/32*6.2832; const p=project(xend, o.y+o.r*Math.cos(th), o.z+o.r*Math.sin(th));
+        a===0?ctx.moveTo(p[0],p[1]):ctx.lineTo(p[0],p[1]); }
+      ctx.stroke();
+    }
+    for(const th of [0,Math.PI/2,Math.PI,3*Math.PI/2]){
+      const p1=project(-2.2,o.y+o.r*Math.cos(th),o.z+o.r*Math.sin(th));
+      const p2=project(2.2,o.y+o.r*Math.cos(th),o.z+o.r*Math.sin(th));
+      ctx.beginPath(); ctx.moveTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.stroke();
+    }
+  }else if(o.type==='sph'){
+    const p=project(o.x,o.y,o.z); const pr=project(o.x+o.r,o.y,o.z);
+    const rad=Math.hypot(pr[0]-p[0],pr[1]-p[1]);
+    ctx.beginPath(); ctx.arc(p[0],p[1],rad,0,6.2832); ctx.fill(); ctx.stroke();
+  }
+}
+
+function frame(){ if(running){ step(); } render(); requestAnimationFrame(frame); }
+
+// ---- 交互 ----
+let dragv=false, lx=0, ly=0;
+C.addEventListener('mousedown',e=>{ dragv=true; lx=e.clientX; ly=e.clientY; C.style.cursor='grabbing'; });
+window.addEventListener('mousemove',e=>{ if(!dragv)return; yaw+=(e.clientX-lx)*0.008; pitch+=(e.clientY-ly)*0.008;
+  pitch=Math.max(-1.3,Math.min(1.3,pitch)); lx=e.clientX; ly=e.clientY; });
+window.addEventListener('mouseup',()=>{ dragv=false; C.style.cursor='grab'; });
+
+const $=id=>document.getElementById(id);
+function bindRange(id,lbl,fn,fmt){ const e=$(id),o=$(lbl);
+  const u=()=>{fn(parseFloat(e.value)); o.textContent=fmt(parseFloat(e.value));}; e.addEventListener('input',u); u(); }
+bindRange('cG','vG', v=>{G=v; build();}, v=>v.toFixed(0));
+bindRange('cGr','vGr', v=>{gravity=v;}, v=>v.toFixed(1));
+bindRange('cK','vK', v=>{iters=v;}, v=>v.toFixed(0));
+
+$('playBtn').onclick=e=>{running=!running; e.target.textContent=running?'⏸ 暂停':'▶ 播放'; e.target.classList.toggle('on',running);};
+$('resetBtn').onclick=build;
+$('windBtn').onclick=e=>{wind=!wind; e.target.classList.toggle('on',wind);};
+$('wireBtn').onclick=e=>{wire=!wire; e.target.classList.toggle('on',wire);};
+document.querySelectorAll('#sceneSeg [data-s]').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('#sceneSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); scene=b.dataset.s; build(); };
+});
+
+build(); frame();
+</script>
+</body>
+</html>
