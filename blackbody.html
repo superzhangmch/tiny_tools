@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>黑体辐射 · 蒙特卡洛(普朗克/瑞利-金斯/紫外灾难)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0d1117; color:#e6edf3;
+    font:14px/1.5 -apple-system,"PingFang SC","Segoe UI",sans-serif;
+    display:flex; flex-direction:column; align-items:center; padding:18px; }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  .sub { color:#8b949e; font-size:12px; margin-bottom:14px; max-width:900px; }
+  .wrap { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
+  canvas { background:#05070a; border:1px solid #30363d; border-radius:8px; display:block; }
+  .side { display:flex; flex-direction:column; gap:12px; }
+  .stats { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:10px 14px;
+    width:280px; font-variant-numeric:tabular-nums; }
+  .stats .row { display:flex; justify-content:space-between; padding:2px 0; }
+  .stats .k { color:#8b949e; } .stats .v { color:#e6edf3; font-weight:600; }
+  .stats .div { margin:5px 0; border-top:1px solid #30363d; }
+  .green { color:#3fb950; } .red { color:#f85149; } .orange { color:#f0883e; }
+  .glow { display:flex; align-items:center; gap:12px; background:#161b22; border:1px solid #30363d;
+    border-radius:8px; padding:10px 14px; width:280px; }
+  .swatch { width:56px; height:56px; border-radius:50%; box-shadow:0 0 26px 6px currentColor; }
+  .lbl { color:#8b949e; font-size:12px; margin:2px 2px; }
+  .row2 { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button { background:#21262d; color:#e6edf3; border:1px solid #30363d; border-radius:6px;
+    padding:6px 12px; font-size:13px; cursor:pointer; } button:hover { background:#30363d; }
+  button.on { background:#1f6feb; border-color:#1f6feb; }
+  .seg { display:inline-flex; border:1px solid #30363d; border-radius:6px; overflow:hidden; }
+  .seg button { border:none; border-radius:0; } .seg button.on { background:#1f6feb; }
+  .panel { margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:10px 18px; width:900px; max-width:100%; }
+  .ctrl { display:flex; flex-direction:column; gap:3px; }
+  .ctrl label { font-size:12px; color:#8b949e; display:flex; justify-content:space-between; }
+  .ctrl label b { color:#58a6ff; font-weight:600; }
+  input[type=range]{ width:100%; accent-color:#58a6ff; }
+  .tip { color:#6e7681; font-size:12px; margin-top:12px; width:900px; max-width:100%; }
+  code { background:#161b22; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+  <h1>黑体辐射 · 蒙特卡洛模拟</h1>
+  <div class="sub">空腔驻波模式 + 热库,用 Metropolis 蒙特卡洛演化。切"经典"看<b>紫外灾难</b>,切"量子(能量成块 hν)"看<b>普朗克谱涌现</b>。曲线不是画出来的,是<b>测</b>出来的。</div>
+
+  <div class="wrap">
+    <div>
+      <div class="lbl">能谱 (橙柱=蒙特卡洛实测 · 绿线=普朗克理论 · 红虚线=瑞利-金斯/经典)</div>
+      <canvas id="spec" width="560" height="340"></canvas>
+      <div class="lbl" style="margin-top:8px">各模式能量 (x=频率, 亮=能量高)。量子模式下高频端会"冻结变暗"→ 这就是没有灾难的原因</div>
+      <canvas id="modes" width="560" height="110"></canvas>
+    </div>
+    <div class="side">
+      <div class="stats">
+        <div class="row"><span class="k">模式数(×2偏振)</span><span class="v" id="sM">—</span></div>
+        <div class="row"><span class="k">温度 T</span><span class="v" id="sT">—</span></div>
+        <div class="div"></div>
+        <div class="row"><span class="k">峰值频率 ν_peak</span><span class="v orange" id="sPk">—</span></div>
+        <div class="row"><span class="k">ν_peak / T (维恩位移,应≈常数)</span><span class="v orange" id="sWien">—</span></div>
+        <div class="div"></div>
+        <div class="row"><span class="k">总能量 E</span><span class="v" id="sE">—</span></div>
+        <div class="row"><span class="k">E / T⁴ (量子:斯特藩-玻尔兹曼,应≈常数)</span><span class="v green" id="sSB">—</span></div>
+        <div class="row"><span class="k">E / T (经典应≈常数)</span><span class="v red" id="sSB1">—</span></div>
+      </div>
+      <div class="glow">
+        <div class="swatch" id="swatch"></div>
+        <div><div class="lbl" style="margin:0">空腔看起来的颜色</div>
+          <div class="v" id="sColor" style="font-size:13px">—</div>
+          <div class="lbl" style="margin:0">(峰值波长→可见光近似)</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row2">
+    <button id="playBtn" class="on">⏸ 暂停</button>
+    <button id="resetBtn">↻ 重置能量</button>
+    <span style="color:#6e7681">模式能量规则:</span>
+    <div class="seg" id="modeSeg">
+      <button data-q="1" class="on">⚛️ 量子 (E = n·hν)</button>
+      <button data-q="0">🌀 经典 (E 连续 → 灾难)</button>
+    </div>
+    <button id="yLog">Y 轴: 线性</button>
+  </div>
+
+  <div class="panel">
+    <div class="ctrl"><label>温度 T <b id="vT">2.0</b></label>
+      <input id="cT" type="range" min="0.4" max="5" step="0.1" value="2"></div>
+    <div class="ctrl"><label>普朗克常数 h (调小→灾难逼近) <b id="vH">1.00</b></label>
+      <input id="cH" type="range" min="0.05" max="2" step="0.05" value="1"></div>
+    <div class="ctrl"><label>模式截断 n_max (=横轴上限,越大越接近连续) <b id="vNmax">18</b></label>
+      <input id="cNmax" type="range" min="12" max="28" step="1" value="18"></div>
+    <div class="ctrl"><label>每帧蒙特卡洛遍历数 <b id="vSweep">4</b></label>
+      <input id="cSweep" type="range" min="1" max="12" step="1" value="4"></div>
+  </div>
+
+  <div class="tip">
+    <b>看紫外灾难:</b> 切到`经典` → 橙柱不再收尾,一路 ∝ν² 冲上去贴着红虚线(高频发散)。把 `n_max` 调大,总能量 `E/T` 一直涨不停 —— 这就是灾难。<br>
+    <b>看量子治愈:</b> 切回`量子` → 高频模式被冻结(下面模式图右侧变暗),橙柱贴着绿色普朗克线收尾。<br>
+    <b>h→0 恢复经典:</b> 量子模式下把 `h` 调到很小,能量块变细,普朗克曲线会退化回瑞利-金斯(量子效应消失)。<br>
+    <b>维恩 & 斯特藩-玻尔兹曼:</b> 拖温度滑块,看 `ν_peak/T` 和 `E/T⁴` 都稳定在常数,颜色从红→黄→白→蓝。<br>
+    <span style="color:#586069">单位 k=1;ν=√(nx²+ny²+nz²) 为空腔驻波,模式密度 ∝ν² 自动成立;×2 偏振。</span>
+  </div>
+
+<script>
+"use strict";
+const specC=document.getElementById('spec'), sx=specC.getContext('2d');
+const modC=document.getElementById('modes'), mx=modC.getContext('2d');
+
+// 参数
+let T=2, h=1, nMax=18, sweeps=4;
+let quantum=true, running=true, yLog=false;
+
+// 模式:freq[i], 量子占据 nq[i], 经典能量 ec[i], 随机 y(展示用)
+let freq, nq, ec, yr, M=0, maxFreq=1, measAvg;
+const nBins=64;
+let binOf, binCount, binFreqC;   // 每模式所属 bin, 每 bin 模式计数, bin 中心频率
+let gA=Math.PI, gB=0, gC=0;      // 模式密度二次拟合 g(ν)=gA·ν²+gB·ν+gC(含边界修正)
+
+// 对真实每格模式数做二次最小二乘拟合 → 光滑且归一正确的模式密度
+function fitDensity(){
+  const dnu=maxFreq/nBins;
+  const S=[0,0,0,0,0], Sy=[0,0,0];
+  for(let b=0;b<nBins;b++){ const nu=(b+0.5)*dnu, dens=binCount[b]/dnu, x=nu;
+    let xp=1; for(let k=0;k<5;k++){ S[k]+=xp; xp*=x; }
+    Sy[0]+=dens; Sy[1]+=dens*x; Sy[2]+=dens*x*x; }
+  const Mx=[[S[0],S[1],S[2],Sy[0]],[S[1],S[2],S[3],Sy[1]],[S[2],S[3],S[4],Sy[2]]];
+  for(let i=0;i<3;i++){ let p=i; for(let r=i+1;r<3;r++) if(Math.abs(Mx[r][i])>Math.abs(Mx[p][i]))p=r; [Mx[i],Mx[p]]=[Mx[p],Mx[i]];
+    for(let r=0;r<3;r++) if(r!==i){ const f=Mx[r][i]/Mx[i][i]; for(let c=i;c<4;c++) Mx[r][c]-=f*Mx[i][c]; } }
+  gC=Mx[0][3]/Mx[0][0]; gB=Mx[1][3]/Mx[1][1]; gA=Mx[2][3]/Mx[2][2];
+}
+
+function buildModes(){
+  const list=[];
+  for(let x=1;x<=nMax;x++)for(let y=1;y<=nMax;y++)for(let z=1;z<=nMax;z++){
+    const f=Math.sqrt(x*x+y*y+z*z);
+    if(f>nMax) continue;          // 只取球内模式,使密度 ∝ν² 全程成立(立方体墙角会缺模式)
+    list.push(f); list.push(f);   // ×2 偏振
+  }
+  M=list.length;
+  freq=new Float32Array(list); nq=new Float32Array(M); ec=new Float32Array(M); yr=new Float32Array(M);
+  measAvg=new Float32Array(nBins);
+  maxFreq=nMax;
+  binOf=new Int16Array(M); binCount=new Float32Array(nBins); binFreqC=new Float32Array(nBins);
+  for(let b=0;b<nBins;b++) binFreqC[b]=(b+0.5)/nBins*maxFreq;
+  for(let i=0;i<M;i++){
+    let b=Math.floor(freq[i]/maxFreq*nBins); if(b<0)b=0; if(b>=nBins)b=nBins-1;
+    binOf[i]=b; binCount[b]++;
+    yr[i]=Math.random();
+  }
+  fitDensity();
+}
+function resetEnergy(){ nq.fill(0); ec.fill(0); if(measAvg) measAvg.fill(0); }
+
+// ---- Metropolis 一次遍历 ----
+function sweep(){
+  if(quantum){
+    for(let i=0;i<M;i++){
+      const dn = Math.random()<0.5 ? 1 : -1;
+      const n2 = nq[i]+dn; if(n2<0) continue;
+      const dE = dn*h*freq[i];
+      if(dE<=0 || Math.random()<Math.exp(-dE/T)) nq[i]=n2;
+    }
+  } else {
+    const s=Math.max(0.5,1.5*T);
+    for(let i=0;i<M;i++){
+      const dE=(Math.random()*2-1)*s; const e2=ec[i]+dE; if(e2<0) continue;
+      if(dE<=0 || Math.random()<Math.exp(-dE/T)) ec[i]=e2;
+    }
+  }
+}
+function modeEnergy(i){ return quantum ? nq[i]*h*freq[i] : ec[i]; }
+
+// ---- 光谱色近似(黑体温度→RGB) ----
+function bbColor(kelvin){
+  const t=kelvin/100; let r,g,b;
+  if(t<=66){ r=255; g=99.4708025861*Math.log(t)-161.1195681661; }
+  else { r=329.698727446*Math.pow(t-60,-0.1332047592); g=288.1221695283*Math.pow(t-60,-0.0755148492); }
+  if(t>=66) b=255; else if(t<=19) b=0; else b=138.5177312231*Math.log(t-10)-305.0447927307;
+  const c=v=>Math.max(0,Math.min(255,Math.round(v)));
+  return [c(r),c(g),c(b)];
+}
+
+// ---- 渲染光谱 ----
+const $=id=>document.getElementById(id);
+function render(){
+  // 实测 & 理论按 bin 聚合
+  const meas=new Float32Array(nBins), planck=new Float32Array(nBins), rj=new Float32Array(nBins);
+  let Etot=0;
+  for(let i=0;i<M;i++){ const e=modeEnergy(i); meas[binOf[i]]+=e; Etot+=e; }
+  // 时间平均(模拟长曝光积分),压掉逐帧蒙特卡洛噪声
+  for(let b=0;b<nBins;b++){ measAvg[b]=measAvg[b]*0.9+meas[b]*0.1; meas[b]=measAvg[b]; }
+  const dnu=maxFreq/nBins;
+  for(let b=0;b<nBins;b++){
+    const f=binFreqC[b], xx=h*f/T;
+    const dens=Math.max(0, gA*f*f+gB*f+gC)*dnu;   // 拟合的真实模式密度(含边界修正,归一正确)
+    planck[b]=dens*(xx<40? h*f/(Math.exp(xx)-1) : 0);
+    rj[b]=dens*T;
+  }
+  // 峰值(用普朗克理论)
+  let pk=0,pkb=0; for(let b=0;b<nBins;b++) if(planck[b]>pk){pk=planck[b];pkb=b;}
+  const nuPeak=binFreqC[pkb];
+
+  // 绘图
+  const CW=specC.width,CH=specC.height,mL=6,mB=22,mT=10;
+  sx.clearRect(0,0,CW,CH);
+  let ymax=1e-6; for(let b=0;b<nBins;b++){ ymax=Math.max(ymax,meas[b],planck[b]); }
+  ymax*=1.15;
+  const X=b=> mL+(b+0.5)/nBins*(CW-mL-6);
+  const Yv=v=>{ if(yLog){ const lv=Math.log10(v+1e-6), lmax=Math.log10(ymax+1e-6), lmin=lmax-4;
+      return CH-mB-Math.max(0,(lv-lmin)/(lmax-lmin))*(CH-mB-mT); }
+    return CH-mB-(v/ymax)*(CH-mB-mT); };
+  // 轴
+  sx.strokeStyle='#30363d'; sx.beginPath(); sx.moveTo(mL,mT); sx.lineTo(mL,CH-mB); sx.lineTo(CW-6,CH-mB); sx.stroke();
+  sx.fillStyle='#6e7681'; sx.font='11px sans-serif';
+  sx.fillText('能量密度',mL+4,mT+10); sx.fillText('频率 ν →',CW-70,CH-6);
+  // 瑞利-金斯 红虚线
+  sx.strokeStyle='#f85149'; sx.setLineDash([5,4]); sx.lineWidth=1.5; sx.beginPath();
+  for(let b=0;b<nBins;b++){ const y=Math.max(mT,Yv(rj[b])); b===0?sx.moveTo(X(b),y):sx.lineTo(X(b),y); } sx.stroke(); sx.setLineDash([]);
+  // 实测橙柱
+  const bw=(CW-mL-6)/nBins;
+  sx.fillStyle='#f0883e';
+  for(let b=0;b<nBins;b++){ const y=Yv(meas[b]); sx.fillRect(X(b)-bw*0.42,y,bw*0.84,(CH-mB)-y); }
+  // 普朗克 绿线
+  sx.strokeStyle='#3fb950'; sx.lineWidth=2.2; sx.beginPath();
+  for(let b=0;b<nBins;b++){ const y=Yv(planck[b]); b===0?sx.moveTo(X(b),y):sx.lineTo(X(b),y); } sx.stroke();
+  // 峰值竖线
+  sx.strokeStyle='rgba(240,136,62,.5)'; sx.setLineDash([2,3]); sx.beginPath();
+  sx.moveTo(X(pkb),mT); sx.lineTo(X(pkb),CH-mB); sx.stroke(); sx.setLineDash([]);
+
+  // 模式能量散点
+  const MW=modC.width,MH=modC.height; mx.clearRect(0,0,MW,MH);
+  const norm=Math.max(1e-6, 2.5*T);
+  const stride=Math.max(1,Math.floor(M/4000));
+  for(let i=0;i<M;i+=stride){
+    const e=modeEnergy(i); const b=Math.min(1,e/norm);
+    if(b<0.02) continue;
+    const px=mL+(freq[i]/maxFreq)*(MW-mL-6), py=4+yr[i]*(MH-8);
+    mx.fillStyle=`rgba(${Math.round(120+135*b)},${Math.round(90+80*b)},${Math.round(40+30*b)},${0.25+0.65*b})`;
+    mx.fillRect(px,py,2,2);
+  }
+
+  // 颜色 swatch
+  const Tk=700+T*850; const [r,g,bb]=bbColor(Tk);
+  const sw=$('swatch'); sw.style.background=`rgb(${r},${g},${bb})`; sw.style.color=`rgb(${r},${g},${bb})`;
+  $('sColor').textContent=`≈ ${Math.round(Tk)} K  ·  rgb(${r},${g},${bb})`;
+
+  // 读数
+  $('sM').textContent=M; $('sT').textContent=T.toFixed(2);
+  $('sPk').textContent=nuPeak.toFixed(2); $('sWien').textContent=(nuPeak/T).toFixed(3);
+  $('sE').textContent=Etot.toFixed(0);
+  $('sSB').textContent=(Etot/Math.pow(T,4)).toFixed(1);
+  $('sSB1').textContent=(Etot/T).toFixed(0);
+}
+
+function frame(){
+  if(running) for(let s=0;s<sweeps;s++) sweep();
+  render();
+  requestAnimationFrame(frame);
+}
+
+// ---- UI ----
+function bindRange(id,lbl,fn,fmt){ const e=$(id),o=$(lbl);
+  const u=()=>{fn(parseFloat(e.value)); o.textContent=fmt(parseFloat(e.value));}; e.addEventListener('input',u); u(); }
+bindRange('cT','vT', v=>{T=v;}, v=>v.toFixed(1));
+bindRange('cH','vH', v=>{h=v;}, v=>v.toFixed(2));
+bindRange('cNmax','vNmax', v=>{nMax=v; buildModes();}, v=>v.toFixed(0));
+bindRange('cSweep','vSweep', v=>{sweeps=v;}, v=>v.toFixed(0));
+
+$('playBtn').onclick=e=>{running=!running; e.target.textContent=running?'⏸ 暂停':'▶ 播放'; e.target.classList.toggle('on',running);};
+$('resetBtn').onclick=resetEnergy;
+$('yLog').onclick=e=>{yLog=!yLog; e.target.textContent='Y 轴: '+(yLog?'对数':'线性');};
+document.querySelectorAll('#modeSeg [data-q]').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); quantum=b.dataset.q==='1'; if(measAvg) measAvg.fill(0); };
+});
+
+buildModes(); frame();
+</script>
+</body>
+</html>

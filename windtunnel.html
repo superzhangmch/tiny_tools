@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>手绘风洞 · Lattice-Boltzmann Wind Tunnel</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; background: #0d1117; color: #e6edf3;
+    font: 14px/1.5 -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; align-items: center; padding: 18px;
+  }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: #8b949e; font-size: 12px; margin-bottom: 14px; }
+  #stage { position: relative; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; cursor: crosshair; }
+  canvas { display: block; }
+  #hud {
+    position: absolute; left: 8px; top: 8px; padding: 4px 8px;
+    background: rgba(0,0,0,.45); border-radius: 6px; font-size: 12px;
+    color: #cdd9e5; pointer-events: none; white-space: pre;
+  }
+  .panel {
+    margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 10px 18px; width: 820px; max-width: 100%;
+  }
+  .ctrl { display: flex; flex-direction: column; gap: 3px; }
+  .ctrl label { font-size: 12px; color: #8b949e; display: flex; justify-content: space-between; }
+  .ctrl label b { color: #58a6ff; font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: #58a6ff; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  button, select {
+    background: #21262d; color: #e6edf3; border: 1px solid #30363d;
+    border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  button:hover, select:hover { background: #30363d; }
+  button.on { background: #1f6feb; border-color: #1f6feb; }
+  .seg { display: inline-flex; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+  .seg button { border: none; border-radius: 0; }
+  .seg button.on { background: #1f6feb; }
+  .tip { color: #6e7681; font-size: 12px; margin-top: 10px; width: 820px; max-width: 100%; }
+  code { background: #161b22; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <h1>手绘风洞 · Lattice-Boltzmann Wind Tunnel</h1>
+  <div class="sub">底层只有一条规则(D2Q9 格子玻尔兹曼 + 边界反弹)。你画的任何形状,绕流都是"涌现"出来的。</div>
+
+  <div id="stage">
+    <canvas id="c"></canvas>
+    <div id="hud"></div>
+  </div>
+
+  <div class="row">
+    <button id="playBtn" class="on">⏸ 暂停</button>
+    <div class="seg" id="toolSeg">
+      <button data-tool="draw" class="on">✏️ 画障碍</button>
+      <button data-tool="erase">🧽 擦除</button>
+    </div>
+    <div class="seg" id="plotSeg">
+      <button data-plot="curl" class="on">涡量</button>
+      <button data-plot="speed">速度</button>
+      <button data-plot="rho">压力</button>
+    </div>
+    <button id="tracerBtn">💨 示踪粒子</button>
+    <span style="color:#6e7681">预设:</span>
+    <button data-shape="circle">● 圆柱</button>
+    <button data-shape="airfoil">✈ 翼型</button>
+    <button data-shape="square">■ 方块</button>
+    <button id="clearBtn">🗑 清空</button>
+  </div>
+
+  <div class="panel">
+    <div class="ctrl">
+      <label>风速 (来流) <b id="vSpeed">0.100</b></label>
+      <input id="speed" type="range" min="0" max="0.12" step="0.005" value="0.1">
+    </div>
+    <div class="ctrl">
+      <label>黏度 (↓=更湍流,雷诺数↑) <b id="vVisc">0.020</b></label>
+      <input id="visc" type="range" min="0.005" max="0.15" step="0.005" value="0.02">
+    </div>
+    <div class="ctrl">
+      <label>笔刷大小 <b id="vBrush">4</b></label>
+      <input id="brush" type="range" min="1" max="14" step="1" value="4">
+    </div>
+    <div class="ctrl">
+      <label>每帧步数 (越大越快) <b id="vSteps">12</b></label>
+      <input id="steps" type="range" min="1" max="30" step="1" value="12">
+    </div>
+    <div class="ctrl">
+      <label>对比度 <b id="vContrast">1.0</b></label>
+      <input id="contrast" type="range" min="0.3" max="3" step="0.1" value="1">
+    </div>
+  </div>
+
+  <div class="tip">
+    玩法:拖动鼠标<b>画</b>出任意形状 → 看流体绕过它。想看经典<b>卡门涡街</b>,点"圆柱"再把黏度调低。
+    翼型是斜放的,注意上表面流速更快(涡量图上更亮),这就是升力的来源。若数值发散(全屏乱色),点"清空"或调高黏度即可。
+  </div>
+
+<script>
+"use strict";
+// ===================== 参数与网格 =====================
+const pxPerCell = 4;
+const canvasW = 800, canvasH = 320;
+const width  = canvasW / pxPerCell;   // 200
+const height = canvasH / pxPerCell;   // 80
+const canvas = document.getElementById('c');
+canvas.width = canvasW; canvas.height = canvasH;
+const ctx = canvas.getContext('2d');
+const image = ctx.createImageData(canvasW, canvasH);
+
+const N = width * height;
+// D2Q9 分布函数:9 个方向 (0=静止, E W N S NE SE NW SW)
+const n0=new Float32Array(N),  nN=new Float32Array(N),  nS=new Float32Array(N),
+      nE=new Float32Array(N),  nW=new Float32Array(N),  nNE=new Float32Array(N),
+      nSE=new Float32Array(N), nNW=new Float32Array(N), nSW=new Float32Array(N);
+const rho=new Float32Array(N), ux=new Float32Array(N), uy=new Float32Array(N),
+      curl=new Float32Array(N);
+const barrier = new Int8Array(N);
+
+const f4=4/9, f9=1/9, f36=1/36;
+
+// 运行状态 (由 UI 更新)
+let speed=0.1, viscosity=0.02, stepsPerFrame=12, contrast=1;
+let brushSize=4, tool='draw', plot='curl', running=true, showTracers=false;
+
+// ===================== 核心:平衡态 / 碰撞 / 迁移 =====================
+function setEquil(x, y, nux, nuy, nrho) {
+  const i = x + y*width;
+  const ux3=3*nux, uy3=3*nuy, ux2=nux*nux, uy2=nuy*nuy, uxuy2=2*nux*nuy;
+  const u2=ux2+uy2, u215=1.5*u2;
+  n0[i]  = f4*nrho*(1-u215);
+  nE[i]  = f9*nrho*(1+ux3+4.5*ux2-u215);
+  nW[i]  = f9*nrho*(1-ux3+4.5*ux2-u215);
+  nN[i]  = f9*nrho*(1+uy3+4.5*uy2-u215);
+  nS[i]  = f9*nrho*(1-uy3+4.5*uy2-u215);
+  nNE[i] = f36*nrho*(1+ux3+uy3+4.5*(u2+uxuy2)-u215);
+  nSE[i] = f36*nrho*(1+ux3-uy3+4.5*(u2-uxuy2)-u215);
+  nNW[i] = f36*nrho*(1-ux3+uy3+4.5*(u2-uxuy2)-u215);
+  nSW[i] = f36*nrho*(1-ux3-uy3+4.5*(u2+uxuy2)-u215);
+  rho[i]=nrho; ux[i]=nux; uy[i]=nuy;
+}
+
+function initFluid() {
+  for (let y=0; y<height; y++)
+    for (let x=0; x<width; x++)
+      setEquil(x, y, speed, 0, 1);
+}
+
+// 四周边界当作稳定的"来流水库",制造持续的风
+function setBoundaries() {
+  for (let x=0; x<width; x++) { setEquil(x,0,speed,0,1); setEquil(x,height-1,speed,0,1); }
+  for (let y=0; y<height; y++) { setEquil(0,y,speed,0,1); setEquil(width-1,y,speed,0,1); }
+}
+
+function collide() {
+  const omega = 1/(3*viscosity+0.5);
+  for (let y=1; y<height-1; y++) {
+    for (let x=1; x<width-1; x++) {
+      const i = x + y*width;
+      const r = n0[i]+nN[i]+nS[i]+nE[i]+nW[i]+nNW[i]+nNE[i]+nSW[i]+nSE[i];
+      const tux = (nE[i]+nNE[i]+nSE[i]-nW[i]-nNW[i]-nSW[i])/r;
+      const tuy = (nN[i]+nNE[i]+nNW[i]-nS[i]-nSE[i]-nSW[i])/r;
+      rho[i]=r; ux[i]=tux; uy[i]=tuy;
+      const r9=f9*r, r36=f36*r;
+      const ux3=3*tux, uy3=3*tuy, ux2=tux*tux, uy2=tuy*tuy, uxuy2=2*tux*tuy;
+      const u2=ux2+uy2, u215=1.5*u2;
+      n0[i]  += omega*(f4*r*(1-u215)-n0[i]);
+      nE[i]  += omega*(r9*(1+ux3+4.5*ux2-u215)-nE[i]);
+      nW[i]  += omega*(r9*(1-ux3+4.5*ux2-u215)-nW[i]);
+      nN[i]  += omega*(r9*(1+uy3+4.5*uy2-u215)-nN[i]);
+      nS[i]  += omega*(r9*(1-uy3+4.5*uy2-u215)-nS[i]);
+      nNE[i] += omega*(r36*(1+ux3+uy3+4.5*(u2+uxuy2)-u215)-nNE[i]);
+      nSE[i] += omega*(r36*(1+ux3-uy3+4.5*(u2-uxuy2)-u215)-nSE[i]);
+      nNW[i] += omega*(r36*(1-ux3+uy3+4.5*(u2-uxuy2)-u215)-nNW[i]);
+      nSW[i] += omega*(r36*(1-ux3-uy3+4.5*(u2+uxuy2)-u215)-nSW[i]);
+    }
+  }
+}
+
+function stream() {
+  for (let y=height-2; y>0; y--) for (let x=1; x<width-1; x++) {
+    nN[x+y*width]  = nN[x+(y-1)*width];
+    nNW[x+y*width] = nNW[x+1+(y-1)*width];
+  }
+  for (let y=height-2; y>0; y--) for (let x=width-2; x>0; x--) {
+    nE[x+y*width]  = nE[x-1+y*width];
+    nNE[x+y*width] = nNE[x-1+(y-1)*width];
+  }
+  for (let y=1; y<height-1; y++) for (let x=width-2; x>0; x--) {
+    nS[x+y*width]  = nS[x+(y+1)*width];
+    nSE[x+y*width] = nSE[x-1+(y+1)*width];
+  }
+  for (let y=1; y<height-1; y++) for (let x=1; x<width-1; x++) {
+    nW[x+y*width]  = nW[x+1+y*width];
+    nSW[x+y*width] = nSW[x+1+(y+1)*width];
+  }
+  // 障碍反弹:入射的分布原路弹回,这是形状"挡风"的全部机制
+  for (let y=1; y<height-1; y++) for (let x=1; x<width-1; x++) {
+    const i = x+y*width;
+    if (barrier[i]) {
+      nE[x+1+y*width]     = nW[i];
+      nW[x-1+y*width]     = nE[i];
+      nN[x+(y+1)*width]   = nS[i];
+      nS[x+(y-1)*width]   = nN[i];
+      nNE[x+1+(y+1)*width]= nSW[i];
+      nNW[x-1+(y+1)*width]= nSE[i];
+      nSE[x+1+(y-1)*width]= nNW[i];
+      nSW[x-1+(y-1)*width]= nNE[i];
+    }
+  }
+}
+
+// ===================== 示踪粒子 =====================
+const nTracers = 900;
+const trX = new Float32Array(nTracers), trY = new Float32Array(nTracers);
+function initTracers() {
+  let k=0;
+  for (let py=0; py<30 && k<nTracers; py++)
+    for (let px=0; px<30 && k<nTracers; px++, k++) {
+      trX[k] = (px+0.5)*width/30;
+      trY[k] = (py+0.5)*height/30;
+    }
+}
+function moveTracers() {
+  for (let k=0; k<nTracers; k++) {
+    const x = Math.min(width-2, Math.max(1, Math.floor(trX[k])));
+    const y = Math.min(height-2, Math.max(1, Math.floor(trY[k])));
+    const i = x+y*width;
+    trX[k] += ux[i]; trY[k] += uy[i];
+    if (trX[k] >= width-1) { trX[k]=1; trY[k]=1+Math.floor((k/nTracers)*(height-2)); }
+    if (trY[k] < 1) trY[k]=height-2; else if (trY[k] > height-1) trY[k]=1;
+  }
+}
+
+// ===================== 渲染 =====================
+const nColors = 400;
+const rC=new Uint8Array(nColors+2), gC=new Uint8Array(nColors+2), bC=new Uint8Array(nColors+2);
+(function buildPalette(){
+  for (let c=0; c<=nColors; c++) {
+    let r,g,b;
+    if (c < nColors/8)        { r=0; g=0; b=Math.round(255*(c+nColors/8)/(nColors/4)); }
+    else if (c < 3*nColors/8) { r=0; g=Math.round(255*(c-nColors/8)/(nColors/4)); b=255; }
+    else if (c < 5*nColors/8) { r=Math.round(255*(c-3*nColors/8)/(nColors/4)); g=255; b=255-r; }
+    else if (c < 7*nColors/8) { r=255; g=Math.round(255*(7*nColors/8-c)/(nColors/4)); b=0; }
+    else                      { r=Math.round(255*(9*nColors/8-c)/(nColors/4)); g=0; b=0; }
+    rC[c]=r; gC[c]=g; bC[c]=b;
+  }
+})();
+
+function colorSquare(x, y, r, g, b) {
+  const fy = height-y-1;                // canvas 的 y 轴向下,翻转一下
+  for (let py=fy*pxPerCell; py<(fy+1)*pxPerCell; py++) {
+    let idx = (px0(x)+py*canvasW)*4;
+    for (let p=0; p<pxPerCell; p++) {
+      image.data[idx]=r; image.data[idx+1]=g; image.data[idx+2]=b; image.data[idx+3]=255;
+      idx+=4;
+    }
+  }
+}
+function px0(x){ return x*pxPerCell; }
+
+function computeCurl() {
+  for (let y=1; y<height-1; y++)
+    for (let x=1; x<width-1; x++)
+      curl[x+y*width] = uy[x+1+y*width]-uy[x-1+y*width] - ux[x+(y+1)*width]+ux[x+(y-1)*width];
+}
+
+function render() {
+  if (plot==='curl') computeCurl();
+  for (let y=0; y<height; y++) {
+    for (let x=0; x<width; x++) {
+      const i = x+y*width;
+      if (barrier[i]) { colorSquare(x,y,190,197,206); continue; }
+      let ci;
+      if (plot==='rho')        ci = Math.round(nColors*((rho[i]-1)*6*contrast + 0.5));
+      else if (plot==='speed') ci = Math.round(nColors*(Math.sqrt(ux[i]*ux[i]+uy[i]*uy[i])*4*contrast));
+      else                     ci = Math.round(nColors*(curl[i]*5*contrast + 0.5));
+      if (ci<0) ci=0; else if (ci>nColors) ci=nColors;
+      colorSquare(x, y, rC[ci], gC[ci], bC[ci]);
+    }
+  }
+  ctx.putImageData(image, 0, 0);
+
+  if (showTracers) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (let k=0; k<nTracers; k++) {
+      const cx = trX[k]*pxPerCell;
+      const cy = (height-trY[k])*pxPerCell;
+      ctx.fillRect(cx-0.6, cy-0.6, 1.4, 1.4);
+    }
+  }
+}
+
+// ===================== 障碍绘制 =====================
+function stamp(cx, cy, add) {
+  const r = brushSize;
+  for (let dy=-r; dy<=r; dy++) for (let dx=-r; dx<=r; dx++) {
+    if (dx*dx+dy*dy > r*r) continue;
+    const x=cx+dx, y=cy+dy;
+    if (x<1 || x>width-2 || y<1 || y>height-2) continue;
+    const i=x+y*width;
+    if (add) barrier[i]=1;
+    else if (barrier[i]) { barrier[i]=0; setEquil(x,y,speed,0,1); }
+  }
+}
+function clearBarriers() {
+  for (let i=0;i<N;i++) if (barrier[i]) barrier[i]=0;
+  initFluid();
+}
+function preset(shape) {
+  clearBarriers();
+  const cx=Math.floor(width*0.28), cy=Math.floor(height/2);
+  if (shape==='circle') {
+    const R=Math.floor(height*0.14);
+    for (let y=-R;y<=R;y++) for (let x=-R;x<=R;x++)
+      if (x*x+y*y<=R*R) mark(cx+x, cy+y);
+  } else if (shape==='square') {
+    const S=Math.floor(height*0.11);
+    for (let y=-S;y<=S;y++) for (let x=-S;x<=S;x++) mark(cx+x, cy+y);
+  } else if (shape==='airfoil') {
+    // 斜放的薄椭圆 ≈ 有迎角的翼型
+    const a=Math.floor(height*0.30), b=Math.floor(height*0.05);
+    const ang=-14*Math.PI/180, ca=Math.cos(ang), sa=Math.sin(ang);
+    for (let y=-a;y<=a;y++) for (let x=-a;x<=a;x++) {
+      const rx=x*ca - y*sa, ry=x*sa + y*ca;
+      if ((rx*rx)/(a*a) + (ry*ry)/(b*b) <= 1) mark(cx+x, cy+y);
+    }
+  }
+}
+function mark(x,y){ if (x>=1&&x<=width-2&&y>=1&&y<=height-2) barrier[x+y*width]=1; }
+
+// ===================== 主循环 =====================
+const hud = document.getElementById('hud');
+function loop() {
+  if (running) {
+    for (let s=0; s<stepsPerFrame; s++) {
+      setBoundaries();
+      collide();
+      stream();
+      if (showTracers) moveTracers();
+    }
+  }
+  render();
+  // 简单的发散检测 + 自愈
+  const mid = ux[(Math.floor(width/2))+Math.floor(height/2)*width];
+  if (!isFinite(mid) || Math.abs(mid) > 1) { initFluid(); }
+  const Re = (speed * height * 0.28) / viscosity; // 粗略估个雷诺数
+  hud.textContent = `Re ≈ ${Re.toFixed(0)}   |   显示: ${plot}   |   拖动=画  · 右键=擦`;
+  requestAnimationFrame(loop);
+}
+
+// ===================== UI 绑定 =====================
+const $=id=>document.getElementById(id);
+function bindRange(id, label, fn, fmt) {
+  const el=$(id), out=$(label);
+  const upd=()=>{ fn(parseFloat(el.value)); out.textContent = fmt(parseFloat(el.value)); };
+  el.addEventListener('input', upd); upd();
+}
+bindRange('speed','vSpeed', v=>speed=v, v=>v.toFixed(3));
+bindRange('visc','vVisc', v=>viscosity=v, v=>v.toFixed(3));
+bindRange('brush','vBrush', v=>brushSize=v, v=>v.toFixed(0));
+bindRange('steps','vSteps', v=>stepsPerFrame=v, v=>v.toFixed(0));
+bindRange('contrast','vContrast', v=>contrast=v, v=>v.toFixed(1));
+
+$('playBtn').onclick = e => {
+  running=!running;
+  e.target.textContent = running ? '⏸ 暂停' : '▶ 播放';
+  e.target.classList.toggle('on', running);
+};
+$('tracerBtn').onclick = e => {
+  showTracers=!showTracers; e.target.classList.toggle('on', showTracers);
+  if (showTracers) initTracers();
+};
+$('clearBtn').onclick = clearBarriers;
+document.querySelectorAll('[data-shape]').forEach(b=>b.onclick=()=>preset(b.dataset.shape));
+
+function segBind(segId, attr, setter) {
+  document.querySelectorAll('#'+segId+' [data-'+attr+']').forEach(b=>{
+    b.onclick=()=>{
+      document.querySelectorAll('#'+segId+' button').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on'); setter(b.dataset[attr]);
+    };
+  });
+}
+segBind('toolSeg','tool', v=>tool=v);
+segBind('plotSeg','plot', v=>plot=v);
+
+// 鼠标画障碍
+let drawing=false, erasing=false;
+function toCell(ev) {
+  const rect=canvas.getBoundingClientRect();
+  const mx=(ev.clientX-rect.left)*(canvasW/rect.width);
+  const my=(ev.clientY-rect.top)*(canvasH/rect.height);
+  return { x: Math.floor(mx/pxPerCell), y: height-1-Math.floor(my/pxPerCell) };
+}
+canvas.addEventListener('contextmenu', e=>e.preventDefault());
+canvas.addEventListener('mousedown', e=>{
+  drawing=true; erasing = (e.button===2) || (tool==='erase');
+  const c=toCell(e); stamp(c.x, c.y, !erasing);
+});
+window.addEventListener('mousemove', e=>{
+  if (!drawing) return; const c=toCell(e); stamp(c.x, c.y, !erasing);
+});
+window.addEventListener('mouseup', ()=>drawing=false);
+// 触屏
+canvas.addEventListener('touchstart', e=>{ e.preventDefault(); drawing=true; erasing=(tool==='erase');
+  const c=toCell(e.touches[0]); stamp(c.x,c.y,!erasing); }, {passive:false});
+canvas.addEventListener('touchmove', e=>{ e.preventDefault(); if(!drawing)return;
+  const c=toCell(e.touches[0]); stamp(c.x,c.y,!erasing); }, {passive:false});
+canvas.addEventListener('touchend', ()=>drawing=false);
+
+// 启动
+initFluid();
+preset('circle');
+loop();
+</script>
+</body>
+</html>
