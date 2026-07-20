@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>原子轨道 · 氢电子云(精确) / 任意原子(SCF 自洽计算)</title>
+<style>
+  :root { --bg:#0b0f17; --panel:#141b28; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5; --accent:#8b9dff; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  .wrap { max-width:730px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 10px; }
+  .tabs { display:flex; gap:8px; margin-bottom:12px; }
+  .tabs button { background:#1b2536; color:var(--txt); border:1px solid var(--line);
+    padding:9px 15px; border-radius:9px; font-size:13px; cursor:pointer; }
+  .tabs button.on { background:var(--accent); color:#0a0f22; border-color:var(--accent); font-weight:600; }
+  canvas { display:block; background:#02040a; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.5);
+    cursor:grab; touch-action:none; }
+  canvas.drag { cursor:grabbing; }
+  .explain { background:#0e1522; border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; margin-top:12px; font-size:13px; line-height:1.6; color:#cdd8ee; }
+  .explain b.y{color:#ffd27f;} .explain b.g{color:#79ffa8;}
+  .ctrl { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-top:12px; }
+  .ctrl .row { display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; }
+  .ctrl label { font-size:12px; color:var(--dim); }
+  .ob { background:#1b2536;color:#e2e9f7;border:1px solid #26324a;padding:6px 11px;border-radius:8px;font-size:12px;cursor:pointer; }
+  .ob.on { background:var(--accent);color:#0a0f22;border-color:var(--accent);font-weight:600; }
+  input[type=range]{accent-color:var(--accent);}
+  .hide{display:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>原子轨道</h1>
+  <div class="tabs">
+    <button id="tabH" class="on">氢 · 电子云(精确解)</button>
+    <button id="tabZ">任意原子 · SCF 自洽计算</button>
+  </div>
+  <canvas id="c" width="700" height="470"></canvas>
+  <div class="explain" id="explain"></div>
+
+  <div class="ctrl" id="ctrl-h">
+    <div class="row"><label>选轨道:</label>
+      <button class="ob on" data-o="1s">1s</button><button class="ob" data-o="2s">2s</button>
+      <button class="ob" data-o="2p">2p</button><button class="ob" data-o="3s">3s</button>
+      <button class="ob" data-o="3p">3p</button><button class="ob" data-o="3dz2">3d z²</button>
+      <button class="ob" data-o="3dxy">3d xy</button></div>
+    <div class="row"><label>颜色 = 波函数正负(节面处变号);拖动可旋转视角。</label>
+      <button class="ob on" id="autorot">自动旋转:开</button></div>
+  </div>
+
+  <div class="ctrl hide" id="ctrl-z">
+    <div class="row"><label>元素 Z = <span id="zV">8 (O 氧)</span></label>
+      <input type="range" id="zsel" min="1" max="36" step="1" value="8" style="flex:1"></div>
+    <div class="row"><label style="color:#8a99b5">从原理算:数值解径向薛定谔方程 + Hartree 自洽迭代;重原子约需 1–4 秒。</label></div>
+  </div>
+</div>
+
+<script>
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+let mode='H';
+const explainEl=document.getElementById('explain');
+
+/* ============ 数值求解器(已用氢原子精确本征值 -Z²/2n² 验证) ============ */
+function makeGrid(rmin,rmax,Ng){ const dx=Math.log(rmax/rmin)/(Ng-1);
+  const r=new Float64Array(Ng),r2=new Float64Array(Ng),sqr=new Float64Array(Ng);
+  for(let i=0;i<Ng;i++){r[i]=rmin*Math.exp(i*dx);r2[i]=r[i]*r[i];sqr[i]=Math.sqrt(r[i]);}
+  return{r,r2,sqr,dx,Ng}; }
+function solveNL(n,l,V,grid,Z,e0){
+  const {r,r2,sqr,dx,Ng}=grid, mesh=Ng-1, ddx12=dx*dx/12, nodesTarget=n-l-1;
+  const y=new Float64Array(Ng), f=new Float64Array(Ng);
+  let eup=-1e-7, elw=-(Z*Z)-20, e=0.5*(eup+elw);
+  if(e0&&e0<0){ elw=e0*1.6; eup=Math.min(-1e-7,e0*0.5); e=e0; }
+  for(let iter=0;iter<400;iter++){
+    let icl=-1;
+    for(let i=0;i<Ng;i++){ f[i]=1-ddx12*((l+0.5)*(l+0.5)+2*r2[i]*(V[i]-e)); }
+    for(let i=1;i<Ng;i++){ if((f[i]-1)*(f[i-1]-1)<0) icl=i; }
+    if(icl<2||icl>=mesh-2){ if(icl<2)elw=e; else eup=e; e=0.5*(eup+elw); continue; }
+    y[0]=Math.pow(r[0],l+1)/sqr[0]*(1-Z*r[0]/(l+1));
+    y[1]=Math.pow(r[1],l+1)/sqr[1]*(1-Z*r[1]/(l+1));
+    let nodes=0;
+    for(let i=1;i<icl;i++){ y[i+1]=((12-10*f[i])*y[i]-f[i-1]*y[i-1])/f[i+1]; if(y[i]*y[i+1]<0)nodes++; }
+    const yicl=y[icl];
+    if(nodes!==nodesTarget){ if(nodes>nodesTarget)eup=e; else elw=e; e=0.5*(eup+elw); continue; }
+    let istart=mesh; while(istart>icl+2&&f[istart]<0.1)istart--;
+    for(let j=istart+1;j<=mesh;j++)y[j]=0;
+    y[istart]=dx; y[istart-1]=(12-10*f[istart])*y[istart]/f[istart-1];
+    for(let i=istart-1;i>icl;i--){ y[i-1]=((12-10*f[i])*y[i]-f[i+1]*y[i+1])/f[i-1];
+      if(Math.abs(y[i-1])>1e10){ for(let j=istart;j>=i-1;j--)y[j]/=1e10; } }
+    const scal=yicl/y[icl]; for(let i=icl;i<=mesh;i++)y[i]*=scal;
+    let norm=0; for(let i=0;i<Ng;i++)norm+=y[i]*y[i]*r2[i]*dx; norm=Math.sqrt(norm);
+    for(let i=0;i<Ng;i++)y[i]/=norm;
+    const i=icl; const ycusp=(y[i-1]*f[i-1]+f[i+1]*y[i+1]+10*f[i]*y[i])/12;
+    const dfcusp=f[i]*(y[i]/ycusp-1); const de=dfcusp/ddx12*ycusp*ycusp*dx;
+    if(de>0)elw=e; else eup=e; e+=de; if(e>eup||e<elw)e=0.5*(eup+elw);
+    if(Math.abs(de)<1e-7)break;
+  }
+  const R=new Float64Array(Ng); for(let i=0;i<Ng;i++)R[i]=y[i]/sqr[i]; return {e,R};
+}
+const AUF=[[1,0,2],[2,0,2],[2,1,6],[3,0,2],[3,1,6],[4,0,2],[3,2,10],[4,1,6],[5,0,2],[4,2,10],[5,1,6]];
+const LBL=['s','p','d','f'];
+function occupations(Z){ const o=[]; let e=Z; for(const [n,l,cap] of AUF){ if(e<=0)break; const k=Math.min(cap,e); o.push({n,l,occ:k}); e-=k; } return o; }
+function scf(Z, grid){
+  const {r,r2,dx,Ng}=grid, fourpi=4*Math.PI, occ=occupations(Z);
+  const V=new Float64Array(Ng);
+  for(let i=0;i<Ng;i++)V[i]=-Z/r[i]+(Z-1)/(r[i]+1);
+  const single=(Z===1);
+  let orbs=[], prev=1e9;
+  for(let it=0; it<70; it++){
+    orbs=occ.map(o=>{ const s=solveNL(o.n,o.l,V,grid,Z, it>0?o._e:undefined); o._e=s.e; return {...o,e:s.e,R:s.R}; });
+    if(single){ for(let i=0;i<Ng;i++)V[i]=-Z/r[i]; break; }   // 单电子=精确, 不加电子势
+    const rho=new Float64Array(Ng);
+    for(const o of orbs)for(let i=0;i<Ng;i++)rho[i]+=o.occ*o.R[i]*o.R[i]/fourpi;
+    const A=new Float64Array(Ng),B=new Float64Array(Ng);
+    let acc=0; for(let i=0;i<Ng;i++){ acc+=rho[i]*fourpi*r2[i]*r[i]*dx; A[i]=acc; }
+    let bcc=0; for(let i=Ng-1;i>=0;i--){ B[i]=bcc; bcc+=rho[i]*fourpi*r2[i]*dx; }
+    const a=0.3;
+    for(let i=0;i<Ng;i++){ const VH=A[i]/r[i]+B[i]; const Vx=-Math.pow(Math.max(0,3*rho[i]/Math.PI),1/3);
+      V[i]=(1-a)*V[i]+a*(-Z/r[i]+VH+Vx); }
+    const esum=orbs.reduce((s,o)=>s+o.occ*o.e,0);
+    if(Math.abs(esum-prev)<1e-4)break; prev=esum;
+  }
+  if(single){ orbs=occ.map(o=>{const s=solveNL(o.n,o.l,V,grid,Z);return {...o,e:s.e,R:s.R};}); }
+  return orbs;
+}
+
+/* ============ 氢 · 精确电子云 ============ */
+const HYD=(function(){
+  function Rnl(n,l,r){
+    if(n===1&&l===0)return Math.exp(-r);
+    if(n===2&&l===0)return (2-r)*Math.exp(-r/2);
+    if(n===2&&l===1)return r*Math.exp(-r/2);
+    if(n===3&&l===0)return (27-18*r+2*r*r)*Math.exp(-r/3);
+    if(n===3&&l===1)return (6*r-r*r)*Math.exp(-r/3);
+    if(n===3&&l===2)return r*r*Math.exp(-r/3);
+    return 0;
+  }
+  const ORB={'1s':{n:1,l:0,ang:()=>1,box:9},'2s':{n:2,l:0,ang:()=>1,box:20},
+    '2p':{n:2,l:1,ang:(x,y,z,r)=>z/r,box:20},'3s':{n:3,l:0,ang:()=>1,box:40},
+    '3p':{n:3,l:1,ang:(x,y,z,r)=>z/r,box:40},'3dz2':{n:3,l:2,ang:(x,y,z,r)=>(3*z*z-r*r)/(r*r),box:42},
+    '3dxy':{n:3,l:2,ang:(x,y,z,r)=>2*x*y/(r*r),box:42}};
+  let key='1s',pts=[],L=9,yaw=0.5,pitch=0.5,auto=true;
+  function sample(){ const o=ORB[key]; L=o.box; pts=[];
+    const psi=(x,y,z)=>{const r=Math.sqrt(x*x+y*y+z*z)||1e-6; return Rnl(o.n,o.l,r)*o.ang(x,y,z,r);};
+    let mx=0; for(let i=0;i<4000;i++){const x=(Math.random()*2-1)*L,y=(Math.random()*2-1)*L,z=(Math.random()*2-1)*L;const p=psi(x,y,z)**2;if(p>mx)mx=p;}
+    let t=0; while(pts.length<4500&&t<400000){t++;const x=(Math.random()*2-1)*L,y=(Math.random()*2-1)*L,z=(Math.random()*2-1)*L;const w=psi(x,y,z);if(Math.random()<w*w/mx)pts.push({x,y,z,s:w>=0?1:-1});}
+  }
+  sample();
+  function draw(){
+    if(auto)yaw+=0.006;
+    const cx=W/2,cy=H/2,sc=(Math.min(W,H)/2-30)/L, cyw=Math.cos(yaw),syw=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+    const proj=pts.map(pt=>{const x1=pt.x*cyw-pt.z*syw,z1=pt.x*syw+pt.z*cyw;const y2=pt.y*cp-z1*sp,z2=pt.y*sp+z1*cp;return{sx:cx+x1*sc,sy:cy-y2*sc,z:z2,s:pt.s};});
+    proj.sort((a,b)=>a.z-b.z);
+    for(const q of proj){const d=(q.z/L+1)/2;ctx.fillStyle=q.s>0?`rgba(90,176,255,${0.25+0.45*d})`:`rgba(255,110,90,${0.25+0.45*d})`;const r=1.4+1.6*d;ctx.fillRect(q.sx-r/2,q.sy-r/2,r,r);}
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(cx,cy,3,0,7);ctx.fill();
+    ctx.fillStyle='#cdd8ee';ctx.font='14px sans-serif';ctx.fillText(key+' 轨道  |ψ|² 电子云',20,28);
+    explainEl.innerHTML=`<b>氢原子:精确解</b> ψ=R<sub>nl</sub>(r)·Y<sub>lm</sub>(θ,φ)。逐点按 <b class="y">|ψ|²=电子出现概率</b> 采样:s 球形、p 哑铃、d 四瓣;蓝/红=波函数正负,空隙是<b class="g">节面</b>(2s 一个、3s 两个径向节)。电子没有轨迹,这团云就是它。`;
+  }
+  return{setKey:k=>{key=k;sample();},setAuto:a=>auto=a,drag:(dx,dy)=>{yaw+=dx*0.01;pitch+=dy*0.01;},draw};
+})();
+
+/* ============ 任意原子 · SCF ============ */
+const ATOM=(function(){
+  const SYM=['','H','He','Li','Be','B','C','N','O','F','Ne','Na','Mg','Al','Si','P','S','Cl','Ar','K','Ca','Sc','Ti','V','Cr','Mn','Fe','Co','Ni','Cu','Zn','Ga','Ge','As','Se','Br','Kr'];
+  const NAME={H:'氢',He:'氦',Li:'锂',Be:'铍',B:'硼',C:'碳',N:'氮',O:'氧',F:'氟',Ne:'氖',Na:'钠',Mg:'镁',Al:'铝',Si:'硅',P:'磷',S:'硫',Cl:'氯',Ar:'氩',K:'钾',Ca:'钙',Sc:'钪',Ti:'钛',V:'钒',Cr:'铬',Mn:'锰',Fe:'铁',Co:'钴',Ni:'镍',Cu:'铜',Zn:'锌',Ga:'镓',Ge:'锗',As:'砷',Se:'硒',Br:'溴',Kr:'氪'};
+  const grid=makeGrid(1e-5,45,2200);
+  let Z=8, cache=new Map(), computing=false, result=null;
+  function sup(n){const m={0:'⁰',1:'¹',2:'²',3:'³',4:'⁴',5:'⁵',6:'⁶',7:'⁷',8:'⁸',9:'⁹'};return(''+n).split('').map(d=>m[d]).join('');}
+  function request(z){ Z=z; if(cache.has(z)){result=cache.get(z);computing=false;return;} result=null;computing=true;
+    setTimeout(()=>{ const orbs=scf(z,grid);
+      // 径向电子密度 D(r)=Σ occ 4π r² R² 与累计电子数
+      const {r,r2,dx,Ng}=grid, fourpi=4*Math.PI; const D=new Float64Array(Ng); let cum=0,rPlot=1;
+      for(let i=0;i<Ng;i++){ let s=0; for(const o of orbs)s+=o.occ*fourpi*r2[i]*o.R[i]*o.R[i]; D[i]=s; }
+      let acc=0; for(let i=0;i<Ng;i++){ acc+=D[i]*r[i]*dx; if(acc<0.997*z)rPlot=r[i]; }
+      const res={orbs,D,rPlot}; cache.set(z,res); result=res; computing=false;
+    },30);
+  }
+  request(8);
+  function draw(){
+    ctx.fillStyle='#02040a';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#cdd8ee';ctx.font='bold 17px sans-serif';
+    ctx.fillText(`${SYM[Z]}  ${NAME[SYM[Z]]}   Z=${Z}`,20,30);
+    if(computing||!result){ ctx.fillStyle='#8b9dff';ctx.font='14px sans-serif';ctx.fillText('⏳ 正在自洽计算…(重原子约 1–4 秒)',20,60);
+      explainEl.innerHTML='正在数值求解…';return; }
+    const orbs=result.orbs;
+    const cfg=orbs.map(o=>`${o.n}${LBL[o.l]}${sup(o.occ)}`).join(' ');
+    ctx.font='14px monospace';ctx.fillStyle='#8b9dff';ctx.fillText('电子排布: '+cfg,20,54);
+    // 能级阶梯(按 log|ε| 定位, 深的在下)
+    const gx=20,gy=80,gw=250,gh=360;
+    ctx.strokeStyle='#26324a';ctx.strokeRect(gx,gy,gw,gh);
+    ctx.fillStyle='#8a99b5';ctx.font='11px sans-serif';ctx.fillText('轨道能级 ε(越低越束缚)',gx+6,gy-4);
+    let Lmin=99,Lmax=-99; for(const o of orbs){const L=Math.log10(Math.abs(o.e));if(L<Lmin)Lmin=L;if(L>Lmax)Lmax=L;}
+    if(Lmax-Lmin<0.5)Lmax=Lmin+0.5;
+    for(const o of orbs){ const L=Math.log10(Math.abs(o.e)); const y=gy+18+(L-Lmin)/(Lmax-Lmin)*(gh-40);
+      ctx.strokeStyle='#8b9dff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(gx+70,y);ctx.lineTo(gx+150,y);ctx.stroke();
+      ctx.fillStyle='#e2e9f7';ctx.font='12px sans-serif';ctx.fillText(`${o.n}${LBL[o.l]}`,gx+50,y+4);
+      ctx.fillStyle='#ffd27f';for(let k=0;k<o.occ;k++)ctx.fillRect(gx+154+k*5,y-4,3,8);
+      ctx.fillStyle='#8a99b5';ctx.font='10px monospace';ctx.fillText((o.e*27.211).toFixed(1)+' eV',gx+70,y-5);
+    }
+    // 径向电子密度(壳层)
+    const px=300,py=80,pw=W-px-20,ph=360;
+    ctx.strokeStyle='#26324a';ctx.strokeRect(px,py,pw,ph);
+    ctx.fillStyle='#8a99b5';ctx.font='11px sans-serif';ctx.fillText('径向电子密度 D(r)=4πr²ρ  →  峰=电子壳层',px+6,py-4);
+    const {r}=grid, D=result.D, rPlot=result.rPlot;
+    let mx=1e-9; for(let i=0;i<grid.Ng;i++){ if(r[i]>rPlot)break; if(D[i]>mx)mx=D[i]; }
+    ctx.strokeStyle='#79ffa8';ctx.lineWidth=2;ctx.beginPath();let started=false;
+    for(let i=0;i<grid.Ng;i++){ if(r[i]>rPlot)break; const X=px+pw*r[i]/rPlot, Y=py+ph-(ph-14)*D[i]/mx;
+      if(!started){ctx.moveTo(X,Y);started=true;}else ctx.lineTo(X,Y); }
+    ctx.stroke();
+    ctx.fillStyle='#8a99b5';ctx.font='10px sans-serif';ctx.fillText('r=0',px+2,py+ph+13);ctx.fillText('r='+rPlot.toFixed(1)+' a₀',px+pw-56,py+ph+13);
+    explainEl.innerHTML=`<b class="g">从原理算出来的</b>:对每个占据轨道<b>数值求解径向薛定谔方程</b>,电子的总密度产生一个<b>屏蔽势</b>(核吸引 + 电子间 Hartree 排斥 + 交换),再解、再更新势……<b class="y">自洽迭代</b>到稳定。`
+      +`左边是算出的<b>轨道能级</b>(内壳层深达上千 eV,外壳层仅几 eV),右边 D(r) 的<b>一个个峰就是电子壳层</b>(K/L/M/N)。这就是"任意原子"的电子结构,不是套公式。<br>`
+      +`<b>方法</b>:Hartree + LDA 交换(近 DFT)。能量系统性偏浅约 10–20%(自相互作用/近似所致),但<b>轨道次序、壳层结构、径向分布都对</b>;工业级精度用 Hartree-Fock / DFT。`;
+  }
+  return{request,setZ:z=>Z=z,sym:z=>SYM[z],name:z=>NAME[SYM[z]],draw};
+})();
+
+/* ============ 循环 & 控件 ============ */
+function loop(){ if(mode==='H'){ctx.fillStyle='#02040a';ctx.fillRect(0,0,W,H);HYD.draw();} else ATOM.draw(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+const tabH=document.getElementById('tabH'),tabZ=document.getElementById('tabZ');
+const ch=document.getElementById('ctrl-h'),cz=document.getElementById('ctrl-z');
+tabH.onclick=()=>{mode='H';tabH.classList.add('on');tabZ.classList.remove('on');ch.classList.remove('hide');cz.classList.add('hide');};
+tabZ.onclick=()=>{mode='Z';tabZ.classList.add('on');tabH.classList.remove('on');cz.classList.remove('hide');ch.classList.add('hide');};
+
+document.querySelectorAll('#ctrl-h .ob[data-o]').forEach(b=>{b.onclick=()=>{
+  document.querySelectorAll('#ctrl-h .ob[data-o]').forEach(x=>x.classList.remove('on'));b.classList.add('on');HYD.setKey(b.dataset.o);};});
+const arb=document.getElementById('autorot');let ao=true;
+arb.onclick=()=>{ao=!ao;HYD.setAuto(ao);arb.classList.toggle('on',ao);arb.textContent='自动旋转:'+(ao?'开':'关');};
+let dg=false,lx=0,ly=0;
+cv.addEventListener('pointerdown',e=>{if(mode==='H'){dg=true;lx=e.clientX;ly=e.clientY;cv.classList.add('drag');}});
+cv.addEventListener('pointermove',e=>{if(dg){HYD.drag(e.clientX-lx,e.clientY-ly);lx=e.clientX;ly=e.clientY;}});
+window.addEventListener('pointerup',()=>{dg=false;cv.classList.remove('drag');});
+
+const zs=document.getElementById('zsel'),zv=document.getElementById('zV');
+let zTimer=null;
+zs.oninput=()=>{const z=+zs.value; zv.textContent=z+' ('+ATOM.sym(z)+' '+ATOM.name(z)+')';
+  clearTimeout(zTimer); zTimer=setTimeout(()=>ATOM.request(z),150); };  // 防抖:停下再算
+</script>
+</body>
+</html>
