@@ -22,6 +22,8 @@
   - 同一条绳并排跑：几何约束（PBD，不算力）vs 真·受力分析（每段弹簧张力 ΣF=ma）。两者都落到同一条 cosh 上，验证刚性极限下等价；真受力版实时画出张力分布。可鼠标提任意点扰动。
 - **布料垂坠 cloth3d.html** [online](https://superzhangmch.github.io/tiny_tools/cloth3d.html)
   - 绳子升到二维的 3D 质点弹簧网格（PBD，结构/抗剪/抗弯三种边）。场景：两角/四角悬挂、搭在横杆、落在球上、提起一点。可旋转视角、开风。
+- **学习笔记：理想气体 & 统计力学** [理想气体_统计力学_学习笔记.md](理想气体_统计力学_学习笔记.md)
+  - 从 idealgas 模拟追问出来的一篇笔记：温度=平均动能、k_B、能量均分、PV=NkT、玻尔兹曼/麦克斯韦分布怎么来的、平衡态怎么衡量、统计力学 vs 热力学。
 
 ### 《说文解字》检索: shuowenjiezi_search.html
 - [online](https://superzhangmch.github.io/tiny_tools/shuowenjiezi_search.html)
