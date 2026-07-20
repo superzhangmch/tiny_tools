@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>理想气体 · 分子动力学 (温度/压强/PV图/热传导)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0d1117; color:#e6edf3;
+    font:14px/1.5 -apple-system,"PingFang SC","Segoe UI",sans-serif;
+    display:flex; flex-direction:column; align-items:center; padding:18px; }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  .sub { color:#8b949e; font-size:12px; margin-bottom:14px; }
+  .wrap { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
+  canvas { background:#05070a; border:1px solid #30363d; border-radius:8px; display:block; }
+  .side { display:flex; flex-direction:column; gap:12px; }
+  .stats { background:#161b22; border:1px solid #30363d; border-radius:8px; padding:10px 14px;
+    width:280px; font-variant-numeric:tabular-nums; }
+  .stats .row { display:flex; justify-content:space-between; padding:2px 0; }
+  .stats .k { color:#8b949e; }
+  .stats .v { color:#e6edf3; font-weight:600; }
+  .big { font-size:20px; color:#58a6ff; }
+  .law { margin-top:5px; padding-top:7px; border-top:1px solid #30363d; }
+  .law .v { color:#3fb950; font-size:16px; }
+  .heat .v { color:#f0883e; }
+  .lbl { color:#8b949e; font-size:12px; margin:2px 2px; }
+  .panel { margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+    gap:10px 18px; width:900px; max-width:100%; }
+  .ctrl { display:flex; flex-direction:column; gap:3px; }
+  .ctrl label { font-size:12px; color:#8b949e; display:flex; justify-content:space-between; }
+  .ctrl label b { color:#58a6ff; font-weight:600; }
+  .ctrl.dim { opacity:.4; }
+  input[type=range]{ width:100%; accent-color:#58a6ff; }
+  .row2 { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button { background:#21262d; color:#e6edf3; border:1px solid #30363d; border-radius:6px;
+    padding:6px 12px; font-size:13px; cursor:pointer; }
+  button:hover { background:#30363d; }
+  button.on { background:#1f6feb; border-color:#1f6feb; }
+  .seg { display:inline-flex; border:1px solid #30363d; border-radius:6px; overflow:hidden; }
+  .seg button { border:none; border-radius:0; }
+  .seg button.on { background:#1f6feb; }
+  .tip { color:#6e7681; font-size:12px; margin-top:12px; width:900px; max-width:100%; }
+  code { background:#161b22; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+  <h1>理想气体 · 分子动力学</h1>
+  <div class="sub">底层只有弹性碰撞 + 热壁。温度、压强、麦克斯韦分布、<code>PV=NkT</code>、P–V 循环、热传导 —— 全是<b>测</b>出来的。</div>
+
+  <div class="wrap">
+    <canvas id="box" width="480" height="420"></canvas>
+    <div class="side">
+      <div class="stats">
+        <div class="row"><span class="k">粒子数 N</span><span class="v" id="sN">—</span></div>
+        <div class="row"><span class="k">温度 T (平均动能)</span><span class="v big" id="sT">—</span></div>
+        <div class="row"><span class="k">压强 P</span><span class="v" id="sP">—</span></div>
+        <div class="row"><span class="k">体积 V</span><span class="v" id="sV">—</span></div>
+        <div class="law"><div class="row"><span class="k">PV / NkT</span><span class="v" id="sLaw">—</span></div></div>
+        <div class="law heat"><div class="row"><span class="k">热流 Q̇  热壁→ / →冷壁</span><span class="v" id="sQ">—</span></div></div>
+      </div>
+      <div>
+        <div class="lbl">速率分布 (蓝柱=实测, 红线=麦克斯韦理论)</div>
+        <canvas id="hist" width="280" height="150"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap" style="margin-top:14px">
+    <div>
+      <div class="lbl">P–V 图 (灰虚线=当前温度的等温线 PV=NkT;轨迹贴线=等温,穿线=绝热)</div>
+      <canvas id="pv" width="360" height="280"></canvas>
+    </div>
+    <div>
+      <div class="lbl">温度分布(沿 x 方向;冷热壁模式下能看到梯度与热传导)</div>
+      <canvas id="prof" width="360" height="140"></canvas>
+    </div>
+  </div>
+
+  <div class="row2">
+    <button id="playBtn" class="on">⏸ 暂停</button>
+    <button id="resetBtn">↻ 重置(全同初速)</button>
+    <button id="heatUp">🔥 加热</button>
+    <button id="heatDn">❄️ 降温</button>
+    <button id="twoGas">⚗️ 双气体扩散</button>
+    <button id="clearPV">🧹 清 P–V 轨迹</button>
+  </div>
+  <div class="row2">
+    <span style="color:#6e7681">壁面模式:</span>
+    <div class="seg" id="wallSeg">
+      <button data-mode="adia" class="on">🧊 绝热壁(弹性)</button>
+      <button data-mode="iso">🌡 等温壁(恒温)</button>
+      <button data-mode="grad">🔥❄️ 冷热壁(梯度)</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ctrl"><label>粒子数 <b id="vN">300</b></label>
+      <input id="cN" type="range" min="20" max="700" step="10" value="300"></div>
+    <div class="ctrl"><label>初始温度 <b id="vTemp">2.5</b></label>
+      <input id="cTemp" type="range" min="0.3" max="8" step="0.1" value="2.5"></div>
+    <div class="ctrl"><label>体积(活塞,←压缩) <b id="vVol">1.00</b></label>
+      <input id="cVol" type="range" min="0.35" max="1" step="0.01" value="1"></div>
+    <div class="ctrl"><label>分子半径 <b id="vR">4</b></label>
+      <input id="cR" type="range" min="2" max="8" step="1" value="4"></div>
+    <div class="ctrl" id="wrapThot"><label>左壁温度(热) <b id="vThot">5.0</b></label>
+      <input id="cThot" type="range" min="0.3" max="10" step="0.1" value="5"></div>
+    <div class="ctrl" id="wrapTcold"><label>右壁温度(冷) <b id="vTcold">1.0</b></label>
+      <input id="cTcold" type="range" min="0.3" max="10" step="0.1" value="1"></div>
+  </div>
+
+  <div class="tip">
+    <b>看 P–V + 绝热/等温对比:</b> 选`绝热壁`,慢慢拖体积滑块压缩 → 轨迹会<b>穿过</b>等温虚线(温度升,`PV^γ`=const,2D 里 γ=2);
+    再选`等温壁`(左右同温)重复 → 轨迹<b>贴着</b>虚线走(`PV`=const)。<br>
+    <b>看热传导:</b> 选`冷热壁`,左热右冷 → 温度分布图出现<b>梯度</b>,统计栏 `Q̇` 显示热壁持续注入、冷壁持续带走的能量(傅里叶热传导)。<br>
+    <span style="color:#586069">2D、等质量硬盘、k=m=1。热壁用麦克斯韦通量分布重发速度。</span>
+  </div>
+
+<script>
+"use strict";
+const boxC=document.getElementById('box'), bx=boxC.getContext('2d');
+const W=boxC.width, H=boxC.height;
+const histC=document.getElementById('hist'), hx=histC.getContext('2d');
+const pvC=document.getElementById('pv'), pvx=pvC.getContext('2d');
+const profC=document.getElementById('prof'), pfx=profC.getContext('2d');
+
+// 状态
+let N=300, radius=4, initTemp=2.5;
+let running=true, twoGas=false, wallMode='adia';   // adia | iso | grad
+let Thot=5, Tcold=1;
+let px,py,vx,vy,grp;
+let wallTarget=W, wallX=W, wallV=0;
+
+// 测量
+let wallImpulse=0, simTime=0, lastMeasureT=0, measP=0;
+let heatLeft=0, heatRight=0, measQL=0, measQR=0;
+
+// P-V 轨迹
+const trailMax=700; let trailV=new Float32Array(trailMax), trailP=new Float32Array(trailMax), trailN=0, trailHead=0;
+
+const rand=(a,b)=>a+Math.random()*(b-a);
+function gaussian(){ return Math.sqrt(-2*Math.log(Math.random()+1e-12))*Math.cos(6.2831853*Math.random()); }
+
+function initParticles(){
+  px=new Float32Array(N); py=new Float32Array(N);
+  vx=new Float32Array(N); vy=new Float32Array(N); grp=new Int8Array(N);
+  const sp=Math.sqrt(2*initTemp);
+  for(let i=0;i<N;i++){
+    grp[i]=(twoGas && i<N/2)?0:(twoGas?1:0);
+    if(twoGas) px[i]= grp[i]===0? rand(radius,wallX*0.45): rand(wallX*0.55,wallX-radius);
+    else       px[i]= rand(radius,wallX-radius);
+    py[i]=rand(radius,H-radius);
+    const a=rand(0,6.2831853); vx[i]=sp*Math.cos(a); vy[i]=sp*Math.sin(a);
+  }
+  wallImpulse=0; simTime=0; lastMeasureT=0; heatLeft=0; heatRight=0;
+}
+function clearTrail(){ trailN=0; trailHead=0; }
+
+// 热壁重发(麦克斯韦通量分布)。dir=+1 左壁向右,-1 右壁向左
+function thermalReflect(i,Tw,dir){
+  const pre=0.5*(vx[i]*vx[i]+vy[i]*vy[i]);
+  vx[i]=dir*Math.sqrt(-2*Tw*Math.log(Math.random()+1e-12));
+  vy[i]=Math.sqrt(Tw)*gaussian();
+  const post=0.5*(vx[i]*vx[i]+vy[i]*vy[i]);
+  return post-pre;   // 气体从该壁获得的能量
+}
+
+function step(dt){
+  const prev=wallX; wallX+=(wallTarget-wallX)*0.06; wallV=(wallX-prev)/dt;
+  for(let i=0;i<N;i++){ px[i]+=vx[i]*dt; py[i]+=vy[i]*dt; }
+
+  const leftTherm  = (wallMode==='iso')||(wallMode==='grad');
+  const rightTherm = (wallMode==='iso')||(wallMode==='grad');
+  const TL = wallMode==='iso' ? initTemp : Thot;
+  const TR = wallMode==='iso' ? initTemp : Tcold;
+
+  for(let i=0;i<N;i++){
+    // 左壁
+    if(px[i]<radius){ px[i]=radius; const b=vx[i];
+      if(leftTherm) heatLeft+=thermalReflect(i,TL,+1); else vx[i]=-vx[i];
+      wallImpulse+=Math.abs(vx[i]-b); }
+    // 右壁(活塞)
+    if(px[i]>wallX-radius){ px[i]=wallX-radius; const b=vx[i];
+      if(rightTherm) heatRight+=thermalReflect(i,TR,-1); else vx[i]=2*wallV-vx[i];
+      wallImpulse+=Math.abs(vx[i]-b); }
+    // 上下壁:弹性
+    if(py[i]<radius){ py[i]=radius; vy[i]=-vy[i]; wallImpulse+=2*Math.abs(vy[i]); }
+    if(py[i]>H-radius){ py[i]=H-radius; vy[i]=-vy[i]; wallImpulse+=2*Math.abs(vy[i]); }
+  }
+  collidePairs();
+  simTime+=dt;
+}
+
+function collidePairs(){
+  const cellSize=radius*2+1;
+  const cols=Math.max(1,Math.floor(wallX/cellSize)), rows=Math.max(1,Math.floor(H/cellSize));
+  const heads=new Int32Array(cols*rows).fill(-1), next=new Int32Array(N).fill(-1);
+  for(let i=0;i<N;i++){
+    const cxi=Math.min(cols-1,Math.max(0,Math.floor(px[i]/cellSize)));
+    const cyi=Math.min(rows-1,Math.max(0,Math.floor(py[i]/cellSize)));
+    const c=cxi+cyi*cols; next[i]=heads[c]; heads[c]=i;
+  }
+  const r2=(2*radius)*(2*radius);
+  for(let cyi=0;cyi<rows;cyi++)for(let cxi=0;cxi<cols;cxi++){
+    for(let dy=0;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      if(dy===0&&dx<0)continue;
+      const nxk=cxi+dx, nyk=cyi+dy;
+      if(nxk<0||nxk>=cols||nyk>=rows)continue;
+      for(let i=heads[cxi+cyi*cols];i!==-1;i=next[i])
+        for(let j=heads[nxk+nyk*cols];j!==-1;j=next[j]){
+          if(dx===0&&dy===0&&j<=i)continue;
+          resolve(i,j,r2);
+        }
+    }
+  }
+}
+function resolve(i,j,r2){
+  const dx=px[j]-px[i], dy=py[j]-py[i], d2=dx*dx+dy*dy;
+  if(d2>r2||d2===0)return;
+  const d=Math.sqrt(d2), nx=dx/d, ny=dy/d;
+  const rel=(vx[j]-vx[i])*nx+(vy[j]-vy[i])*ny;
+  if(rel>0)return;
+  vx[i]+=rel*nx; vy[i]+=rel*ny; vx[j]-=rel*nx; vy[j]-=rel*ny;
+  const ov=(2*radius-d)/2; px[i]-=nx*ov; py[i]-=ny*ov; px[j]+=nx*ov; py[j]+=ny*ov;
+}
+
+function measure(){
+  let ke=0; for(let i=0;i<N;i++) ke+=0.5*(vx[i]*vx[i]+vy[i]*vy[i]);
+  const T=ke/N, A=wallX*H;
+  if(simTime-lastMeasureT>6){
+    const per=2*(wallX+H), win=simTime-lastMeasureT;
+    measP=wallImpulse/(win*per);
+    measQL=heatLeft/win; measQR=-heatRight/win;   // 冷壁带走→正值表示流出
+    wallImpulse=0; heatLeft=0; heatRight=0; lastMeasureT=simTime;
+    // 记 P-V 轨迹
+    trailV[trailHead]=A; trailP[trailHead]=measP;
+    trailHead=(trailHead+1)%trailMax; if(trailN<trailMax)trailN++;
+  }
+  return {T,A,P:measP};
+}
+
+// ---- 渲染:盒子 ----
+function speedColor(s,T){ const n=Math.min(1,s/(2.5*Math.sqrt(2*Math.max(T,.01))));
+  return `rgb(${Math.round(60+195*n)},90,${Math.round(230-180*n)})`; }
+function drawBox(T){
+  bx.clearRect(0,0,W,H);
+  bx.fillStyle='#1c2530'; bx.fillRect(wallX,0,W-wallX,H);
+  // 壁面着色提示
+  if(wallMode!=='adia'){
+    const TL=wallMode==='iso'?initTemp:Thot, TR=wallMode==='iso'?initTemp:Tcold;
+    bx.fillStyle=`rgba(${Math.min(255,TL*40)},60,${Math.max(0,200-TL*30)},.5)`; bx.fillRect(0,0,4,H);
+    bx.fillStyle=`rgba(${Math.min(255,TR*40)},60,${Math.max(0,200-TR*30)},.5)`; bx.fillRect(wallX-4,0,4,H);
+  }
+  bx.fillStyle='#4b5563'; bx.fillRect(wallX-3,0,3,H);
+  for(let i=0;i<N;i++){
+    const s=Math.sqrt(vx[i]*vx[i]+vy[i]*vy[i]);
+    bx.fillStyle= twoGas ? (grp[i]===0?'#58a6ff':'#f778ba') : speedColor(s,T);
+    bx.beginPath(); bx.arc(px[i],py[i],radius,0,6.2832); bx.fill();
+  }
+}
+// ---- 速率直方图 ----
+function drawHist(T){
+  const bins=32, maxv=Math.sqrt(2*T)*3+1e-3, h=new Float32Array(bins);
+  for(let i=0;i<N;i++){ let b=Math.floor(Math.sqrt(vx[i]*vx[i]+vy[i]*vy[i])/maxv*bins);
+    if(b<0)b=0; if(b>=bins)b=bins-1; h[b]++; }
+  let hmax=1; for(let b=0;b<bins;b++)hmax=Math.max(hmax,h[b]);
+  const HW=histC.width,HH=histC.height; hx.clearRect(0,0,HW,HH);
+  const bw=HW/bins; hx.fillStyle='#1f6feb';
+  for(let b=0;b<bins;b++){ const bh=h[b]/hmax*(HH-8); hx.fillRect(b*bw+1,HH-bh,bw-2,bh); }
+  hx.strokeStyle='#f85149'; hx.lineWidth=2; hx.beginPath();
+  let peak=0; for(let x=0;x<=HW;x++){const v=x/HW*maxv; peak=Math.max(peak,(v/T)*Math.exp(-v*v/(2*T)));}
+  for(let x=0;x<=HW;x++){ const v=x/HW*maxv, f=(v/T)*Math.exp(-v*v/(2*T))/(peak||1);
+    const y=HH-f*(HH-8); x===0?hx.moveTo(x,y):hx.lineTo(x,y); } hx.stroke();
+}
+// ---- P-V 图 ----
+function drawPV(curV,curP,T){
+  const CW=pvC.width,CH=pvC.height,m=34; pvx.clearRect(0,0,CW,CH);
+  const Vmax=W*H, Vmin=0.35*W*H*0.9;
+  let Pmax=curP; for(let k=0;k<trailN;k++)Pmax=Math.max(Pmax,trailP[k]); Pmax=Math.max(Pmax*1.2,1e-3);
+  const X=V=> m+(V-0)/(Vmax)*(CW-m-8);
+  const Y=P=> CH-m-(P/Pmax)*(CH-m-8);
+  // 轴
+  pvx.strokeStyle='#30363d'; pvx.lineWidth=1;
+  pvx.beginPath(); pvx.moveTo(m,8); pvx.lineTo(m,CH-m); pvx.lineTo(CW-8,CH-m); pvx.stroke();
+  pvx.fillStyle='#6e7681'; pvx.font='11px sans-serif';
+  pvx.fillText('P',m-8,16); pvx.fillText('V',CW-16,CH-m+16);
+  // 当前温度的等温线 PV=NkT
+  pvx.strokeStyle='#586069'; pvx.setLineDash([4,4]); pvx.beginPath();
+  for(let V=Vmin;V<=Vmax;V+=Vmax/120){ const P=N*T/V; const x=X(V),y=Y(P);
+    if(V===Vmin)pvx.moveTo(x,y); else pvx.lineTo(x,y);} pvx.stroke(); pvx.setLineDash([]);
+  // 轨迹
+  if(trailN>1){ pvx.strokeStyle='#3fb950'; pvx.lineWidth=1.6; pvx.beginPath();
+    for(let k=0;k<trailN;k++){ const idx=(trailHead-trailN+k+trailMax*2)%trailMax;
+      const x=X(trailV[idx]),y=Y(trailP[idx]); k===0?pvx.moveTo(x,y):pvx.lineTo(x,y);} pvx.stroke(); }
+  // 当前点
+  pvx.fillStyle='#f0883e'; pvx.beginPath(); pvx.arc(X(curV),Y(curP),4,0,6.2832); pvx.fill();
+}
+// ---- 温度分布 ----
+function drawProfile(){
+  const CW=profC.width,CH=profC.height,slabs=24; pfx.clearRect(0,0,CW,CH);
+  const ke=new Float32Array(slabs), cnt=new Float32Array(slabs);
+  for(let i=0;i<N;i++){ let s=Math.floor(px[i]/wallX*slabs); if(s<0)s=0; if(s>=slabs)s=slabs-1;
+    ke[s]+=0.5*(vx[i]*vx[i]+vy[i]*vy[i]); cnt[s]++; }
+  let tmax=1e-3; const Ts=new Float32Array(slabs);
+  for(let s=0;s<slabs;s++){ Ts[s]=cnt[s]>0?ke[s]/cnt[s]:0; tmax=Math.max(tmax,Ts[s]); }
+  const bw=CW/slabs;
+  for(let s=0;s<slabs;s++){ const bh=Ts[s]/tmax*(CH-14);
+    const n=Math.min(1,Ts[s]/tmax); pfx.fillStyle=`rgb(${Math.round(60+195*n)},90,${Math.round(230-180*n)})`;
+    pfx.fillRect(s*bw+1,CH-bh,bw-2,bh); }
+  pfx.fillStyle='#6e7681'; pfx.font='11px sans-serif';
+  pfx.fillText('左壁',2,12); pfx.fillText('右壁',CW-30,12);
+}
+
+// ---- 主循环 ----
+const $=id=>document.getElementById(id);
+function frame(){
+  if(running){ const sub=5,dt=1/sub; for(let s=0;s<sub;s++)step(dt); }
+  const mm=measure();
+  drawBox(mm.T); drawHist(mm.T); drawPV(mm.A,mm.P,mm.T); drawProfile();
+  $('sN').textContent=N; $('sT').textContent=mm.T.toFixed(2);
+  $('sP').textContent=mm.P.toFixed(3); $('sV').textContent=(mm.A/1000).toFixed(1)+'k';
+  $('sLaw').textContent= mm.T>0?((mm.P*mm.A)/(N*mm.T)).toFixed(3):'—';
+  $('sQ').textContent= (wallMode==='adia')?'绝热(0)':`${measQL.toFixed(2)} / ${measQR.toFixed(2)}`;
+  requestAnimationFrame(frame);
+}
+
+// ---- UI ----
+function bindRange(id,lbl,fn,fmt){ const e=$(id),o=$(lbl);
+  const u=()=>{fn(parseFloat(e.value)); o.textContent=fmt(parseFloat(e.value));}; e.addEventListener('input',u); u(); }
+bindRange('cN','vN', v=>{N=v; initParticles(); clearTrail();}, v=>v.toFixed(0));
+bindRange('cTemp','vTemp', v=>{initTemp=v;}, v=>v.toFixed(1));
+bindRange('cVol','vVol', v=>{wallTarget=W*v;}, v=>v.toFixed(2));
+bindRange('cR','vR', v=>{radius=v;}, v=>v.toFixed(0));
+bindRange('cThot','vThot', v=>{Thot=v;}, v=>v.toFixed(1));
+bindRange('cTcold','vTcold', v=>{Tcold=v;}, v=>v.toFixed(1));
+
+$('playBtn').onclick=e=>{running=!running; e.target.textContent=running?'⏸ 暂停':'▶ 播放'; e.target.classList.toggle('on',running);};
+$('resetBtn').onclick=()=>{twoGas=false; $('twoGas').classList.remove('on'); initParticles(); clearTrail();};
+$('heatUp').onclick=()=>{for(let i=0;i<N;i++){vx[i]*=1.08;vy[i]*=1.08;}};
+$('heatDn').onclick=()=>{for(let i=0;i<N;i++){vx[i]*=0.93;vy[i]*=0.93;}};
+$('twoGas').onclick=e=>{twoGas=!twoGas; e.target.classList.toggle('on',twoGas); initParticles(); clearTrail();};
+$('clearPV').onclick=clearTrail;
+
+function updWallUI(){
+  const showT = wallMode==='grad';
+  $('wrapThot').classList.toggle('dim',!showT);
+  $('wrapTcold').classList.toggle('dim',!showT);
+}
+document.querySelectorAll('#wallSeg [data-mode]').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('#wallSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); wallMode=b.dataset.mode; clearTrail(); updWallUI(); };
+});
+
+updWallUI(); initParticles(); frame();
+</script>
+</body>
+</html>
