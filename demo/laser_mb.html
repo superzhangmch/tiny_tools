@@ -44,6 +44,36 @@
 </div>
 
 <script>
+/*
+ * ============ 怎么判断"这是真起振的激光",以及各图怎么读 ============
+ *
+ * 求解的方程(半经典,第一性原理,没有一行"画正弦/到点就亮"的作弊):
+ *   ∂E/∂t = ∂H/∂z − ∂P/∂t − κE      (麦克斯韦,真电磁场;κ=腔损耗/输出)
+ *   P̈ + γ2·Ṗ + ω0²·P = −σ·N·E        (二能级原子极化;N>0 反转→负阻尼→增益)
+ *   Ṅ = (N0 − N)/T1 + ζ·E·Ṗ           (反转:泵浦抽到 N0;场从介质取能→N 降=增益饱和)
+ * 只用极小随机噪声做种子(模拟自发辐射)。相干/单频/阈值/钳位全是解出来的,不是设定的。
+ *
+ * 三块证据图(过阈值时应同时成立):
+ *   ① 场能:从 ~1e-7 噪声【自发指数涨起】再饱和。刚点亮时上下起伏=弛豫振荡(relaxation
+ *      oscillation),真实激光也有,正常,不是 bug。
+ *   ② 某点 E(t):变成【干净正弦】= 相干。阈值以下是杂乱衰减的小噪声。
+ *   ③ 频谱(探针 E(t) 的 DFT):【一根靠左的独高尖峰】= 单频。右侧快速衰减的小尾巴是
+ *      "频谱泄漏"(采样窗口非整数个周期),正常;阈值以下频谱矮而平摊。
+ *      注意:探针必须【每一步都采样】(一个振荡周期≈60步),否则欠采样混叠→频谱变成
+ *      往右升的锯齿假象(这是之前的 bug)。
+ *
+ * E(z):腔内相干驻波;幅度沿腔轻微起伏=几个纵模拍频,正常。
+ * N(z):红=反转(增益),蓝=吸收。
+ *
+ * 杀死实验(证明不是硬画的):
+ *   - 「增益 σ:开→关」→ 立刻熄灭(证明撑着它的是受激辐射);
+ *   - 「噪声种子:有→无」再重置 → 永远不亮(证明是放大自发噪声起振)。
+ * 阈值曲线(最硬):扫描泵浦 → 输出-泵浦有【骤升拐点】=阈值;稳态反转过阈后【变平】=
+ *   增益钳位。把腔损耗 κ 调大重扫,阈值按理论方向右移(参数一致性)。
+ *
+ * 求解器已在 node(laser_mb_dev.js)验证:N0<阈值→场衰减;N0>阈值→场从噪声长起并
+ * 把反转钳在阈值附近(增益饱和),与激光理论一致。
+ */
 const cv=document.getElementById('c'), ctx=cv.getContext('2d'), W=cv.width, H=cv.height;
 const Nz=220, gL=50, gR=170, dt=0.5, w0=2*Math.PI/30, w02=w0*w0;
 const g2=0.03, SIGMA=0.02, invT1=0.002, zeta=0.05;
@@ -94,7 +124,6 @@ function drawLive(){
   // 读数
   let en=0; for(let i=0;i<Nz;i++) en+=Ex[i]*Ex[i]+Hy[i]*Hy[i];
   let nav=0; for(let i=gL;i<gR;i++) nav+=N[i]; nav/=(gR-gL);
-  if(tstep%4===0){ enHist.push(en); if(enHist.length>200)enHist.shift(); probeHist.push(Ex[110]); if(probeHist.length>200)probeHist.shift(); }
   // 三块证据图
   const py=300, ph=140, pw=210;
   // ① 场能起振
@@ -146,7 +175,11 @@ function drawSweep(){
 }
 
 const explainEl=document.getElementById('explain');
-function loop(){ if(view==='live'){ if(running){ for(let s=0;s<26;s++) step(Ex,Hy,P,Pd,N,N0); } drawLive(); } else drawSweep(); requestAnimationFrame(loop); }
+function loop(){ if(view==='live'){
+    if(running){ for(let s=0;s<26;s++){ step(Ex,Hy,P,Pd,N,N0);
+      probeHist.push(Ex[110]); if(probeHist.length>256)probeHist.shift(); tstep++; }  // 每步采样 → 一个周期~60点, 不混叠
+      let en=0; for(let i=0;i<Nz;i++) en+=Ex[i]*Ex[i]+Hy[i]*Hy[i]; enHist.push(en); if(enHist.length>200)enHist.shift(); }
+    drawLive(); } else drawSweep(); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 
 function runSweep(){ sweeping=true; view='sweep';
