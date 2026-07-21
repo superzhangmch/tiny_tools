@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>激光 · 麦克斯韦–布洛赫 + "真起振"证据(阈值曲线/频谱/杀死实验)</title>
+<style>
+  :root { --bg:#0b0f17; --panel:#141b28; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5; --accent:#ff5a7a; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  .wrap { max-width:730px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { font-size:12px; color:var(--dim); margin:0 0 12px; line-height:1.5; }
+  canvas { display:block; width:100%; max-width:700px; background:#02040a; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.5); }
+  .ctrl { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-top:12px; }
+  .row { display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; }
+  .row label { font-size:12px; color:var(--dim); width:170px; }
+  input[type=range]{ flex:1; accent-color:var(--accent); }
+  .val{ width:70px; text-align:right; font-family:monospace; color:var(--accent); font-size:13px; }
+  button { background:#1b2536;color:var(--txt);border:1px solid var(--line);padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer; }
+  button.on{ background:var(--accent); color:#180209; border-color:var(--accent); font-weight:600; }
+  .explain { background:#0e1522; border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13px; line-height:1.6; color:#cdd8ee; }
+  .explain b.y{color:#ffd27f;} .explain b.g{color:#79ffa8;} .explain b.r{color:#ff8a9a;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>激光 · 麦克斯韦–布洛赫(带"真起振"证据)</h1>
+  <p class="sub">真电磁场 + 二能级原子。下面三块小图 = 起振的三条硬证据:场能起振、E(t) 相干正弦、频谱单峰。</p>
+  <canvas id="c" width="700" height="520"></canvas>
+
+  <div class="ctrl">
+    <div class="row"><label>泵浦(目标反转 N₀)</label><input type="range" id="pump" min="-50" max="60" step="1" value="35"><span class="val" id="pumpV">0.35</span></div>
+    <div class="row"><label>腔损耗 κ</label><input type="range" id="loss" min="1" max="12" step="1" value="4"><span class="val" id="lossV">0.004</span></div>
+    <div class="row">
+      <button id="pause">⏸ 暂停</button><button id="reset">重置起振</button>
+      <button id="gain" class="on">增益 σ:开</button>
+      <button id="seed" class="on">噪声种子:有</button>
+      <button id="sweep">📈 扫描泵浦画阈值曲线</button>
+    </div>
+  </div>
+  <div class="explain" id="explain"></div>
+</div>
+
+<script>
+const cv=document.getElementById('c'), ctx=cv.getContext('2d'), W=cv.width, H=cv.height;
+const Nz=220, gL=50, gR=170, dt=0.5, w0=2*Math.PI/30, w02=w0*w0;
+const g2=0.03, SIGMA=0.02, invT1=0.002, zeta=0.05;
+let kappa=0.004, N0=0.35, running=true, gainOn=true, seedOn=true;
+let Ex,Hy,P,Pd,N, seed, enHist, probeHist, tstep;
+let view='live', sweepData=null, sweeping=false;
+
+function rndGen(s){ let x=s; return ()=>{ x=(x*1103515245+12345)&0x7fffffff; return x/0x7fffffff-0.5; }; }
+function reset(){ Ex=new Float64Array(Nz);Hy=new Float64Array(Nz);P=new Float64Array(Nz);Pd=new Float64Array(Nz);N=new Float64Array(Nz);
+  const rnd=rndGen(12345);
+  for(let i=gL;i<gR;i++){ Ex[i]=seedOn?1e-4*rnd():0; N[i]=N0; }
+  enHist=[]; probeHist=[]; tstep=0; }
+reset();
+
+function step(E,Hh,Pp,Pdd,Nn,n0){ const sig=gainOn?SIGMA:0;
+  for(let i=0;i<Nz-1;i++) Hh[i]+=dt*(E[i+1]-E[i]);
+  for(let i=gL;i<gR;i++){ Pdd[i]+=dt*(-g2*Pdd[i]-w02*Pp[i]-sig*Nn[i]*E[i]); Pp[i]+=dt*Pdd[i]; }
+  for(let i=1;i<Nz-1;i++){ const jp=(i>=gL&&i<gR)?Pdd[i]:0; E[i]+=dt*((Hh[i]-Hh[i-1])-jp)-dt*kappa*E[i]; }
+  E[0]=0; E[Nz-1]=0;
+  for(let i=gL;i<gR;i++) Nn[i]+=dt*((n0-Nn[i])*invT1 + zeta*E[i]*Pdd[i]);
+}
+
+// 频谱(探针 E(t) 的 DFT 幅值)
+function spectrum(sig){ const L=sig.length, M=48, mag=new Float64Array(M);
+  let mean=0; for(const v of sig)mean+=v; mean/=L||1;
+  for(let k=1;k<=M;k++){ let re=0,im=0; for(let n=0;n<L;n++){ const a=2*Math.PI*k*n/L; re+=(sig[n]-mean)*Math.cos(a); im+=(sig[n]-mean)*Math.sin(a); } mag[k-1]=Math.hypot(re,im); }
+  return mag; }
+
+function panel(x,y,w,h,title){ ctx.strokeStyle='#26324a'; ctx.strokeRect(x,y,w,h);
+  ctx.fillStyle='#8a99b5'; ctx.font='10.5px sans-serif'; ctx.fillText(title,x+4,y-4); }
+
+function drawLive(){
+  ctx.fillStyle='#02040a'; ctx.fillRect(0,0,W,H);
+  const x0=30, sx=(W-50)/Nz;
+  ctx.fillStyle='#7fd0ff'; ctx.fillRect(x0+gL*sx-3,20,3,150); ctx.fillRect(x0+gR*sx,20,3,150);
+  ctx.fillStyle='#8a99b5'; ctx.font='11px sans-serif'; ctx.fillText('镜',x0+gL*sx-14,16); ctx.fillText('镜',x0+gR*sx,16); ctx.fillText('增益介质',x0+(gL+8)*sx,16);
+  // E(z)
+  let emax=1e-6; for(let i=0;i<Nz;i++) if(Math.abs(Ex[i])>emax)emax=Math.abs(Ex[i]);
+  ctx.strokeStyle='#ff5a7a'; ctx.lineWidth=1.5; ctx.beginPath();
+  for(let i=0;i<Nz;i++){ const X=x0+i*sx, Y=95-Ex[i]/emax*Math.min(70,emax*24); i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y); }
+  ctx.stroke();
+  ctx.fillStyle='#ff8a9a'; ctx.font='12px sans-serif'; ctx.fillText('电场 E(z) — 起振后是相干驻波',x0,182);
+  // N(z)
+  const ny=205, nh=38; ctx.fillStyle='#8a99b5'; ctx.font='12px sans-serif'; ctx.fillText('反转 N(z):红=增益 蓝=吸收',x0,ny-4);
+  for(let i=gL;i<gR;i++){ const v=Math.max(-1,Math.min(1,N[i]/0.5));
+    ctx.fillStyle=v>=0?`rgba(255,110,90,${0.2+0.8*v})`:`rgba(90,150,255,${0.2+0.8*(-v)})`; ctx.fillRect(x0+i*sx,ny,sx+0.6,nh); }
+  ctx.strokeStyle='#33405c'; ctx.strokeRect(x0+gL*sx,ny,(gR-gL)*sx,nh);
+  // 读数
+  let en=0; for(let i=0;i<Nz;i++) en+=Ex[i]*Ex[i]+Hy[i]*Hy[i];
+  let nav=0; for(let i=gL;i<gR;i++) nav+=N[i]; nav/=(gR-gL);
+  if(tstep%4===0){ enHist.push(en); if(enHist.length>200)enHist.shift(); probeHist.push(Ex[110]); if(probeHist.length>200)probeHist.shift(); }
+  // 三块证据图
+  const py=300, ph=140, pw=210;
+  // ① 场能起振
+  panel(x0,py,pw,ph,'① 场能(从噪声起振)'); let mE=1e-9; for(const v of enHist)if(v>mE)mE=v;
+  ctx.strokeStyle='#ffd27f'; ctx.beginPath();
+  for(let i=0;i<enHist.length;i++){ const X=x0+pw*i/200, Y=py+ph-(ph-10)*enHist[i]/mE; i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y); } ctx.stroke();
+  // ② E(t) 相干正弦
+  const p2=x0+pw+20; panel(p2,py,pw,ph,'② 某点 E(t):相干=干净正弦'); let mp=1e-9; for(const v of probeHist)if(Math.abs(v)>mp)mp=Math.abs(v);
+  ctx.strokeStyle='#ff5a7a'; ctx.beginPath();
+  for(let i=0;i<probeHist.length;i++){ const X=p2+pw*i/200, Y=py+ph/2-probeHist[i]/mp*(ph/2-6); i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y); } ctx.stroke();
+  // ③ 频谱单峰
+  const p3=x0+2*(pw+20); panel(p3,py,pw,ph,'③ 频谱:相干=单尖峰'); const mag=spectrum(probeHist);
+  let mm=1e-9; for(const v of mag)if(v>mm)mm=v;
+  ctx.fillStyle='#79ffa8';
+  for(let k=0;k<mag.length;k++){ const bw=pw/mag.length, X=p3+k*bw, Hh=(ph-10)*mag[k]/mm; ctx.fillRect(X+1,py+ph-Hh,bw-1.5,Hh); }
+  ctx.fillStyle='#e2e9f7'; ctx.font='12px monospace';
+  ctx.fillText(`平均反转 N=${nav.toFixed(3)}   场能=${en.toExponential(1)}`,x0,H-8);
+  // 判据结论
+  const lasing = en>5 && nav<Math.max(0.05,N0*0.4);
+  explainEl.innerHTML = (lasing
+    ? `<b class="g">判定:真起振</b> —— ① 场能从 1e-7 噪声自发涨到 1e+? ;② E(t) 是干净正弦(相干);③ 频谱是<b>单根尖峰</b>(单频)。而反转 N 被<b>钳在阈值</b>(增益饱和)。`
+    : `<b class="r">未起振</b> —— 场能衰减、E(t) 杂乱、频谱平摊。`)
+    + `<br><b>杀死实验(证明不是硬画的)</b>:点「<b>增益 σ:开→关</b>」→ 立刻熄灭(证明是受激辐射在撑);点「<b>噪声种子:有→无</b>」再重置 → 永远不亮(证明是放大噪声起振)。点「<b>扫描泵浦</b>」看输出-泵浦的<b class="y">阈值拐点</b> + 反转钳位。`;
+}
+
+function drawSweep(){
+  ctx.fillStyle='#02040a'; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#e2e9f7'; ctx.font='14px sans-serif'; ctx.fillText('阈值曲线:输出功率 & 反转 vs 泵浦',30,26);
+  if(sweeping||!sweepData){ ctx.fillStyle='#ff8a9a'; ctx.font='14px sans-serif'; ctx.fillText('⏳ 扫描计算中…(每个泵浦跑到稳态)',30,60); return; }
+  const {pumps,outs,invs}=sweepData; const gx=60,gy=70,gw=W-120,gh=380;
+  ctx.strokeStyle='#26324a'; ctx.strokeRect(gx,gy,gw,gh);
+  const pmin=pumps[0], pmax=pumps[pumps.length-1];
+  let om=1e-9; for(const v of outs)if(v>om)om=v;
+  // 输出功率(粉)
+  ctx.strokeStyle='#ff5a7a'; ctx.lineWidth=2; ctx.beginPath();
+  for(let i=0;i<pumps.length;i++){ const X=gx+gw*(pumps[i]-pmin)/(pmax-pmin), Y=gy+gh-(gh-20)*outs[i]/om; i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y); }
+  ctx.stroke(); ctx.fillStyle='#ff8a9a'; ctx.font='12px sans-serif'; ctx.fillText('输出功率(过阈骤升=激光阈值)',gx+8,gy+16);
+  // 反转(青):过阈后变平=钳位
+  ctx.strokeStyle='#79ffe0'; ctx.beginPath();
+  for(let i=0;i<pumps.length;i++){ const X=gx+gw*(pumps[i]-pmin)/(pmax-pmin), Y=gy+gh-(gh-20)*(invs[i]-pmin)/(pmax-pmin); i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y); }
+  ctx.stroke(); ctx.fillStyle='#79ffe0'; ctx.fillText('稳态反转 N(过阈后变平=增益钳位)',gx+8,gy+34);
+  // 阈值点
+  let thi=-1; for(let i=1;i<outs.length;i++){ if(outs[i]>om*0.05){ thi=i; break; } }
+  if(thi>0){ const X=gx+gw*(pumps[thi]-pmin)/(pmax-pmin);
+    ctx.strokeStyle='rgba(255,210,127,0.6)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.moveTo(X,gy); ctx.lineTo(X,gy+gh); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle='#ffd27f'; ctx.fillText('阈值 ≈ N₀'+pumps[thi].toFixed(2),X-30,gy+gh-6); }
+  ctx.fillStyle='#8a99b5'; ctx.font='11px sans-serif'; ctx.fillText('泵浦 N₀ →',gx+gw-60,gy+gh+16);
+  ctx.fillText('点上方"扫描"按钮下的图任意处或再点按钮返回实时',gx,gy+gh+16);
+}
+
+const explainEl=document.getElementById('explain');
+function loop(){ if(view==='live'){ if(running){ for(let s=0;s<26;s++) step(Ex,Hy,P,Pd,N,N0); } drawLive(); } else drawSweep(); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+function runSweep(){ sweeping=true; view='sweep';
+  setTimeout(()=>{ const pumps=[],outs=[],invs=[];
+    for(let p=-0.2;p<=0.601;p+=0.04){
+      const E=new Float64Array(Nz),Hh=new Float64Array(Nz),Pp=new Float64Array(Nz),Pdd=new Float64Array(Nz),Nn=new Float64Array(Nz);
+      const rnd=rndGen(777); for(let i=gL;i<gR;i++){ E[i]=1e-4*rnd(); Nn[i]=p; }
+      for(let t=0;t<9000;t++) step(E,Hh,Pp,Pdd,Nn,p);
+      let en=0; for(let i=0;i<Nz;i++) en+=E[i]*E[i]+Hh[i]*Hh[i];
+      let nv=0; for(let i=gL;i<gR;i++) nv+=Nn[i]; nv/=(gR-gL);
+      pumps.push(p); outs.push(en); invs.push(nv);
+    }
+    sweepData={pumps,outs,invs}; sweeping=false;
+  },30);
+}
+
+const pump=document.getElementById('pump'),pumpV=document.getElementById('pumpV');
+pump.oninput=()=>{ N0=(+pump.value)/100; pumpV.textContent=N0.toFixed(2); };
+const loss=document.getElementById('loss'),lossV=document.getElementById('lossV');
+loss.oninput=()=>{ kappa=(+loss.value)/1000; lossV.textContent=kappa.toFixed(3); };
+document.getElementById('pause').onclick=e=>{running=!running;e.target.textContent=running?'⏸ 暂停':'▶ 继续';};
+document.getElementById('reset').onclick=()=>{ view='live'; reset(); };
+const gb=document.getElementById('gain'); gb.onclick=()=>{ gainOn=!gainOn; gb.classList.toggle('on',gainOn); gb.textContent='增益 σ:'+(gainOn?'开':'关'); };
+const sb=document.getElementById('seed'); sb.onclick=()=>{ seedOn=!seedOn; sb.classList.toggle('on',seedOn); sb.textContent='噪声种子:'+(seedOn?'有':'无'); };
+const swb=document.getElementById('sweep'); swb.onclick=()=>{ if(view==='sweep'){ view='live'; } else runSweep(); };
+cv.onclick=()=>{ if(view==='sweep' && !sweeping) view='live'; };
+</script>
+</body>
+</html>

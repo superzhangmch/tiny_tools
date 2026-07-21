@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>激光原理 · 逐光子/逐原子蒙特卡洛(不是示意图)</title>
+<style>
+  :root { --bg:#0b0f17; --panel:#141b28; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5; --accent:#ff5a7a; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; min-height:100%; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  .wrap { max-width:730px; margin:0 auto; padding:16px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  .sub { font-size:12px; color:var(--dim); margin:0 0 12px; line-height:1.5; }
+  canvas { display:block; width:100%; max-width:700px; background:#02040a; border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.5); }
+  .ctrl { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-top:12px; }
+  .row { display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; }
+  .row label { font-size:12px; color:var(--dim); width:150px; }
+  input[type=range]{ flex:1; accent-color:var(--accent); }
+  .val{ width:70px; text-align:right; font-family:monospace; color:var(--accent); font-size:13px; }
+  button { background:#1b2536;color:var(--txt);border:1px solid var(--line);padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer; }
+  .explain { background:#0e1522; border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:12px; font-size:13px; line-height:1.6; color:#cdd8ee; }
+  .explain b.y{color:#ffd27f;} .explain b.g{color:#79ffa8;} .explain b.r{color:#ff8a9a;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>激光原理 · 逐原子 / 逐光子模拟</h1>
+  <p class="sub">拖<b>泵浦强度</b>越过<b>阈值</b>,看激光"点亮":腔内光子暴涨、汇成一束定向相干光从右镜射出。全靠三条基本过程涌现。</p>
+  <canvas id="c" width="700" height="360"></canvas>
+
+  <div class="ctrl">
+    <div class="row"><label>泵浦强度(抽到激发态)</label><input type="range" id="pump" min="0" max="100" step="1" value="10"><span class="val" id="pumpV">10%</span></div>
+    <div class="row"><label>右镜反射率(↑更易起振)</label><input type="range" id="refl" min="80" max="99" step="1" value="94"><span class="val" id="reflV">94%</span></div>
+    <div class="row">
+      <button id="pause">⏸ 暂停</button><button id="reset">重置</button>
+    </div>
+  </div>
+  <div class="explain" id="explain"></div>
+</div>
+
+<script>
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+// 腔:左镜(全反) x=xL,右镜(半透)x=xR;上下开口=侧向损耗
+const xL=70, xR=630, yT=150, yB=300;
+let pPump=0.006, Rright=0.94, running=true;
+const V=3.2, SUB=3, R_INT=7, P_INT=0.62, P_SPONT=0.006, PHOTON_CAP=2600;
+
+// 原子(固定位置, 状态=基态/激发态)
+let atoms=[];
+const cell=16, cols=Math.ceil(W/cell), rows=Math.ceil(H/cell); let buckets=[];
+function initAtoms(){ atoms=[];
+  for(let i=0;i<300;i++) atoms.push({x:xL+20+Math.random()*(xR-xL-40), y:yT+8+Math.random()*(yB-yT-16), ex:false});
+  buckets=Array.from({length:cols*rows},()=>[]);
+  atoms.forEach((a,i)=>{ const c=((a.x/cell)|0)+cols*((a.y/cell)|0); if(buckets[c])buckets[c].push(i); });
+}
+initAtoms();
+let photons=[]; let outAccum=0, outRate=0, outHist=[];
+
+function step(){
+  // ① 泵浦:基态原子被抽到激发态
+  for(const a of atoms) if(!a.ex && Math.random()<pPump) a.ex=true;
+  // ② 自发辐射:激发态随机衰变, 发随机方向/相位光子
+  for(const a of atoms) if(a.ex && Math.random()<P_SPONT){ a.ex=false;
+    const th=Math.random()*2*Math.PI; photons.push({x:a.x,y:a.y,vx:V*Math.cos(th),vy:V*Math.sin(th),ph:Math.random()*2*Math.PI}); }
+  // ③ 光子传播 + 受激辐射/吸收 + 镜面
+  const next=[];
+  for(const p of photons){ p.x+=p.vx; p.y+=p.vy;
+    // 与所在格原子相互作用(取一个)
+    const c=((p.x/cell)|0)+cols*((p.y/cell)|0); const b=buckets[c];
+    if(b) for(const idx of b){ const a=atoms[idx];
+      if((a.x-p.x)**2+(a.y-p.y)**2<R_INT*R_INT && Math.random()<P_INT){
+        if(a.ex){ a.ex=false;                              // 受激辐射:克隆同向同相光子
+          const sp=Math.hypot(p.vx,p.vy)||1; next.push({x:a.x,y:a.y,vx:p.vx,vy:p.vy,ph:p.ph}); }
+        else { a.ex=true; p.dead=true; }                   // 吸收:光子没了,原子被抬到激发态
+        break;
+      } }
+    if(p.dead) continue;
+    // 镜面 / 边界
+    if(p.x<xL){ p.x=xL; p.vx=-p.vx; }                      // 左镜全反
+    else if(p.x>xR){ if(Math.random()<Rright){ p.x=xR; p.vx=-p.vx; } else { outAccum++; continue; } } // 右镜:反射或输出
+    if(p.y<yT||p.y>yB) continue;                            // 侧向逃逸=损耗(淘汰离轴光子)
+    next.push(p);
+  }
+  photons=next;
+  if(photons.length>PHOTON_CAP) photons.length=PHOTON_CAP;
+}
+
+function draw(){
+  ctx.fillStyle='#02040a'; ctx.fillRect(0,0,W,H);
+  // 镜子
+  ctx.fillStyle='#7fd0ff'; ctx.fillRect(xL-8,yT,6,yB-yT);
+  ctx.fillStyle='rgba(127,208,255,0.5)'; ctx.fillRect(xR+2,yT,6,yB-yT);
+  ctx.fillStyle='#8a99b5'; ctx.font='11px sans-serif';
+  ctx.fillText('全反镜',xL-24,yT-6); ctx.fillText('输出镜(半透)',xR-20,yT-6);
+  // 原子(激发=亮橙, 基态=暗)
+  for(const a of atoms){ if(a.ex){ ctx.fillStyle='#ffb15a'; ctx.beginPath(); ctx.arc(a.x,a.y,2.6,0,7); ctx.fill(); }
+    else { ctx.fillStyle='rgba(120,130,150,0.4)'; ctx.fillRect(a.x-1,a.y-1,2,2); } }
+  // 光子(按相位着色 → 受激克隆同色=相干)
+  for(const p of photons){ const hue=p.ph/(2*Math.PI)*360; ctx.fillStyle=`hsl(${hue},95%,65%)`;
+    ctx.fillRect(p.x-1,p.y-1,2.4,2.4); }
+  // 输出光束(从右镜漏出)
+  if(outRate>0.5){ const a=Math.min(1,outRate/20); ctx.fillStyle=`rgba(255,120,150,${0.15+0.5*a})`;
+    ctx.fillRect(xR+8,(yT+yB)/2-6*a-2,W-xR-8,12*a+4); }
+  // 读数
+  let nex=0; for(const a of atoms) if(a.ex)nex++; const inv=(nex-(atoms.length-nex))/atoms.length; // 反转度
+  const bx=xL, by=yB+16;
+  ctx.fillStyle='#8a99b5'; ctx.font='12px sans-serif';
+  ctx.fillText('粒子数反转:', bx, by+4);
+  ctx.strokeStyle='#33405c'; ctx.strokeRect(bx+90,by-8,200,14);
+  ctx.fillStyle= inv>0?'#79ffa8':'#ff8a9a'; ctx.fillRect(bx+190,by-8,inv*100,14); // 中点=0
+  ctx.fillStyle='#e2e9f7'; ctx.font='12px monospace';
+  ctx.fillText(`激发态 ${nex}/${atoms.length}  ·  腔内光子 ${photons.length}  ·  输出功率 ${outRate.toFixed(0)}`, bx, by+30);
+  // 输出功率随时间
+  ctx.strokeStyle='#26324a'; ctx.strokeRect(bx+330, by-10, 250, 46);
+  ctx.fillStyle='#8a99b5'; ctx.font='10px sans-serif'; ctx.fillText('输出功率(时间)', bx+334, by-14);
+  ctx.strokeStyle='#ff5a7a'; ctx.beginPath();
+  for(let i=0;i<outHist.length;i++){ const X=bx+330+250*i/120, Y=by+36-Math.min(44,outHist[i]/1.2); i===0?ctx.moveTo(X,Y):ctx.lineTo(X,Y); }
+  ctx.stroke();
+  const lasing = outRate>8 && photons.length>300;
+  explainEl.innerHTML=`<b>三条基本过程在跑</b>:<b class="y">泵浦</b>把原子抬到激发态(亮橙);<b>自发辐射</b>随机放光子(乱方向、乱相位);`
+    +`<b class="g">受激辐射</b>——光子撞到激发态原子会克隆出<b>同向同相</b>的光子(相干放大);<b class="r">吸收</b>则相反。<br>`
+    +(lasing
+      ?`<b class="g">已起振(激光)!</b> 泵浦够强 → 激发态多于基态(<b>粒子数反转</b>)→ 受激放大压过损耗;离轴光子从上下漏掉、只剩<b>沿轴</b>的在两镜间反复放大 → 汇成一束定向光从右镜射出。注意反转度被"钉"在阈值附近(增益饱和)。`
+      :`<b>还没起振</b>:泵浦不足 → 反转不够 → 受激放大顶不过损耗(输出镜漏光 + 侧向逃逸),光子生了又灭。把<b>泵浦</b>调大越过阈值,或调高右镜反射率,看它突然"点亮"。`);
+}
+
+const explainEl=document.getElementById('explain');
+let last=performance.now(), acc=0;
+function loop(now){ const dt=now-last; last=now;
+  if(running){ for(let s=0;s<SUB;s++) step();
+    acc+=dt; if(acc>100){ outRate=outAccum*1000/acc; outAccum=0; acc=0; outHist.push(outRate); if(outHist.length>120)outHist.shift(); } }
+  draw(); requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+const pump=document.getElementById('pump'),pumpV=document.getElementById('pumpV');
+pump.oninput=()=>{ pPump=(+pump.value)/100*0.06; pumpV.textContent=pump.value+'%'; };
+const refl=document.getElementById('refl'),reflV=document.getElementById('reflV');
+refl.oninput=()=>{ Rright=(+refl.value)/100; reflV.textContent=refl.value+'%'; };
+document.getElementById('pause').onclick=e=>{running=!running;e.target.textContent=running?'⏸ 暂停':'▶ 继续';};
+document.getElementById('reset').onclick=()=>{ photons=[]; initAtoms(); outHist=[]; outAccum=0; };
+</script>
+</body>
+</html>
