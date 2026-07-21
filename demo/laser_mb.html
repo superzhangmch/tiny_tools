@@ -37,6 +37,7 @@
       <button id="pause">⏸ 暂停</button><button id="reset">重置起振</button>
       <button id="gain" class="on">增益 σ:开</button>
       <button id="seed" class="on">噪声种子:有</button>
+      <button id="cav">腔:多模(长)</button>
       <button id="sweep">📈 扫描泵浦画阈值曲线</button>
     </div>
   </div>
@@ -75,9 +76,10 @@
  * 把反转钳在阈值附近(增益饱和),与激光理论一致。
  */
 const cv=document.getElementById('c'), ctx=cv.getContext('2d'), W=cv.width, H=cv.height;
-const Nz=220, gL=50, gR=170, dt=0.5, w0=2*Math.PI/30, w02=w0*w0;
-const g2=0.03, SIGMA=0.02, invT1=0.002, zeta=0.05;
-let kappa=0.004, N0=0.35, running=true, gainOn=true, seedOn=true;
+const Nz=220, dt=0.5, w0=2*Math.PI/30, w02=w0*w0;
+const SIGMA=0.02, invT1=0.002, zeta=0.05;
+let gL=50, gR=170, g2=0.03, probe=110;          // 腔=两镜之间;probe=探针点
+let kappa=0.004, N0=0.35, running=true, gainOn=true, seedOn=true, cavMode='multi';
 let Ex,Hy,P,Pd,N, seed, enHist, probeHist, tstep;
 let view='live', sweepData=null, sweeping=false;
 
@@ -92,7 +94,7 @@ function step(E,Hh,Pp,Pdd,Nn,n0){ const sig=gainOn?SIGMA:0;
   for(let i=0;i<Nz-1;i++) Hh[i]+=dt*(E[i+1]-E[i]);
   for(let i=gL;i<gR;i++){ Pdd[i]+=dt*(-g2*Pdd[i]-w02*Pp[i]-sig*Nn[i]*E[i]); Pp[i]+=dt*Pdd[i]; }
   for(let i=1;i<Nz-1;i++){ const jp=(i>=gL&&i<gR)?Pdd[i]:0; E[i]+=dt*((Hh[i]-Hh[i-1])-jp)-dt*kappa*E[i]; }
-  E[0]=0; E[Nz-1]=0;
+  E[0]=0; E[Nz-1]=0; E[gL]=0; E[gR]=0;   // 反射镜=画出的两根(gL/gR 处强制节点),腔就在两镜之间
   for(let i=gL;i<gR;i++) Nn[i]+=dt*((n0-Nn[i])*invT1 + zeta*E[i]*Pdd[i]);
 }
 
@@ -146,7 +148,8 @@ function drawLive(){
   explainEl.innerHTML = (lasing
     ? `<b class="g">判定:真起振</b> —— ① 场能从 1e-7 噪声自发涨到 1e+? ;② E(t) 是干净正弦(相干);③ 频谱是<b>单根尖峰</b>(单频)。而反转 N 被<b>钳在阈值</b>(增益饱和)。`
     : `<b class="r">未起振</b> —— 场能衰减、E(t) 杂乱、频谱平摊。`)
-    + `<br><b>杀死实验(证明不是硬画的)</b>:点「<b>增益 σ:开→关</b>」→ 立刻熄灭(证明是受激辐射在撑);点「<b>噪声种子:有→无</b>」再重置 → 永远不亮(证明是放大噪声起振)。点「<b>扫描泵浦</b>」看输出-泵浦的<b class="y">阈值拐点</b> + 反转钳位。`;
+    + `<br><b>杀死实验(证明不是硬画的)</b>:点「<b>增益 σ:开→关</b>」→ 立刻熄灭(证明是受激辐射在撑);点「<b>噪声种子:有→无</b>」再重置 → 永远不亮(证明是放大噪声起振)。点「<b>扫描泵浦</b>」看输出-泵浦的<b class="y">阈值拐点</b> + 反转钳位。`
+    + `<br>点「<b>腔:多模/单模</b>」对比:<b class="g">单模(短腔)</b>→ ② 干净正弦、③ 单尖峰、E(z) 包络平整;<b class="r">多模(长腔)</b>→ ② 忽大忽小、③ 主峰带尾巴、E(z) 包络"呼吸"。两者都是真起振,区别只是同时振荡的纵模数。`;
 }
 
 function drawSweep(){
@@ -177,7 +180,7 @@ function drawSweep(){
 const explainEl=document.getElementById('explain');
 function loop(){ if(view==='live'){
     if(running){ for(let s=0;s<26;s++){ step(Ex,Hy,P,Pd,N,N0);
-      probeHist.push(Ex[110]); if(probeHist.length>256)probeHist.shift(); tstep++; }  // 每步采样 → 一个周期~60点, 不混叠
+      probeHist.push(Ex[probe]); if(probeHist.length>256)probeHist.shift(); tstep++; }  // 每步采样 → 一个周期~60点, 不混叠
       let en=0; for(let i=0;i<Nz;i++) en+=Ex[i]*Ex[i]+Hy[i]*Hy[i]; enHist.push(en); if(enHist.length>200)enHist.shift(); }
     drawLive(); } else drawSweep(); requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
@@ -204,6 +207,14 @@ document.getElementById('pause').onclick=e=>{running=!running;e.target.textConte
 document.getElementById('reset').onclick=()=>{ view='live'; reset(); };
 const gb=document.getElementById('gain'); gb.onclick=()=>{ gainOn=!gainOn; gb.classList.toggle('on',gainOn); gb.textContent='增益 σ:'+(gainOn?'开':'关'); };
 const sb=document.getElementById('seed'); sb.onclick=()=>{ seedOn=!seedOn; sb.classList.toggle('on',seedOn); sb.textContent='噪声种子:'+(seedOn?'有':'无'); };
+function setCavity(m){ cavMode=m;
+  if(m==='single'){ gL=90; gR=130; g2=0.02; N0=0.6; }   // 短腔:增益带宽内只容一个纵模 → 单模
+  else { gL=50; gR=170; g2=0.03; N0=0.35; }              // 长腔:多个纵模一起振 → 多模
+  probe=Math.floor((gL+gR)/2);
+  pump.value=Math.round(N0*100); pumpV.textContent=N0.toFixed(2);
+  view='live'; reset(); }
+const cavb=document.getElementById('cav'); cavb.onclick=()=>{ setCavity(cavMode==='multi'?'single':'multi');
+  cavb.textContent='腔:'+(cavMode==='single'?'单模(短)':'多模(长)'); };
 const swb=document.getElementById('sweep'); swb.onclick=()=>{ if(view==='sweep'){ view='live'; } else runSweep(); };
 cv.onclick=()=>{ if(view==='sweep' && !sweeping) view='live'; };
 </script>
