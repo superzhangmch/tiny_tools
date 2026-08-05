@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>等宽文本渲染器（中英混排对齐）</title>
+<!-- Maple Mono CN：中文恰好 = 2×英文宽的等宽字体。按 unicode-range 分包，浏览器只下载用到的字 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chinese-fonts/maple-mono-cn@2.0.0/dist/MapleMono-CN-Regular/result.css">
+<style>
+  body {
+    font-family: Arial, "PingFang SC", sans-serif;
+    margin: 20px;
+    background: #f5f5f5;
+  }
+  h1 { font-size: 20px; }
+  .hint { color: #666; font-size: 13px; margin: 4px 0 10px; }
+  textarea {
+    width: 100%;
+    height: 160px;
+    box-sizing: border-box;
+    font-family: Menlo, Consolas, "Courier New", monospace;
+    font-size: 13px;
+    padding: 8px;
+  }
+  .toolbar {
+    margin: 10px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    font-size: 14px;
+  }
+  .toolbar label { user-select: none; }
+  button { padding: 4px 12px; font-size: 14px; cursor: pointer; }
+
+  #output {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 12px;
+    overflow-x: auto;
+    background: #fff;
+    color: #222;
+    line-height: 1.35;
+  }
+  #output.dark {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border-color: #444;
+  }
+  #output .line {
+    /* 每行一个 div，内部按字符网格排列 */
+    white-space: pre;
+    font-family: Menlo, Consolas, "SF Mono", "Courier New", monospace;
+    font-variant-ligatures: none;
+    font-kerning: none;
+  }
+  /* 宽度强制到网格：--cw 由 JS 实测等宽字体单字符像素宽得出。
+     不能用 ch 单位 —— ch 按 span 自身字体（CJK 字体）的 "0" 算，会和外层等宽字体不一致导致累积偏移 */
+  #output .c {
+    display: inline-block;
+    white-space: pre;
+    overflow: visible;
+    vertical-align: bottom;
+  }
+  #output .w1 { width: var(--cw); }
+  #output .w2 { width: calc(var(--cw) * 2); text-align: center; }
+  /* 字体模式：不做任何计算，整行文本直接用「中文=2×英文宽」的等宽字体渲染，
+     本地装了 Sarasa / Maple / 思源等宽就用本地，否则用上面按需加载的 webfont */
+  #output.fontmode .line {
+    font-family: "Maple Mono NF CN", "Sarasa Mono SC", "Sarasa Term SC",
+                 "等距更纱黑体 SC", "Sarasa Fixed SC", "Noto Sans Mono CJK SC",
+                 "Source Han Mono SC", "Maple Mono CN", Menlo, monospace;
+  }
+  label.disabled { color: #aaa; }
+  /* 宽字符（中文等）用系统 CJK 字体渲染，居中放进 2ch 格子 */
+  #output .cjk { font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+</style>
+</head>
+<body>
+<h1>等宽文本渲染器</h1>
+<div class="hint">
+  粘贴在终端 / 等宽字体环境下生成的文本（可夹杂中英文，如 ASCII 表格、框线图、代码对齐输出）。<br>
+  <b>字体模式</b>：直接用「中文=2×英文宽」的等宽字体（Maple Mono CN，按需加载）整段渲染，零计算，就是终端的观感；
+  <b>网格模式</b>：逐字符按 wcwidth 锁到网格，不依赖任何字体。<br>
+  注意：若文本是 LLM 生成的表格，它补空格时常把中文数成 1 列——源文本本身就歪，放真终端里也歪，渲染救不了。
+  这种情况点 <b>修复 LLM 表格</b>，按真实显示宽度重排后回填输入框（可复制走）。
+</div>
+
+<textarea id="input" placeholder="在此粘贴文本…" spellcheck="false"></textarea>
+
+<div class="toolbar">
+  <label title="字体模式：整段直接用中文=2×英文宽的等宽字体（Maple Mono CN），零计算，就是终端的观感">
+    <input type="radio" name="mode" id="modeFont" checked>字体模式（终端同款）</label>
+  <label title="网格模式：逐字符按 wcwidth 锁到网格，不依赖任何字体，没网也严格对齐">
+    <input type="radio" name="mode" id="modeGrid">网格模式（严格）</label>
+  <label>字号
+    <input type="range" id="fontSize" min="10" max="28" value="14">
+    <span id="fontSizeVal">14px</span>
+  </label>
+  <label>Tab 宽度
+    <select id="tabWidth">
+      <option value="8" selected>8</option>
+      <option value="4">4</option>
+      <option value="2">2</option>
+    </select>
+  </label>
+  <label id="ambLabel"><input type="checkbox" id="ambWide">「模糊宽度」字符按 2 列（如 ─│• 部分终端设置）</label>
+  <label><input type="checkbox" id="darkMode" checked>深色</label>
+  <button id="exportBtn">导出 PNG</button>
+  <button id="fixBtn" title="LLM 生成表格时常把中文按 1 列数导致源文本本身就歪。此按钮解析 │/| 分隔的表格，按真实显示宽度重新补空格，结果回填输入框">修复 LLM 表格</button>
+</div>
+
+<div id="output" class="dark"></div>
+
+<script>
+// ============ wcwidth：字符占几列 ============
+// 组合符 / 零宽 → 0；East Asian Wide/Fullwidth → 2；其余 → 1
+// 「模糊宽度 (Ambiguous)」字符（框线 ─│┌、•、±、希腊字母等）多数终端按 1 列，可选按 2 列。
+
+const ZERO_RANGES = [
+  [0x0300,0x036F],[0x0483,0x0489],[0x0591,0x05BD],[0x0610,0x061A],
+  [0x064B,0x065F],[0x0670,0x0670],[0x06D6,0x06DC],[0x0E31,0x0E31],
+  [0x0E34,0x0E3A],[0x0E47,0x0E4E],[0x1AB0,0x1AFF],[0x1DC0,0x1DFF],
+  [0x200B,0x200F],[0x202A,0x202E],[0x2060,0x2064],[0x20D0,0x20FF],
+  [0xFE00,0xFE0F],[0xFE20,0xFE2F],[0xFEFF,0xFEFF],[0xE0100,0xE01EF],
+];
+
+const WIDE_RANGES = [
+  [0x1100,0x115F],  // 韩文 Jamo
+  [0x2329,0x232A],
+  [0x2E80,0x303E],  // CJK 部首、标点（〈〉「」等）
+  [0x3041,0x33FF],  // 假名、注音、CJK 兼容
+  [0x3400,0x4DBF],  // CJK 扩展 A
+  [0x4E00,0x9FFF],  // CJK 统一汉字
+  [0xA000,0xA4CF],  // 彝文
+  [0xAC00,0xD7A3],  // 韩文音节
+  [0xF900,0xFAFF],  // CJK 兼容汉字
+  [0xFE10,0xFE19],[0xFE30,0xFE52],[0xFE54,0xFE66],[0xFE68,0xFE6B],
+  [0xFF00,0xFF60],  // 全角 ASCII、全角标点
+  [0xFFE0,0xFFE6],
+  [0x1F300,0x1F64F],[0x1F900,0x1F9FF],[0x1FA70,0x1FAFF], // emoji
+  [0x20000,0x2FFFD],[0x30000,0x3FFFD], // CJK 扩展 B+
+];
+
+const AMBIGUOUS_RANGES = [
+  [0x00A1,0x00A1],[0x00A4,0x00A4],[0x00A7,0x00A8],[0x00AA,0x00AA],
+  [0x00B0,0x00B4],[0x00B6,0x00BA],[0x00BC,0x00BF],[0x00D7,0x00D7],
+  [0x00F7,0x00F7],[0x0391,0x03A9],[0x03B1,0x03C9],[0x0401,0x0401],
+  [0x0410,0x044F],[0x0451,0x0451],
+  [0x2010,0x2027],  // ‐ – — ‘ ’ “ ” † ‡ • … ‧
+  [0x2030,0x203B],[0x2103,0x2103],[0x2109,0x2109],[0x2121,0x2122],
+  [0x2160,0x216B],[0x2170,0x2179],[0x2190,0x2199],[0x21B8,0x21B9],
+  [0x2200,0x22FF],  // 数学符号 ∀∈∑√≈≠≤≥
+  [0x2460,0x24FF],  // ①②③
+  [0x2500,0x257F],  // ★ 框线字符 ─│┌┐└┘├┤┬┴┼═║╔ 等
+  [0x2580,0x259F],  // 块元素 ▀▄█▌▐░▒▓
+  [0x25A0,0x25FF],  // ■□▲△▼▽◆◇○●◎
+  [0x2605,0x2606],[0x2609,0x2609],[0x260E,0x260F],[0x2614,0x2615],
+  [0x261C,0x261C],[0x261E,0x261E],[0x2640,0x2640],[0x2642,0x2642],
+  [0x2660,0x2661],[0x2663,0x2665],[0x2667,0x266A],[0x266C,0x266D],
+  [0x266F,0x266F],[0x2E80,0x2E99],
+];
+
+function inRanges(cp, ranges) {
+  let lo = 0, hi = ranges.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (cp < ranges[mid][0]) hi = mid - 1;
+    else if (cp > ranges[mid][1]) lo = mid + 1;
+    else return true;
+  }
+  return false;
+}
+
+function charCols(cp, ambWide) {
+  if (cp === 0) return 0;
+  if (inRanges(cp, ZERO_RANGES)) return 0;
+  if (inRanges(cp, WIDE_RANGES)) return 2;
+  if (ambWide && inRanges(cp, AMBIGUOUS_RANGES)) return 2;
+  return 1;
+}
+
+function isCJKFont(cp) {
+  // 这些字符用 CJK 字体渲染更好看（覆盖所有可能占 2 列的）
+  return inRanges(cp, WIDE_RANGES) || inRanges(cp, AMBIGUOUS_RANGES);
+}
+
+// ============ 渲染 ============
+
+const input = document.getElementById('input');
+const output = document.getElementById('output');
+const fontSizeEl = document.getElementById('fontSize');
+const fontSizeVal = document.getElementById('fontSizeVal');
+const tabWidthEl = document.getElementById('tabWidth');
+const ambWideEl = document.getElementById('ambWide');
+const darkEl = document.getElementById('darkMode');
+const modeFontEl = document.getElementById('modeFont');
+const modeGridEl = document.getElementById('modeGrid');
+
+// 每行数据缓存，导出 PNG 时复用：[{ch, cols, cjk}, ...][]
+let renderedLines = [];
+
+function parseLine(line, tabW, ambWide) {
+  const cells = [];
+  let col = 0;
+  for (const ch of line) {  // for...of 正确处理代理对
+    const cp = ch.codePointAt(0);
+    if (cp === 9) { // Tab：补空格到下一个制表位
+      const n = tabW - (col % tabW);
+      for (let i = 0; i < n; i++) cells.push({ ch: ' ', cols: 1, cjk: false });
+      col += n;
+      continue;
+    }
+    if (cp === 13) continue; // \r
+    const cols = charCols(cp, ambWide);
+    if (cols === 0 && cells.length > 0) {
+      // 组合符附加到前一个字符
+      cells[cells.length - 1].ch += ch;
+      continue;
+    }
+    cells.push({ ch, cols: cols || 1, cjk: isCJKFont(cp) });
+    col += cols || 1;
+  }
+  return cells;
+}
+
+function render() {
+  const text = input.value;
+  const tabW = parseInt(tabWidthEl.value, 10);
+  const ambWide = ambWideEl.checked;
+  const fontSize = parseInt(fontSizeEl.value, 10);
+  fontSizeVal.textContent = fontSize + 'px';
+  output.style.fontSize = fontSize + 'px';
+  output.classList.toggle('dark', darkEl.checked);
+
+  // 实测当前字号下等宽字体的单字符像素宽（取 100 个字符求平均，拿到亚像素精度）
+  const probe = document.createElement('div');
+  probe.className = 'line';
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;display:inline-block';
+  probe.textContent = '0'.repeat(100);
+  output.appendChild(probe);
+  const cw = probe.getBoundingClientRect().width / 100;
+  probe.remove();
+  output.style.setProperty('--cw', cw + 'px');
+
+  const fontMode = modeFontEl.checked;
+  output.classList.toggle('fontmode', fontMode);
+  document.getElementById('ambLabel').classList.toggle('disabled', fontMode);
+  ambWideEl.disabled = fontMode;
+
+  renderedLines = text.split('\n').map(l => parseLine(l, tabW, ambWide));
+
+  const frag = document.createDocumentFragment();
+  for (const cells of renderedLines) {
+    const div = document.createElement('div');
+    div.className = 'line';
+    if (fontMode) {
+      // 字体模式：不做网格计算，整行原样交给 2:1 等宽字体（tab 已展开）
+      div.textContent = cells.map(c => c.ch).join('') || ' ';
+      frag.appendChild(div);
+      continue;
+    }
+    let asciiRun = '';
+    const flush = () => {
+      if (asciiRun) { div.appendChild(document.createTextNode(asciiRun)); asciiRun = ''; }
+    };
+    for (const c of cells) {
+      // 连续可打印 ASCII 直接放文本节点（等宽字体天然 1ch），减少 DOM 数量
+      if (!c.cjk && c.cols === 1 && c.ch.length === 1 &&
+          c.ch.charCodeAt(0) >= 0x20 && c.ch.charCodeAt(0) < 0x7F) {
+        asciiRun += c.ch;
+        continue;
+      }
+      flush();
+      const span = document.createElement('span');
+      span.className = 'c w' + c.cols + (c.cjk ? ' cjk' : '');
+      span.textContent = c.ch;
+      div.appendChild(span);
+    }
+    flush();
+    if (!div.firstChild) div.appendChild(document.createTextNode(' '));
+    frag.appendChild(div);
+  }
+  output.replaceChildren(frag);
+}
+
+input.addEventListener('input', render);
+fontSizeEl.addEventListener('input', render);
+tabWidthEl.addEventListener('change', render);
+ambWideEl.addEventListener('change', render);
+darkEl.addEventListener('change', render);
+modeFontEl.addEventListener('change', render);
+modeGridEl.addEventListener('change', render);
+// webfont 子集陆续加载完成后重渲染一次，保证测量/显示用上最终字体
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+
+// ============ 修复 LLM 表格：按真实显示宽度重排列 ============
+// LLM 补空格时常把中文数成 1 列，源文本列数本身就是错的——渲染救不了，只能重排。
+// 解析 │ 或 | 分隔的表格行 + 框线行（├─┼─┤ 等），按每列内容的 wcwidth 最大值重新补空格。
+
+function displayWidth(s) {
+  let w = 0;
+  for (const ch of s) w += charCols(ch.codePointAt(0), ambWideEl.checked) || 1;
+  return w;
+}
+
+function fixTable(text) {
+  const lines = text.split('\n');
+  const SEP = /[│|]/;
+  const isBorder = l => /^[\s┌┬┐├┼┤└┴┘─╔╦╗╠╬╣╚╩╝═+\-=]+$/.test(l) && /[─═\-=]/.test(l);
+  // 找出连续的表格块：含分隔符的内容行 + 框线行
+  const blocks = [];
+  let start = -1;
+  const isTableLine = l => isBorder(l) || SEP.test(l);
+  for (let i = 0; i <= lines.length; i++) {
+    const ok = i < lines.length && lines[i].trim() && isTableLine(lines[i]);
+    if (ok && start < 0) start = i;
+    if (!ok && start >= 0) {
+      if (i - start >= 2) blocks.push([start, i]);
+      start = -1;
+    }
+  }
+  for (const [s, e] of blocks) {
+    // 内容行按 │/| 切分，去掉首尾空 cell（来自行首行尾的边框）
+    const rows = [];   // {i, cells} 或 {i, border: line}
+    let ncol = 0;
+    for (let i = s; i < e; i++) {
+      const l = lines[i];
+      if (isBorder(l)) { rows.push({ i, border: l }); continue; }
+      const parts = l.split(SEP);
+      const lead = parts[0].trim() === '' ? 1 : 0;
+      const tail = parts.length > 1 && parts[parts.length - 1].trim() === '' ? 1 : 0;
+      const cells = parts.slice(lead, parts.length - tail).map(c => c.trim());
+      rows.push({ i, cells, lead, tail });
+      ncol = Math.max(ncol, cells.length);
+    }
+    if (!ncol) continue;
+    const widths = new Array(ncol).fill(0);
+    for (const r of rows) if (r.cells) {
+      r.cells.forEach((c, j) => { widths[j] = Math.max(widths[j], displayWidth(c)); });
+    }
+    for (const r of rows) {
+      if (r.border) {
+        // 用原框线行的角字符重建：取首、分隔、尾字符
+        const l = r.border.trim();
+        const first = l[0], last = l[l.length - 1];
+        const fill = /[═]/.test(l) ? '═' : (/[─]/.test(l) ? '─' : '-');
+        const midMatch = l.match(/[┼╬┬┴╦╩+]/);
+        const mid = midMatch ? midMatch[0] : fill;
+        lines[r.i] = first + widths.map(w => fill.repeat(w + 2)).join(mid) + last;
+      } else {
+        const padded = r.cells.map((c, j) =>
+          ' ' + c + ' '.repeat(widths[j] - displayWidth(c)) + ' ');
+        const sepCh = SEP.test('│') && /│/.test(lines[r.i]) ? '│' : '|';
+        lines[r.i] = (r.lead ? sepCh : '') + padded.join(sepCh) + (r.tail ? sepCh : '');
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
+document.getElementById('fixBtn').addEventListener('click', () => {
+  input.value = fixTable(input.value);
+  render();
+});
+
+// ============ 导出 PNG（canvas 按同一网格重画，像素级对齐） ============
+
+const FONT_STACK_21 = '"Maple Mono NF CN","Sarasa Mono SC","Sarasa Term SC","等距更纱黑体 SC","Sarasa Fixed SC","Noto Sans Mono CJK SC","Source Han Mono SC","Maple Mono CN",Menlo,monospace';
+
+document.getElementById('exportBtn').addEventListener('click', async () => {
+  const fontSize = parseInt(fontSizeEl.value, 10);
+  const dark = darkEl.checked;
+  const fontMode = modeFontEl.checked;
+  const scale = 2; // 高清
+  const lineH = fontSize * 1.35;
+  const pad = 16;
+
+  if (document.fonts && document.fonts.ready) await document.fonts.ready;
+
+  // 用真实字体测量 1ch 宽度
+  const meas = document.createElement('canvas').getContext('2d');
+  meas.font = fontMode ? fontSize + 'px ' + FONT_STACK_21
+                       : fontSize + 'px Menlo, Consolas, monospace';
+  const chW = meas.measureText('0').width || fontSize * 0.62;
+
+  const lineStrs = renderedLines.map(cells => cells.map(c => c.ch).join(''));
+  let maxW = 1;
+  if (fontMode) {
+    for (const l of lineStrs) maxW = Math.max(maxW, meas.measureText(l).width);
+  } else {
+    for (const cells of renderedLines) {
+      let c = 0;
+      for (const cell of cells) c += cell.cols;
+      maxW = Math.max(maxW, c * chW);
+    }
+  }
+
+  const w = Math.ceil(maxW + pad * 2);
+  const h = Math.ceil(renderedLines.length * lineH + pad * 2);
+  const canvas = document.createElement('canvas');
+  canvas.width = w * scale;
+  canvas.height = h * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = dark ? '#1e1e1e' : '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = dark ? '#d4d4d4' : '#222222';
+  ctx.textBaseline = 'middle';
+
+  if (fontMode) {
+    // 字体模式：整行交给 2:1 字体，对齐由字体本身保证
+    ctx.font = fontSize + 'px ' + FONT_STACK_21;
+    lineStrs.forEach((l, row) => {
+      ctx.fillText(l, pad, pad + row * lineH + lineH / 2);
+    });
+  } else {
+    const monoFont = fontSize + 'px Menlo, Consolas, monospace';
+    const cjkFont = fontSize + 'px "PingFang SC", "Microsoft YaHei", sans-serif';
+    renderedLines.forEach((cells, row) => {
+      const y = pad + row * lineH + lineH / 2;
+      let col = 0;
+      for (const cell of cells) {
+        const x = pad + col * chW;
+        ctx.font = cell.cjk ? cjkFont : monoFont;
+        if (cell.cols === 2) {
+          // 居中放进 2 格
+          const tw = ctx.measureText(cell.ch).width;
+          ctx.fillText(cell.ch, x + (2 * chW - tw) / 2, y);
+        } else {
+          ctx.fillText(cell.ch, x, y);
+        }
+        col += cell.cols;
+      }
+    });
+  }
+
+  const ts = new Date();
+  const pad2 = n => String(n).padStart(2, '0');
+  const name = `monospace_${ts.getFullYear()}${pad2(ts.getMonth()+1)}${pad2(ts.getDate())}_${pad2(ts.getHours())}${pad2(ts.getMinutes())}${pad2(ts.getSeconds())}.png`;
+  canvas.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+});
+
+// ============ 初始示例 ============
+
+input.value = [
+  '┌────────────┬──────────┬────────────────┐',
+  '│ 项目名称   │ Status   │ 说明 note      │',
+  '├────────────┼──────────┼────────────────┤',
+  '│ tiny_tools │ active   │ 小工具合集     │',
+  '│ 等宽渲染   │ new      │ mixed 中英对齐 │',
+  '└────────────┴──────────┴────────────────┘',
+  '',
+  'def hello():           # 函数定义',
+  '    print("你好 world")  # 中英混排',
+  '',
+  '下面是一个 LLM 生成的错位表格（把中文数成了 1 列），点「修复 LLM 表格」试试：',
+  '│ 名称     │ 类型   │ 备注       │',
+  '│ 深度学习模型 │ model    │ transformer 架构 │',
+  '│ 数据 │ data │ 共 10k 条样本 │',
+].join('\n');
+render();
+</script>
+</body>
+</html>
