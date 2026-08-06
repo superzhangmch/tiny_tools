@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown 渲染（支持 LaTeX）</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked-katex-extension@5/lib/index.umd.js"></script>
+<style>
+  body {
+    font-family: Arial, "PingFang SC", sans-serif;
+    margin: 12px 20px 20px;
+    background: #f5f5f5;
+  }
+  /* 头部压缩成一行：标题 + 简短说明，渲染结果才是主体 */
+  .header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .header h1 { font-size: 16px; margin: 0; }
+  .hint { color: #888; font-size: 12px; }
+  .toolbar {
+    margin: 6px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    font-size: 13px;
+  }
+  /* 输入框默认矮，聚焦编辑时自动展开 */
+  textarea {
+    width: 100%;
+    height: 64px;
+    box-sizing: border-box;
+    font-family: Menlo, Consolas, "Courier New", monospace;
+    font-size: 12px;
+    padding: 6px 8px;
+    resize: vertical;
+    transition: height .15s ease;
+    margin-bottom: 8px;
+  }
+  textarea:focus { height: 220px; }
+  /* 从 Finder 拖文件进来时的全屏提示遮罩 */
+  #dropOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    background: rgba(74, 144, 217, .12);
+    border: 3px dashed #4a90d9;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: #2b6cb0;
+    pointer-events: none; /* 不挡 drop 事件，事件由 document 接 */
+  }
+  body.dragging #dropOverlay { display: flex; }
+
+  /* 渲染区：GitHub 风格 */
+  #preview {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 20px 24px;
+    background: #fff;
+    color: #24292f;
+    line-height: 1.6;
+    font-size: 15px;
+    overflow-x: auto;
+  }
+  #preview h1, #preview h2 {
+    border-bottom: 1px solid #d8dee4;
+    padding-bottom: .3em;
+    font-size: revert;
+  }
+  #preview code {
+    background: rgba(175,184,193,.2);
+    border-radius: 4px;
+    padding: .15em .35em;
+    font-family: Menlo, Consolas, monospace;
+    font-size: 85%;
+  }
+  #preview pre {
+    background: #f6f8fa;
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+  }
+  #preview pre code { background: none; padding: 0; font-size: 13px; }
+  #preview table { border-collapse: collapse; margin: 10px 0; display: block; overflow-x: auto; max-width: 100%; width: max-content; }
+  #preview th, #preview td { border: 1px solid #d0d7de; padding: 5px 12px; }
+  #preview th { background: #f6f8fa; }
+  #preview tr:nth-child(2n) td { background: #fafbfc; }
+  #preview blockquote {
+    margin: 8px 0;
+    padding: 2px 14px;
+    color: #57606a;
+    border-left: 4px solid #d0d7de;
+  }
+  #preview img { max-width: 100%; }
+  #preview .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Markdown 渲染</h1>
+  <span class="hint">选文件 / 粘贴 / 把 .md 拖到页面任意位置；支持 LaTeX（$...$、$$...$$、\(...\)、\[...\]）</span>
+</div>
+
+<div class="toolbar">
+  <input type="file" id="file" accept=".md,.markdown,.txt,text/markdown,text/plain">
+  <label title="LLM 常用 \(...\) 和 \[...\] 做公式定界符，勾上后把它们转成 $ 形式再渲染（代码块内不动）">
+    <input type="checkbox" id="slashDelim" checked>识别 \(...\) 与 \[...\]</label>
+  <button id="clearBtn">清空</button>
+</div>
+
+<textarea id="input" placeholder="在此粘贴 Markdown…" spellcheck="false"></textarea>
+
+<div id="preview"></div>
+<div id="dropOverlay">松开，渲染这个 Markdown 文件</div>
+
+<script>
+marked.use(markedKatex({ throwOnError: false }));
+marked.use({ gfm: true, breaks: false });
+
+const input = document.getElementById('input');
+const preview = document.getElementById('preview');
+const fileEl = document.getElementById('file');
+const slashDelimEl = document.getElementById('slashDelim');
+
+// 把 \(...\) → $...$、\[...\] → $$...$$，跳过 ``` 围栏代码块和 `行内代码`，
+// 避免把代码里的字面 \( 误当成公式。
+function convertSlashDelims(md) {
+  const parts = md.split(/(```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)|`[^`\n]*`)/);
+  return parts.map((seg, i) => {
+    if (i % 2 === 1) return seg; // 代码段原样
+    return seg
+      .replace(/\\\[([\s\S]*?)\\\]/g, (_, t) => '$$' + t + '$$')
+      .replace(/\\\(([\s\S]*?)\\\)/g, (_, t) => '$' + t + '$');
+  }).join('');
+}
+
+function render() {
+  let md = input.value;
+  if (slashDelimEl.checked) md = convertSlashDelims(md);
+  preview.innerHTML = marked.parse(md);
+}
+
+input.addEventListener('input', render);
+slashDelimEl.addEventListener('change', render);
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  input.value = '';
+  fileEl.value = '';
+  render();
+});
+
+// ---- 文件选择 / 拖拽：读入 textarea 再渲染（可继续编辑） ----
+
+function loadFile(f) {
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => { input.value = reader.result; render(); };
+  reader.readAsText(f);
+}
+
+fileEl.addEventListener('change', () => loadFile(fileEl.files[0]));
+
+// 整个页面都是 drop 目标：从 Finder / 文件管理器把 .md 拖到页面任意位置即可打开。
+// dragenter/dragleave 在子元素间移动时会成对触发，用计数器判断是否真正离开页面。
+let dragDepth = 0;
+document.addEventListener('dragenter', e => {
+  if (!e.dataTransfer || ![...e.dataTransfer.types].includes('Files')) return;
+  e.preventDefault();
+  dragDepth++;
+  document.body.classList.add('dragging');
+});
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('dragleave', () => {
+  if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); }
+});
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove('dragging');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+
+// ---- 初始示例 ----
+
+input.value = [
+  '# Markdown + LaTeX 示例',
+  '',
+  '行内公式：质能方程 $E = mc^2$，二次方程求根 \\( x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a} \\)。',
+  '',
+  '块级公式：',
+  '',
+  '$$\\int_{-\\infty}^{\\infty} e^{-x^2}\\,dx = \\sqrt{\\pi}$$',
+  '',
+  '| 语法 | 效果 |',
+  '|------|------|',
+  '| `**加粗**` | **加粗** |',
+  '| `$\\alpha+\\beta$` | $\\alpha+\\beta$ |',
+  '',
+  '```python',
+  'def f(x):  # 代码块里的 \\( 不会被当成公式',
+  '    return x ** 2',
+  '```',
+  '',
+  '> 选择文件或把 .md 拖到输入框，即可渲染整个文件。',
+].join('\n');
+render();
+</script>
+</body>
+</html>
