@@ -72,6 +72,31 @@
                  "Source Han Mono SC", "Maple Mono CN", Menlo, monospace;
   }
   label.disabled { color: #aaa; }
+  /* Markdown 预览：把输入框里的 markdown 表格渲染成真 HTML 表格，用于验证转换结果 */
+  #mdPreview {
+    display: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 12px;
+    background: #fff;
+    color: #222;
+    margin-top: 10px;
+    overflow-x: auto;
+  }
+  #mdPreview table { border-collapse: collapse; margin: 8px 0; }
+  #mdPreview th, #mdPreview td {
+    border: 1px solid #bbb;
+    padding: 4px 10px;
+    font-size: 14px;
+    text-align: left;
+  }
+  #mdPreview th { background: #f0f0f0; }
+  #mdPreview .plain {
+    white-space: pre-wrap;
+    font-family: Menlo, Consolas, monospace;
+    font-size: 13px;
+    color: #555;
+  }
   /* 宽字符（中文等）用系统 CJK 字体渲染，居中放进 2ch 格子 */
   #output .cjk { font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
 </style>
@@ -84,6 +109,7 @@
   <b>网格模式</b>：逐字符按 wcwidth 锁到网格，不依赖任何字体。<br>
   注意：若文本是 LLM 生成的表格，它补空格时常把中文数成 1 列——源文本本身就歪，放真终端里也歪，渲染救不了。
   这种情况点 <b>修复 LLM 表格</b>，按真实显示宽度重排后回填输入框（可复制走）。
+  <b>转 Markdown 表格</b>：把终端框线表格（┌─┬─┐ / │ 分隔）转成 Markdown 表格，同样回填输入框。
 </div>
 
 <textarea id="input" placeholder="在此粘贴文本…" spellcheck="false"></textarea>
@@ -108,9 +134,12 @@
   <label><input type="checkbox" id="darkMode" checked>深色</label>
   <button id="exportBtn">导出 PNG</button>
   <button id="fixBtn" title="LLM 生成表格时常把中文按 1 列数导致源文本本身就歪。此按钮解析 │/| 分隔的表格，按真实显示宽度重新补空格，结果回填输入框">修复 LLM 表格</button>
+  <button id="mdBtn" title="把终端框线表格（┌─┬─┐ / │ 分隔）转换为 Markdown 表格，首行作表头，结果回填输入框">转 Markdown 表格</button>
+  <label title="把输入框里的 Markdown 表格渲染成真 HTML 表格，验证转换结果对不对"><input type="checkbox" id="mdPreviewChk">Markdown 预览</label>
 </div>
 
 <div id="output" class="dark"></div>
+<div id="mdPreview"></div>
 
 <script>
 // ============ wcwidth：字符占几列 ============
@@ -282,6 +311,7 @@ function render() {
     frag.appendChild(div);
   }
   output.replaceChildren(frag);
+  renderMdPreview();
 }
 
 input.addEventListener('input', render);
@@ -304,14 +334,14 @@ function displayWidth(s) {
   return w;
 }
 
-function fixTable(text) {
-  const lines = text.split('\n');
-  const SEP = /[│|]/;
-  const isBorder = l => /^[\s┌┬┐├┼┤└┴┘─╔╦╗╠╬╣╚╩╝═+\-=]+$/.test(l) && /[─═\-=]/.test(l);
-  // 找出连续的表格块：含分隔符的内容行 + 框线行
+const TBL_SEP = /[│|]/;
+const isBorderLine = l => /^[\s┌┬┐├┼┤└┴┘─╔╦╗╠╬╣╚╩╝═+\-=]+$/.test(l) && /[─═\-=]/.test(l);
+
+// 找出连续的表格块：含分隔符的内容行 + 框线行
+function findTableBlocks(lines) {
   const blocks = [];
   let start = -1;
-  const isTableLine = l => isBorder(l) || SEP.test(l);
+  const isTableLine = l => isBorderLine(l) || TBL_SEP.test(l);
   for (let i = 0; i <= lines.length; i++) {
     const ok = i < lines.length && lines[i].trim() && isTableLine(lines[i]);
     if (ok && start < 0) start = i;
@@ -320,20 +350,31 @@ function fixTable(text) {
       start = -1;
     }
   }
-  for (const [s, e] of blocks) {
-    // 内容行按 │/| 切分，去掉首尾空 cell（来自行首行尾的边框）
-    const rows = [];   // {i, cells} 或 {i, border: line}
-    let ncol = 0;
-    for (let i = s; i < e; i++) {
-      const l = lines[i];
-      if (isBorder(l)) { rows.push({ i, border: l }); continue; }
-      const parts = l.split(SEP);
-      const lead = parts[0].trim() === '' ? 1 : 0;
-      const tail = parts.length > 1 && parts[parts.length - 1].trim() === '' ? 1 : 0;
-      const cells = parts.slice(lead, parts.length - tail).map(c => c.trim());
-      rows.push({ i, cells, lead, tail });
-      ncol = Math.max(ncol, cells.length);
-    }
+  return blocks;
+}
+
+// 块内逐行解析：内容行按 │/| 切分，去掉首尾空 cell（来自行首行尾的边框）
+// 返回 {rows: [{i, cells, lead, tail} 或 {i, border}], ncol}
+function parseTableRows(lines, s, e) {
+  const rows = [];
+  let ncol = 0;
+  for (let i = s; i < e; i++) {
+    const l = lines[i];
+    if (isBorderLine(l)) { rows.push({ i, border: l }); continue; }
+    const parts = l.split(TBL_SEP);
+    const lead = parts[0].trim() === '' ? 1 : 0;
+    const tail = parts.length > 1 && parts[parts.length - 1].trim() === '' ? 1 : 0;
+    const cells = parts.slice(lead, parts.length - tail).map(c => c.trim());
+    rows.push({ i, cells, lead, tail });
+    ncol = Math.max(ncol, cells.length);
+  }
+  return { rows, ncol };
+}
+
+function fixTable(text) {
+  const lines = text.split('\n');
+  for (const [s, e] of findTableBlocks(lines)) {
+    const { rows, ncol } = parseTableRows(lines, s, e);
     if (!ncol) continue;
     const widths = new Array(ncol).fill(0);
     for (const r of rows) if (r.cells) {
@@ -351,10 +392,60 @@ function fixTable(text) {
       } else {
         const padded = r.cells.map((c, j) =>
           ' ' + c + ' '.repeat(widths[j] - displayWidth(c)) + ' ');
-        const sepCh = SEP.test('│') && /│/.test(lines[r.i]) ? '│' : '|';
+        const sepCh = /│/.test(lines[r.i]) ? '│' : '|';
         lines[r.i] = (r.lead ? sepCh : '') + padded.join(sepCh) + (r.tail ? sepCh : '');
       }
     }
+  }
+  return lines.join('\n');
+}
+
+// ============ 终端表格 → Markdown 表格 ============
+// 框线行是行分隔；连续内容行仅当首列为空（折行续行的特征）才并入上一行，
+// 否则各自成行（兼容 mysql/psql 风格：只有表头下一条框线，body 不分隔）。
+// 首个逻辑行作表头。单元格按真实显示宽度补空格，转出的 Markdown 源码在终端里也对齐。
+
+function joinCell(a, b) {
+  if (!a) return b;
+  // 中文折行拼回时不插空格，英文之间插一个
+  const lastCp = [...a].pop().codePointAt(0);
+  const noSpace = charCols(lastCp, false) === 2 && charCols(b.codePointAt(0), false) === 2;
+  return a + (noSpace ? '' : ' ') + b;
+}
+
+function tableToMarkdown(text) {
+  const lines = text.split('\n');
+  const blocks = findTableBlocks(lines);
+  for (let b = blocks.length - 1; b >= 0; b--) { // 从后往前替换，splice 不影响前面块的下标
+    const [s, e] = blocks[b];
+    const { rows, ncol } = parseTableRows(lines, s, e);
+    if (!ncol) continue;
+    const logical = [];
+    let cur = null;
+    for (const r of rows) {
+      if (r.border) { cur = null; continue; }
+      if (r.cells.every(c => !c)) continue; // 全空行（单元格内的空白填充行）
+      if (cur && r.cells[0] === '') {
+        r.cells.forEach((c, j) => { if (c) cur[j] = joinCell(cur[j], c); });
+      } else {
+        cur = r.cells.slice();
+        while (cur.length < ncol) cur.push('');
+        logical.push(cur);
+      }
+    }
+    if (!logical.length) continue;
+    const widths = new Array(ncol).fill(3);
+    for (const row of logical) {
+      row.forEach((c, j) => { widths[j] = Math.max(widths[j], displayWidth(c)); });
+    }
+    const mk = row => '|' + row.map((c, j) =>
+      ' ' + c + ' '.repeat(widths[j] - displayWidth(c)) + ' ').join('|') + '|';
+    const md = [
+      mk(logical[0]),
+      '|' + widths.map(w => '-'.repeat(w + 2)).join('|') + '|',
+      ...logical.slice(1).map(mk),
+    ];
+    lines.splice(s, e - s, ...md);
   }
   return lines.join('\n');
 }
@@ -363,6 +454,66 @@ document.getElementById('fixBtn').addEventListener('click', () => {
   input.value = fixTable(input.value);
   render();
 });
+
+document.getElementById('mdBtn').addEventListener('click', () => {
+  input.value = tableToMarkdown(input.value);
+  mdPreviewChk.checked = true; // 转换后自动打开预览，肉眼验证结果
+  render();
+});
+
+// ============ Markdown 预览：渲染成真 HTML 表格验证转换结果 ============
+// 只认表格（| 行 + |---| 分隔行），其余行按纯文本显示。不引外部库，离线可用。
+
+const mdPreviewChk = document.getElementById('mdPreviewChk');
+const mdPreviewBox = document.getElementById('mdPreview');
+
+function renderMdPreview() {
+  if (!mdPreviewChk.checked) { mdPreviewBox.style.display = 'none'; return; }
+  mdPreviewBox.style.display = 'block';
+  const lines = input.value.split('\n');
+  const isMdRow = l => /^\s*\|.*\|\s*$/.test(l);
+  const isMdSep = l => /^\s*\|(\s*:?-{3,}:?\s*\|)+\s*$/.test(l);
+  const splitRow = l => {
+    const p = l.trim().split('|');
+    return p.slice(1, p.length - 1).map(c => c.trim());
+  };
+  const frag = document.createDocumentFragment();
+  let i = 0;
+  while (i < lines.length) {
+    if (isMdRow(lines[i]) && i + 1 < lines.length && isMdSep(lines[i + 1])) {
+      const table = document.createElement('table');
+      const addRow = (cells, tag, parent) => {
+        const tr = document.createElement('tr');
+        for (const c of cells) {
+          const td = document.createElement(tag);
+          td.textContent = c;  // textContent 天然防注入
+          tr.appendChild(td);
+        }
+        parent.appendChild(tr);
+      };
+      const thead = document.createElement('thead');
+      addRow(splitRow(lines[i]), 'th', thead);
+      table.appendChild(thead);
+      const tbody = document.createElement('tbody');
+      i += 2;
+      while (i < lines.length && isMdRow(lines[i]) && !isMdSep(lines[i])) {
+        addRow(splitRow(lines[i]), 'td', tbody);
+        i++;
+      }
+      table.appendChild(tbody);
+      frag.appendChild(table);
+    } else {
+      const div = document.createElement('div');
+      div.className = 'plain';
+      div.textContent = lines[i] || ' ';
+      frag.appendChild(div);
+      i++;
+    }
+  }
+  mdPreviewBox.replaceChildren(frag);
+}
+
+mdPreviewChk.addEventListener('change', renderMdPreview);
 
 // ============ 导出 PNG（canvas 按同一网格重画，像素级对齐） ============
 
