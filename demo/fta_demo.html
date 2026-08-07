@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>代数基本定理：高斯 1799 几何证明 可视化</title>
+<style>
+  body { font-family: Arial, "PingFang SC", sans-serif; margin: 20px; background: #f5f5f5; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .hint { color: #666; font-size: 13px; margin: 4px 0 10px; line-height: 1.5; }
+  .panel { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 12px; }
+  canvas { border: 1px solid #bbb; background: #fff; display: block; }
+  button { padding: 4px 12px; font-size: 14px; cursor: pointer; }
+  input[type=text] { font-family: Menlo, Consolas, monospace; font-size: 14px; padding: 4px 6px; }
+  .toolbar { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14px; }
+  .mono { font-family: Menlo, Consolas, monospace; font-size: 12.5px; }
+  #rootlist { margin-top: 6px; color: #333; }
+  .legend span { display: inline-block; padding: 1px 8px; border-radius: 3px; margin-right: 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>代数基本定理：n 次复多项式必有 n 个根</h1>
+
+<div class="panel">
+  <div class="toolbar">
+    f(z) 系数（最高次在前，空格分隔）:
+    <input type="text" id="coefIn" size="30" value="1 0 0 0 0 -1">
+    <button id="applyBtn" style="font-weight:bold">应用</button>
+    预设:
+    <button data-c="1 0 0 0 0 -1">z⁵−1</button>
+    <button data-c="1 0 0 0 1">z⁴+1</button>
+    <button data-c="1 0 -1 -1">z³−z−1</button>
+    <button data-c="1 0 -2 -3 0 6">(z²−2)(z³−3)</button>
+    <button data-c="1 -2 0 3 -1 1 -4">6次随手写</button>
+    <button id="randBtn">🎲 随机多项式</button>
+    <span id="polyShow" class="mono"></span>
+  </div>
+  <div id="eqShow" class="mono" style="margin:6px 0 2px; line-height:1.8"></div>
+  <div id="rootlist" class="mono"></div>
+</div>
+
+<h2>高斯 1799：Re f = 0 与 Im f = 0 两族曲线必然相交</h2>
+<div class="hint">
+  背景四色 = (Re f, Im f) 的符号组合；<b style="color:#c0392b">红曲线 Re f = 0</b>，<b style="color:#1665d8">蓝曲线 Im f = 0</b>。
+  外圈大圆上红蓝刻度是两族曲线伸向无穷的分支——因为远处 f(z) ≈ z^n，红蓝各 2n 条、<b>严格交替</b>排成 4n 根辐条。
+  高斯的论证：交替结构逼着每条蓝分支进入圆内后必须横穿某条红曲线——<b>红蓝交点(★)就是根</b>，Re = Im = 0。
+</div>
+<div class="panel">
+  <canvas id="cv1" width="860" height="430"></canvas>
+  <div class="hint legend" style="margin-top:6px">
+    <span style="background:#fff7dc">Re&gt;0, Im&gt;0</span>
+    <span style="background:#e8f6e8">Re&lt;0, Im&gt;0</span>
+    <span style="background:#e8eefb">Re&lt;0, Im&lt;0</span>
+    <span style="background:#fcecec">Re&gt;0, Im&lt;0</span>
+    ★ = 根　外圈数字 = 辐条计数（应为 4n）
+  </div>
+</div>
+
+
+<script>
+'use strict';
+// ---------------- 复数与多项式 ----------------
+function evalPoly(c, re, im) {          // Horner, c 最高次在前
+  let a = 0, b = 0;
+  for (const k of c) { const t = a * re - b * im + k; b = a * im + b * re; a = t; }
+  return [a, b];
+}
+function parseCoefs(s) {
+  const c = s.trim().split(/[\s,]+/).map(Number);
+  if (c.some(isNaN)) throw new Error('系数解析失败');
+  while (c.length && c[0] === 0) c.shift();
+  if (c.length < 2) throw new Error('至少一次多项式');
+  return c;
+}
+function cauchyR(c) {
+  let m = 0;
+  for (let i = 1; i < c.length; i++) m = Math.max(m, Math.abs(c[i] / c[0]));
+  return 1 + m;
+}
+function durandKerner(c) {              // 全部复根
+  const n = c.length - 1, mc = c.map(x => x / c[0]);
+  let zs = [];
+  for (let k = 0; k < n; k++) {
+    const ang = 2 * Math.PI * k / n + 0.4;
+    const rad = Math.pow(cauchyR(c), (k + 1) / (n + 1));
+    zs.push([rad * Math.cos(ang), rad * Math.sin(ang)]);
+  }
+  for (let it = 0; it < 300; it++) {
+    let move = 0;
+    for (let k = 0; k < n; k++) {
+      const [pr, pi] = evalPoly(mc, zs[k][0], zs[k][1]);
+      let dr = 1, di = 0;
+      for (let j = 0; j < n; j++) {
+        if (j === k) continue;
+        const ar = zs[k][0] - zs[j][0], ai = zs[k][1] - zs[j][1];
+        const t = dr * ar - di * ai; di = dr * ai + di * ar; dr = t;
+      }
+      const d2 = dr * dr + di * di || 1e-300;
+      const qr = (pr * dr + pi * di) / d2, qi = (pi * dr - pr * di) / d2;
+      zs[k][0] -= qr; zs[k][1] -= qi;
+      move = Math.max(move, Math.abs(qr) + Math.abs(qi));
+    }
+    if (move < 1e-13) break;
+  }
+  return zs.sort((a, b) => Math.hypot(...a) - Math.hypot(...b));
+}
+// ---------------- 符号展开: f(a+bi) = P(a,b) + i·Q(a,b) ----------------
+function expandPQ(c) {          // c 实系数, 最高次在前; 返回 {P, Q}: 键 "i,j" -> a^i b^j 的系数
+  const n = c.length - 1, P = {}, Q = {};
+  for (let k = 0; k <= n; k++) {
+    const ck = c[n - k];
+    if (ck === 0) continue;
+    let binom = 1;              // C(k, j), 递推
+    for (let j = 0; j <= k; j++) {
+      const key = (k - j) + ',' + j;         // a^(k-j) b^j, 来自 i^j
+      if (j % 2 === 0) {
+        const s = (j / 2) % 2 === 0 ? 1 : -1;         // i^j = ±1
+        P[key] = (P[key] || 0) + s * ck * binom;
+      } else {
+        const s = ((j - 1) / 2) % 2 === 0 ? 1 : -1;   // i^j = ±i
+        Q[key] = (Q[key] || 0) + s * ck * binom;
+      }
+      binom = binom * (k - j) / (j + 1);
+    }
+  }
+  return { P, Q };
+}
+function fmtPQ(T) {
+  const sup = d => String(d).split('').map(x => '⁰¹²³⁴⁵⁶⁷⁸⁹'[+x]).join('');
+  const terms = Object.entries(T).filter(([, v]) => v !== 0)
+    .map(([k, v]) => { const [i, j] = k.split(',').map(Number); return { i, j, v }; })
+    .sort((x, y) => (y.i + y.j) - (x.i + x.j) || y.i - x.i);
+  if (!terms.length) return '0';
+  return terms.map((t, idx) => {
+    const mag = Math.abs(t.v);
+    const vars = (t.i ? 'a' + (t.i > 1 ? sup(t.i) : '') : '') + (t.j ? 'b' + (t.j > 1 ? sup(t.j) : '') : '');
+    const coef = (mag === 1 && vars) ? '' : (Number.isInteger(mag) ? String(mag) : mag.toFixed(3));
+    return (idx === 0 ? (t.v < 0 ? '−' : '') : (t.v < 0 ? ' − ' : ' + ')) + coef + vars;
+  }).join('');
+}
+
+// ---------------- 全局状态 ----------------
+let C = [1, 0, 0, 0, 0, -1], ROOTS = [], VIEW = 2;
+
+function fmtRoot([x, y]) {
+  const f = v => (Math.abs(v) < 5e-5 ? '0' : v.toFixed(4));
+  return y >= 0 ? `${f(x)}+${f(y)}i` : `${f(x)}−${f(-y)}i`;
+}
+function polyText(c) {
+  const n = c.length - 1;
+  return c.map((k, i) => {
+    if (k === 0) return '';
+    const p = n - i, ks = (Math.abs(k) === 1 && p > 0) ? '' : Math.abs(k);
+    const zs = p === 0 ? '' : (p === 1 ? 'z' : 'z^' + p);
+    return (i === 0 ? (k < 0 ? '-' : '') : (k < 0 ? ' - ' : ' + ')) + ks + zs;
+  }).join('') || '0';
+}
+
+// ---------------- 第一节: 高斯 1799 ----------------
+const cv1 = document.getElementById('cv1'), g1 = cv1.getContext('2d');
+function drawGauss() {
+  const W = cv1.width, H = cv1.height;
+  const sc = VIEW / (H / 2);                       // 世界单位/像素
+  const img = g1.createImageData(W, H);
+  const sgnRe = new Int8Array(W * H), sgnIm = new Int8Array(W * H);
+  const pal = { '1,1': [255, 247, 220], '-1,1': [232, 246, 232], '-1,-1': [232, 238, 251], '1,-1': [252, 236, 236] };
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const x = (px - W / 2) * sc, y = (H / 2 - py) * sc;
+      const [re, im] = evalPoly(C, x, y);
+      const i = py * W + px;
+      sgnRe[i] = re >= 0 ? 1 : -1; sgnIm[i] = im >= 0 ? 1 : -1;
+      const col = pal[sgnRe[i] + ',' + sgnIm[i]];
+      img.data[i * 4] = col[0]; img.data[i * 4 + 1] = col[1]; img.data[i * 4 + 2] = col[2]; img.data[i * 4 + 3] = 255;
+    }
+  }
+  // 零曲线: 符号翻转像素
+  for (let py = 0; py < H - 1; py++) {
+    for (let px = 0; px < W - 1; px++) {
+      const i = py * W + px;
+      const reFlip = sgnRe[i] !== sgnRe[i + 1] || sgnRe[i] !== sgnRe[i + W];
+      const imFlip = sgnIm[i] !== sgnIm[i + 1] || sgnIm[i] !== sgnIm[i + W];
+      if (!reFlip && !imFlip) continue;
+      const col = reFlip && imFlip ? [40, 40, 40] : reFlip ? [192, 57, 43] : [22, 101, 216];
+      img.data[i * 4] = col[0]; img.data[i * 4 + 1] = col[1]; img.data[i * 4 + 2] = col[2];
+    }
+  }
+  g1.putImageData(img, 0, 0);
+  // 大圆 + 交替辐条刻度
+  const Rc = VIEW * 0.92 * (H / 2) / (H / 2);      // 世界半径
+  const rpx = Rc / sc;
+  g1.strokeStyle = '#777'; g1.lineWidth = 1.2;
+  g1.beginPath(); g1.arc(W / 2, H / 2, rpx, 0, 2 * Math.PI); g1.stroke();
+  // 环形计数(首尾相接), 避免接缝处浮点符号噪声吞掉翻转
+  const NN = 2880, sR = [], sI = [], pos = [];
+  for (let i = 0; i < NN; i++) {
+    const th = 2 * Math.PI * i / NN;
+    const [re, im] = evalPoly(C, Rc * Math.cos(th), Rc * Math.sin(th));
+    sR.push(re >= 0); sI.push(im >= 0);
+    pos.push([W / 2 + rpx * Math.cos(th), H / 2 - rpx * Math.sin(th)]);
+  }
+  let spokes = 0;
+  for (let i = 0; i < NN; i++) {
+    const j = (i + 1) % NN;
+    if (sR[i] !== sR[j]) { dot(pos[j][0], pos[j][1], '#c0392b'); spokes++; }
+    if (sI[i] !== sI[j]) { dot(pos[j][0], pos[j][1], '#1665d8'); spokes++; }
+  }
+  function dot(x, y, c) { g1.fillStyle = c; g1.beginPath(); g1.arc(x, y, 4, 0, 2 * Math.PI); g1.fill(); }
+  g1.fillStyle = '#333'; g1.font = '13px Menlo';
+  g1.fillText(`辐条: ${spokes} = 4×${(C.length - 1)}`, 10, 18);
+  // 根
+  for (const [x, y] of ROOTS) {
+    const px = W / 2 + x / sc, py = H / 2 - y / sc;
+    g1.fillStyle = '#111'; g1.font = 'bold 17px sans-serif';
+    g1.fillText('★', px - 6, py + 6);
+  }
+}
+
+// ---------------- 应用输入 ----------------
+function apply() {
+  try {
+    C = parseCoefs(document.getElementById('coefIn').value);
+    ROOTS = durandKerner(C);
+    VIEW = Math.max(...ROOTS.map(z => Math.hypot(...z)), 1) * 1.45;
+    document.getElementById('polyShow').textContent = 'f(z) = ' + polyText(C);
+    const { P, Q } = expandPQ(C);
+    document.getElementById('eqShow').innerHTML =
+      `原方程: ${polyText(C).replace(/z/g, 'z')} = 0，令 z = a + bi 展开，f = P + i·Q:<br>` +
+      `<span style="color:#c0392b">P(a,b) = ${fmtPQ(P)} = 0</span>（红曲线）<br>` +
+      `<span style="color:#1665d8">Q(a,b) = ${fmtPQ(Q)} = 0</span>（蓝曲线）`;
+    document.getElementById('rootlist').innerHTML =
+      `${C.length - 1} 个根: ` + ROOTS.map(z => `${fmtRoot(z)} (|z|=${Math.hypot(...z).toFixed(3)})`).join(',  ');
+    drawGauss();
+  } catch (e) {
+    document.getElementById('rootlist').textContent = e.message;
+  }
+}
+document.getElementById('applyBtn').addEventListener('click', apply);
+document.getElementById('randBtn').addEventListener('click', () => {
+  const deg = 3 + Math.floor(Math.random() * 5);          // 3..7 次
+  const r = () => Math.floor(Math.random() * 19) - 9;     // -9..9
+  const c = [0].map(() => 0);
+  c[0] = (Math.floor(Math.random() * 9) + 1) * (Math.random() < 0.5 ? -1 : 1);
+  for (let i = 1; i <= deg; i++) c.push(r());
+  document.getElementById('coefIn').value = c.join(' ');
+  apply();
+});
+document.querySelector('.toolbar').addEventListener('click', e => {
+  if (e.target.dataset && e.target.dataset.c) {
+    document.getElementById('coefIn').value = e.target.dataset.c;
+    apply();
+  }
+});
+apply();
+</script>
+</body>
+</html>
