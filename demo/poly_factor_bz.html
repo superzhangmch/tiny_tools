@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>整系数多项式分解 · Berlekamp–Zassenhaus (mod p → Hensel p^N → 穷举重组)</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#171b21; --panel2:#1d222a; --line:#2a3140;
+    --fg:#e6e9ef; --dim:#9aa4b2; --acc:#6ea8fe; --ok:#5ad19a; --warn:#f0c26b; --bad:#f08a8a;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB",sans-serif;}
+  header{padding:18px 22px 12px;border-bottom:1px solid var(--line)}
+  h1{margin:0;font-size:17px;font-weight:650;letter-spacing:.2px}
+  header .sub{color:var(--dim);font-size:12.5px;margin-top:4px}
+  .wrap{display:grid;grid-template-columns:360px 1fr;gap:0;min-height:calc(100vh - 62px)}
+  .side{border-right:1px solid var(--line);padding:16px;background:var(--panel)}
+  .main{padding:16px 20px;overflow:auto}
+  fieldset{border:1px solid var(--line);border-radius:8px;padding:10px 12px 12px;margin:0 0 14px}
+  legend{color:var(--acc);font-size:12px;padding:0 6px;letter-spacing:.4px;text-transform:uppercase}
+  label{display:block;font-size:12.5px;color:var(--dim);margin:8px 0 3px}
+  input[type=number],input[type=text],textarea,select{
+    width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+    border-radius:6px;padding:7px 9px;font-family:var(--mono);font-size:13px}
+  textarea{resize:vertical;min-height:64px}
+  .row{display:flex;gap:8px}.row>*{flex:1}
+  button{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--fg);
+    border-radius:6px;padding:8px 10px;font-size:13px;font-weight:550}
+  button:hover{border-color:var(--acc);color:#fff}
+  button.pri{background:var(--acc);border-color:var(--acc);color:#0b1020}
+  button.pri:hover{filter:brightness(1.1)}
+  .btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:14px}
+  .card h2{margin:0 0 8px;font-size:13px;color:var(--acc);text-transform:uppercase;letter-spacing:.5px;font-weight:650}
+  .poly{font-family:var(--mono);font-size:14px;word-break:break-all;line-height:1.9}
+  .poly sup{font-size:.72em}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;font-size:13px}
+  .kv div:nth-child(odd){color:var(--dim);white-space:nowrap}
+  .kv div:nth-child(even){font-family:var(--mono)}
+  .fac{padding:6px 0;border-top:1px dashed var(--line)}
+  .fac:first-of-type{border-top:0}
+  .eqline{font-family:var(--mono);font-size:16px;line-height:2;word-break:break-all;
+    padding:8px 10px;background:#101419;border:1px solid var(--line);border-radius:8px}
+  .eqline sup{font-size:.72em}
+  .eqplain{font-family:var(--mono);font-size:12px;color:var(--dim);word-break:break-all;
+    margin:6px 0 12px;user-select:all}
+  .badge{display:inline-block;font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:99px;
+    border:1px solid var(--line);color:var(--dim);margin-left:6px}
+  .ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)} .dim{color:var(--dim)}
+  pre.log{font-family:var(--mono);font-size:12px;background:#101419;border:1px solid var(--line);
+    border-radius:8px;padding:10px 12px;max-height:340px;overflow:auto;white-space:pre-wrap;margin:0;color:#c6cedb}
+  details summary{cursor:pointer;color:var(--dim);font-size:12.5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}.side{border-right:0;border-bottom:1px solid var(--line)}.grid2{grid-template-columns:1fr}}
+  code{font-family:var(--mono);background:#101419;padding:1px 4px;border-radius:4px}
+  table.t{border-collapse:collapse;width:100%;font-size:12.5px}
+  table.t th{text-align:left;color:var(--dim);font-weight:550;font-size:11.5px;
+    text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--line);padding:4px 8px}
+  table.t td{padding:5px 8px;border-bottom:1px solid #222834;vertical-align:top;font-family:var(--mono)}
+  table.t tr:last-child td{border-bottom:0}
+  .gtag{display:inline-block;min-width:20px;text-align:center;font-family:var(--mono);font-size:11px;
+    padding:0 5px;border-radius:4px;color:#0b1020;font-weight:700}
+  .idx{color:var(--dim);font-family:var(--mono)}
+  .chain{font-family:var(--mono);font-size:11.5px;line-height:1.75;white-space:pre;overflow-x:auto}
+  .chain b{color:var(--ok);font-weight:600}
+  .chain .new{color:var(--warn)}
+  .grp{border-left:3px solid;padding:6px 0 6px 10px;margin:8px 0}
+  .arrow{color:var(--dim)}
+  .ctl{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+  .ctl .inl{display:flex;gap:5px;align-items:center;margin:0;font-size:12.5px;color:var(--dim)}
+  .ctl select{width:auto;padding:4px 6px;font-size:12px}
+  .ctl input[type=checkbox]{width:auto;accent-color:var(--acc)}
+  table.lin{border-collapse:collapse}
+  table.lin td,table.lin th{border:1px solid #263041}
+  table.lin td.pcell{white-space:normal;word-break:break-all;min-width:96px}
+  table.lin td.dcell{white-space:pre;font-size:11.5px}
+  table.lin td.fcell{font-weight:600}
+  table.lin td.gcell{text-align:center;vertical-align:middle}
+  .scrollx{overflow-x:auto}
+  .mblk{border:1px solid var(--line);border-left:4px solid;border-radius:8px;
+    padding:10px 12px;margin:0 0 12px;background:#141922}
+  .mblk.fail{border-left-color:var(--bad);background:#1a1417}
+  .mhead{font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+  .mnote{font-size:12.5px;margin:6px 0 4px}
+  table.mtab{width:auto}
+  table.mtab td{border:0;padding:2px 10px 2px 0;white-space:nowrap}
+  table.mcalc2{width:auto;border-collapse:collapse;font-size:13px;margin-top:2px}
+  table.mcalc2 td{padding:2px 10px 2px 0;vertical-align:baseline;white-space:nowrap}
+  table.stg{width:auto;border-collapse:collapse;font-size:13px;margin-top:2px}
+  table.stg td{padding:3px 14px 3px 0;vertical-align:baseline;border:0}
+  table.stg td.st{color:var(--dim);font-size:12px;white-space:nowrap;text-align:right}
+  table.stg td.val{font-family:var(--mono);white-space:normal;word-break:break-all}
+  table.stg td.note{color:var(--dim);font-size:11.5px;white-space:normal;font-family:var(--mono)}
+  table.mcalc2 td.lhs{font-family:var(--mono);text-align:right;white-space:normal;word-break:break-all}
+  table.mcalc2 td.val{font-family:var(--mono);white-space:normal;word-break:break-all}
+  table.mcalc2 td.val .dim{font-size:11.5px}
+  table.mtab td.pcell{white-space:normal;word-break:break-all}
+  table.mtab td.tg{color:var(--dim);padding-right:4px;font-size:13px}
+  .mcalc{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);font-size:13px}
+  .mcalc .op{color:var(--acc);font-family:var(--mono);display:inline-block;width:1.2em}
+  .mcalc .poly{margin:2px 0 6px 1.4em}
+  .step{margin:2px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>整系数多项式分解 — Berlekamp–Zassenhaus</h1>
+  <div class="sub">mod p 分解（Cantor–Zassenhaus）→ Hensel 二次提升到 p<sup>N</sup> → <b>穷举子集重组 + 试除</b>（不使用 LLL）</div>
+</header>
+
+<div class="wrap">
+<div class="side">
+
+  <fieldset>
+    <legend>随机输入</legend>
+    <div class="row">
+      <div><label>次数 d</label><input type="number" id="rdeg" value="8" min="1" max="60"></div>
+      <div><label>系数范围 ±C</label><input type="number" id="rcoef" value="9" min="1" max="100000"></div>
+    </div>
+    <div class="btns"><button id="btnRand" style="flex:1">生成 1 个随机多项式</button></div>
+
+    <div class="row" style="margin-top:12px">
+      <div><label>因子个数 k</label><input type="number" id="pk" value="3" min="1" max="12"></div>
+      <div><label>每个因子次数 ≤</label><input type="number" id="pdeg" value="4" min="1" max="20"></div>
+    </div>
+    <div class="row">
+      <div><label>因子系数范围 ±C</label><input type="number" id="pcoef" value="5" min="1" max="1000"></div>
+      <div><label>允许重复因子</label>
+        <select id="prep"><option value="0">否</option><option value="1">是（测重数）</option></select></div>
+    </div>
+    <label>因子本身</label>
+    <select id="pirr">
+      <option value="1">保证不可约 —— 分解结果应与构造因子完全一致</option>
+      <option value="0">任意随机 —— 因子自身可能还能再分解</option>
+    </select>
+    <div class="btns"><button id="btnProd" style="flex:1">生成 k 个随机多项式之积</button></div>
+
+    <label style="margin-top:12px">Swinnerton–Dyer ∏(x±√2±√3±…)：不可约但 mod p 几乎全裂，重组呈 2<sup>r</sup> 爆炸</label>
+    <div class="row">
+      <div><select id="sdk">
+        <option value="2">2 个素数 → deg 4</option>
+        <option value="3" selected>3 个素数 → deg 8</option>
+        <option value="4">4 个素数 → deg 16</option>
+        <option value="5">5 个素数 → deg 32（慢）</option>
+        <option value="6">6 个素数 → deg 64（很慢）</option>
+      </select></div>
+      <div><button id="btnSD">生成</button></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>输入多项式 f(x)</legend>
+    <label>支持 <code>3x^5-2x^2+x-7</code>、<code>(x^2+1)(x^3-2)</code>、<code>2*x^3-1</code></label>
+    <textarea id="input" spellcheck="false">(x^4-x^2+1)*(3x^3+2x-5)*(x^2+x+1)</textarea>
+    <div class="btns">
+      <button class="pri" id="btnGo" style="flex:1">分解</button>
+      <button id="btnClear">清空日志</button>
+    </div>
+    <label style="margin-top:10px">重组子集上限（防组合爆炸）</label>
+    <input type="number" id="cap" value="400000" min="1000" step="1000">
+  </fieldset>
+
+  <fieldset>
+    <legend>示例</legend>
+    <div class="btns">
+      <button data-ex="x^8+1">x^8+1</button>
+      <button data-ex="x^16-1">x^16-1</button>
+      <button data-ex="x^12+x^11-x^9-x^8+x^6+x^4-x^3-x+1">Φ 型</button>
+      <button data-ex="(x^5-x-1)*(x^5+x+1)">Swinnerton 风格</button>
+      <button data-ex="6*(x^2-2)^3*(x^3-3)^2">带重数与 content</button>
+      <button data-ex="x^10+x^9+x^8+x^7+x^6+x^5+x^4+x^3+x^2+x+1">Φ11（不可约）</button>
+    </div>
+  </fieldset>
+</div>
+
+<div class="main">
+  <div class="card"><h2>输入</h2><div class="poly" id="outIn" class="dim">—</div>
+    <div id="outSeed" style="margin-top:8px"></div></div>
+  <div class="card"><h2>分解结果</h2><div id="outRes" class="dim">—</div></div>
+  <div class="card">
+    <h2>每个结果因子 ← 上一层哪几个合并而来</h2>
+    <div id="outMerge" class="dim">—</div>
+  </div>
+  <div class="card">
+    <h2>继承关系总表 &nbsp;<span style="text-transform:none;letter-spacing:0;color:var(--dim);font-weight:400">
+      u<sub>i</sub> (mod p) → û<sub>i</sub> (mod p<sup>N</sup>) → 合并 → Z[x] 因子</span></h2>
+    <div class="ctl">
+      <label class="inl">表示法
+        <select id="lineRep">
+          <option value="sym">多项式（对称代表元）</option>
+          <option value="pos">多项式（0 ≤ c &lt; p<sup>k</sup>）</option>
+          <option value="padic">p 进数字（低位在左）</option>
+        </select></label>
+      <label class="inl"><input type="checkbox" id="chkAllPrec"> 展开所有中间精度列</label>
+      <span class="dim" id="lineHint"></span>
+    </div>
+    <div id="outLine" class="dim">—</div>
+  </div>
+  <div class="card"><h2>算法数据</h2><div class="kv" id="outStat"><div class="dim">—</div><div></div></div></div>
+  <div class="card"><h2>过程日志</h2><pre class="log" id="outLog">—</pre></div>
+</div>
+</div>
+
+<script>
+"use strict";
+/* =======================================================================
+   多项式表示：BigInt 数组，下标 = 次数（小端）。零多项式 = []。
+   mod p 层：Number 数组（p 取小素数，乘积不溢出 2^53）。
+   ======================================================================= */
+
+/* ---------------- Z[x] ---------------- */
+const Z = {
+  trim(a){ let n=a.length; while(n>0 && a[n-1]===0n) n--; return n===a.length?a:a.slice(0,n); },
+  deg(a){ return a.length-1; },                       // 零多项式 -> -1
+  isZero(a){ return a.length===0; },
+  add(a,b){ const n=Math.max(a.length,b.length),r=new Array(n);
+    for(let i=0;i<n;i++) r[i]=(a[i]||0n)+(b[i]||0n); return Z.trim(r); },
+  sub(a,b){ const n=Math.max(a.length,b.length),r=new Array(n);
+    for(let i=0;i<n;i++) r[i]=(a[i]||0n)-(b[i]||0n); return Z.trim(r); },
+  mul(a,b){ if(!a.length||!b.length) return [];
+    const r=new Array(a.length+b.length-1).fill(0n);
+    for(let i=0;i<a.length;i++){ const ai=a[i]; if(ai===0n) continue;
+      for(let j=0;j<b.length;j++) r[i+j]+=ai*b[j]; }
+    return Z.trim(r); },
+  scale(a,c){ return c===0n?[]:Z.trim(a.map(x=>x*c)); },
+  shift(a,k){ return a.length?new Array(k).fill(0n).concat(a):[]; },
+  neg(a){ return a.map(x=>-x); },
+  lc(a){ return a[a.length-1]; },
+  deriv(a){ if(a.length<2) return []; const r=new Array(a.length-1);
+    for(let i=1;i<a.length;i++) r[i-1]=a[i]*BigInt(i); return Z.trim(r); },
+  content(a){ let g=0n; for(const c of a) g=bgcd(g,babs(c)); return g; },
+  primitive(a){ if(!a.length) return []; let g=Z.content(a);
+    let r=a.map(c=>c/g); if(Z.lc(r)<0n) r=r.map(c=>-c); return r; },
+  /* 精确整除，不能整除返回 null */
+  exactDiv(a,b){
+    if(!b.length) return null;
+    if(!a.length) return [];
+    if(a.length<b.length) return null;
+    const r=a.slice(), q=new Array(a.length-b.length+1).fill(0n), lb=Z.lc(b);
+    for(let i=q.length-1;i>=0;i--){
+      const t=r[i+b.length-1];
+      if(t===0n){ q[i]=0n; continue; }
+      if(t % lb !== 0n) return null;
+      const c=t/lb; q[i]=c;
+      for(let j=0;j<b.length;j++) r[i+j]-=c*b[j];
+    }
+    for(const c of r) if(c!==0n) return null;
+    return Z.trim(q);
+  },
+  /* 伪余（用于原始 PRS gcd） */
+  pseudoRem(a,b){
+    let r=a.slice(); const db=b.length-1, lb=Z.lc(b);
+    while(r.length-1>=db && r.length){
+      const lr=Z.lc(r), k=r.length-1-db;
+      // r <- lb*r - lr*x^k*b
+      const nr=r.map(c=>c*lb);
+      for(let j=0;j<b.length;j++) nr[j+k]-=lr*b[j];
+      const t=Z.trim(nr);
+      if(t.length>=r.length) break;              // 保险
+      r=t;
+    }
+    return r;
+  },
+  gcd(a,b){
+    let x=a.length?Z.primitive(a):[], y=b.length?Z.primitive(b):[];
+    while(y.length){ const r=Z.pseudoRem(x,y); x=y; y=r.length?Z.primitive(r):[]; }
+    return x.length?Z.primitive(x):[];
+  },
+  eq(a,b){ if(a.length!==b.length) return false;
+    for(let i=0;i<a.length;i++) if(a[i]!==b[i]) return false; return true; },
+  norm2sq(a){ let s=0n; for(const c of a) s+=c*c; return s; },
+};
+function babs(x){ return x<0n?-x:x; }
+function bgcd(a,b){ a=babs(a); b=babs(b); while(b){ const t=a%b; a=b; b=t; } return a; }
+function bisqrt(n){ if(n<2n) return n; let x=n, y=(x+1n)/2n;
+  while(y<x){ x=y; y=(x+n/x)/2n; } return x; }
+function binom(n,k){ let r=1n; const N=BigInt(n);
+  for(let i=0;i<k;i++) r=r*(N-BigInt(i))/BigInt(i+1); return r; }
+function bpowmod(a,e,m){ let r=1n; a=((a%m)+m)%m;
+  while(e>0n){ if(e&1n) r=r*a%m; a=a*a%m; e>>=1n; } return r; }
+function binvmod(a,m){ // 扩展欧几里得
+  let [old_r,r]=[((a%m)+m)%m,m], [old_s,s]=[1n,0n];
+  while(r){ const q=old_r/r; [old_r,r]=[r,old_r-q*r]; [old_s,s]=[s,old_s-q*s]; }
+  if(old_r!==1n) return null;
+  return ((old_s%m)+m)%m;
+}
+
+/* ---------------- F_p[x] （Number 数组） ---------------- */
+function Mp(p){
+ const M={
+  p,
+  norm(a){ const r=a.map(c=>((c%p)+p)%p); let n=r.length;
+    while(n>0&&r[n-1]===0)n--; return r.slice(0,n); },
+  deg(a){ return a.length-1; },
+  add(a,b){ const n=Math.max(a.length,b.length),r=new Array(n);
+    for(let i=0;i<n;i++) r[i]=((a[i]||0)+(b[i]||0))%p; return M.norm(r); },
+  sub(a,b){ const n=Math.max(a.length,b.length),r=new Array(n);
+    for(let i=0;i<n;i++) r[i]=((a[i]||0)-(b[i]||0)+p)%p; return M.norm(r); },
+  mul(a,b){ if(!a.length||!b.length) return [];
+    const r=new Array(a.length+b.length-1).fill(0);
+    for(let i=0;i<a.length;i++){ const ai=a[i]; if(!ai) continue;
+      for(let j=0;j<b.length;j++) r[i+j]=(r[i+j]+ai*b[j])%p; }
+    return M.norm(r); },
+  scale(a,c){ c=((c%p)+p)%p; return c===0?[]:M.norm(a.map(x=>x*c%p)); },
+  inv(a){ let [r0,r1]=[((a%p)+p)%p,p],[s0,s1]=[1,0];
+    while(r1){ const q=Math.floor(r0/r1); [r0,r1]=[r1,r0-q*r1]; [s0,s1]=[s1,s0-q*s1]; }
+    return ((s0%p)+p)%p; },
+  divrem(a,b){
+    if(!b.length) throw new Error("div by 0");
+    if(a.length<b.length) return {q:[],r:a.slice()};
+    const ib=M.inv(b[b.length-1]), r=a.slice(), db=b.length-1,
+          q=new Array(a.length-db).fill(0);
+    for(let i=q.length-1;i>=0;i--){
+      const c=r[i+db]*ib%p; q[i]=c;
+      if(c) for(let j=0;j<b.length;j++) r[i+j]=(r[i+j]-c*b[j]%p+p*p)%p;
+    }
+    return {q:M.norm(q), r:M.norm(r.slice(0,db))};
+  },
+  monic(a){ return M.scale(a, M.inv(a[a.length-1])); },
+  gcd(a,b){ let x=M.norm(a), y=M.norm(b);
+    while(y.length){ const {r}=M.divrem(x,y); x=y; y=r; }
+    return x.length?M.monic(x):[]; },
+  extgcd(a,b){ // 返回 [g,s,t]，g 首一
+    let r0=M.norm(a),r1=M.norm(b),s0=[1],s1=[],t0=[],t1=[1];
+    while(r1.length){ const {q,r}=M.divrem(r0,r1);
+      [r0,r1]=[r1,r];
+      [s0,s1]=[s1,M.sub(s0,M.mul(q,s1))];
+      [t0,t1]=[t1,M.sub(t0,M.mul(q,t1))]; }
+    const i=M.inv(r0[r0.length-1]);
+    return [M.scale(r0,i),M.scale(s0,i),M.scale(t0,i)]; },
+  powmod(base,e,f){ // base^e mod f，e 为 BigInt
+    let r=[1], b=M.divrem(base,f).r;
+    while(e>0n){ if(e&1n) r=M.divrem(M.mul(r,b),f).r;
+      b=M.divrem(M.mul(b,b),f).r; e>>=1n; }
+    return r; },
+  rand(d){ const r=new Array(d+1); for(let i=0;i<=d;i++) r[i]=Math.floor(Math.random()*p);
+    return M.norm(r); },
+ };
+ return M;
+}
+
+/* ---- mod p 分解：distinct-degree + Cantor–Zassenhaus equal-degree ---- */
+function factorModP(f, p){                       // f 首一、无平方因子
+  const M=Mp(p);
+  const out=[];
+  let v=M.monic(f), h=[0,1], d=0;                // h = x^{p^d} mod v
+  while(v.length-1 >= 2*(d+1)){
+    d++;
+    h=M.powmod(h,BigInt(p),v);
+    const g=M.gcd(M.sub(h,[0,1]), v);
+    if(g.length-1>0){
+      for(const u of equalDegSplit(M,g,d)) out.push(u);
+      v=M.divrem(v,g).q;
+      h=M.divrem(h,v).r;
+    }
+  }
+  if(v.length-1>0) out.push(v);
+  return out;
+}
+function equalDegSplit(M,g,d){                   // g 的全部不可约因子次数均为 d
+  const n=g.length-1;
+  if(n===d) return [M.monic(g)];
+  const p=M.p, e=(BigInt(p)**BigInt(d)-1n)/2n;
+  for(let guard=0;guard<10000;guard++){
+    const a=M.rand(Math.max(1,n-1));
+    if(a.length<2) continue;
+    let s=M.gcd(a,g);
+    if(s.length-1<=0){
+      const b=M.powmod(a,e,g);
+      s=M.gcd(M.sub(b,[1]),g);
+    }
+    const ds=s.length-1;
+    if(ds>0 && ds<n){
+      return equalDegSplit(M,s,d).concat(equalDegSplit(M,M.divrem(g,s).q,d));
+    }
+  }
+  throw new Error("equal-degree split 失败（p 太小？）");
+}
+
+/* ---------------- Z/m[x]（m = p^k，BigInt） ---------------- */
+function Mm(m){
+ const A={
+  m,
+  norm(a){ const r=a.map(c=>((c%m)+m)%m); let n=r.length;
+    while(n>0&&r[n-1]===0n)n--; return r.slice(0,n); },
+  add(a,b){ const n=Math.max(a.length,b.length),r=new Array(n);
+    for(let i=0;i<n;i++) r[i]=((a[i]||0n)+(b[i]||0n))%m; return A.norm(r); },
+  sub(a,b){ const n=Math.max(a.length,b.length),r=new Array(n);
+    for(let i=0;i<n;i++) r[i]=((a[i]||0n)-(b[i]||0n)+m)%m; return A.norm(r); },
+  mul(a,b){ if(!a.length||!b.length) return [];
+    const r=new Array(a.length+b.length-1).fill(0n);
+    for(let i=0;i<a.length;i++){ const ai=a[i]; if(ai===0n) continue;
+      for(let j=0;j<b.length;j++) r[i+j]=(r[i+j]+ai*b[j])%m; }
+    return A.norm(r); },
+  scale(a,c){ c=((c%m)+m)%m; return c===0n?[]:A.norm(a.map(x=>x*c%m)); },
+  divremMonic(a,b){                           // b 必须首一
+    if(a.length<b.length) return {q:[],r:a.slice()};
+    const r=a.slice(), db=b.length-1, q=new Array(a.length-db).fill(0n);
+    for(let i=q.length-1;i>=0;i--){
+      const c=r[i+db]%m; q[i]=c;
+      if(c!==0n) for(let j=0;j<b.length;j++) r[i+j]=((r[i+j]-c*b[j])%m+m)%m;
+    }
+    return {q:A.norm(q), r:A.norm(r.slice(0,db))};
+  },
+  fromZ(a){ return A.norm(a.map(c=>c)); },
+  sym(a){ const h=m/2n; return Z.trim(a.map(c=>c>h?c-m:c)); },
+ };
+ return A;
+}
+
+/* ---- Hensel 单步（von zur Gathen & Gerhard, Alg. 15.10），h 首一 ---- */
+function henselStep(F,g,h,s,t,m2){
+  const A=Mm(m2);
+  const e=A.sub(F,A.mul(g,h));
+  const {q,r}=A.divremMonic(A.mul(s,e),h);
+  const G=A.add(A.add(g,A.mul(t,e)),A.mul(q,g));
+  const H=A.add(h,r);
+  const b=A.sub(A.add(A.mul(s,G),A.mul(t,H)),[1n]);
+  const {q:c,r:dd}=A.divremMonic(A.mul(s,b),H);
+  const S=A.sub(s,dd);
+  const T=A.sub(A.sub(t,A.mul(t,b)),A.mul(c,G));
+  return {G,H,S,T};
+}
+
+/* ---- 多因子 Hensel 提升：二叉树 ---- */
+function buildTree(list,p){          // list: mod p 的首一因子（Number 数组）
+  const M=Mp(p);
+  function rec(l){
+    if(l.length===1) return {leaf:true, poly:l[0].map(c=>BigInt(c))};
+    const mid=l.length>>1, L=rec(l.slice(0,mid)), R=rec(l.slice(mid));
+    const gl=l.slice(0,mid).reduce((a,b)=>M.mul(a,b),[1]);
+    const gr=l.slice(mid).reduce((a,b)=>M.mul(a,b),[1]);
+    const [gg,s,t]=M.extgcd(gl,gr);
+    if(gg.length!==1) throw new Error("mod p 因子不互素");
+    return {leaf:false,left:L,right:R,
+      g:gl.map(c=>BigInt(c)), h:gr.map(c=>BigInt(c)),
+      s:s.map(c=>BigInt(c)),  t:t.map(c=>BigInt(c))};
+  }
+  return rec(list);
+}
+function liftTree(node,F,m2){
+  if(node.leaf){ node.poly=F; return; }
+  const {G,H,S,T}=henselStep(F,node.g,node.h,node.s,node.t,m2);
+  node.g=G; node.h=H; node.s=S; node.t=T;
+  liftTree(node.left,G,m2);
+  liftTree(node.right,H,m2);
+}
+function collectLeaves(node,out=[]){
+  if(node.leaf) out.push(node.poly);
+  else { collectLeaves(node.left,out); collectLeaves(node.right,out); }
+  return out;
+}
+
+/* =======================================================================
+   Berlekamp–Zassenhaus 主体：输入 f 为本原、无平方因子、lc>0
+   ======================================================================= */
+function bzFactorSquarefree(f, log, cap){
+  const n=Z.deg(f);
+  if(n<=1) return [f];
+
+  const lc=Z.lc(f);
+  /* --- 1. 选素数 p：p ∤ lc 且 f mod p 无平方因子；试几个取因子最少的 --- */
+  const cands=[], trial=[];                      // trial 按实际试的顺序记录，含跳过原因
+  for(let p=3;p<20000 && cands.length<5;p=nextPrime(p+1)){
+    if(lc % BigInt(p) === 0n){ trial.push({p,skip:`p | lc`}); continue; }
+    const M=Mp(p);
+    const fp=M.norm(f.map(c=>Number(((c%BigInt(p))+BigInt(p))%BigInt(p))));
+    if(fp.length-1!==n){ trial.push({p,skip:`降次`}); continue; }
+    const g=M.gcd(fp,M.norm(Z.deriv(f).map(c=>Number(((c%BigInt(p))+BigInt(p))%BigInt(p)))));
+    if(g.length-1!==0){ trial.push({p,skip:`有平方因子`}); continue; }   // gcd(f,f') ≠ 1
+    let fac;
+    try{ fac=factorModP(M.monic(fp),p); }catch(e){ trial.push({p,skip:`分裂失败`}); continue; }
+    cands.push({p,fac});
+    trial.push({p,r:fac.length});
+    log(`  候选 p=${p} → mod p 因子数 r=${fac.length}，次数 [${fac.map(u=>u.length-1).join(",")}]`);
+  }
+  if(!cands.length) throw new Error("找不到合适的素数 p");
+  cands.sort((a,b)=>a.fac.length-b.fac.length);
+  const {p, fac}=cands[0];
+  log(`  选定 p=${p}，r=${fac.length} 个 mod p 不可约因子`);
+
+  if(fac.length===1){
+    log(`  mod p 已不可约（次数相同）⇒ f 在 Z[x] 上不可约，无需提升与重组`);
+    const res=[f];
+    res.__tried=0; res.__capped=false; res.__levels={};
+    res.__r=1; res.__p=p; res.__N=1; res.__M=BigInt(p);
+    res.__modp=fac; res.__us=fac.map(u=>u.map(BigInt));
+    res.__combos=[{ids:[0],size:1,factor:f,raw:null,rest:true}];
+    res.__lcRad=lc; res.__noLift=true;
+    res.__rad=f; res.__lcInv=binvmod(lc,BigInt(p));
+    res.__Fm=Mm(BigInt(p)).scale(Mm(BigInt(p)).fromZ(f),res.__lcInv);
+    return res;
+  }
+
+  /* --- 2. Landau–Mignotte 界，确定 N --- */
+  const nrm=bisqrt(Z.norm2sq(f))+1n;
+  const B=binom(n,n>>1)*nrm;                     // 任一因子系数上界
+  const need=2n*babs(lc)*B+1n;                   // 需 p^N > 2|lc|B
+  const bnd={nrm, binom:binom(n,n>>1), B, need}; // 供界面展示"N 怎么定的"
+  let N=1, P=BigInt(p);
+  while(P<=need){ P*=BigInt(p); N++; }
+  log(`  ‖f‖₂≈${nrm}，Mignotte 界 B=${B}`);
+  log(`  需要模数 > 2|lc|B = ${need} ⇒ N=${N}, p^N=${P}`);
+
+  /* --- 3. Hensel 提升（二次，倍增） --- */
+  const tree=buildTree(fac,p);
+  let k=1, m=BigInt(p);
+  const hist=[{k:1, m:BigInt(p), us:fac.map(u=>u.map(BigInt))}];
+  while(m<P){
+    const k2=Math.min(2*k, N), m2=BigInt(p)**BigInt(k2);
+    const A=Mm(m2);
+    const ilc=binvmod(lc,m2);
+    const Fm=A.scale(A.fromZ(f),ilc);            // 首一化：F = lc^{-1} f mod p^{k2}
+    liftTree(tree,Fm,m2);
+    k=k2; m=m2;
+    hist.push({k, m, us:collectLeaves(tree).map(a=>a.slice())});
+    log(`  Hensel: p^${k} = ${m}`);
+  }
+  const M_=m;
+  const us=collectLeaves(tree);
+  // 校验：prod us ≡ lc^{-1} f (mod M)
+  {
+    const A=Mm(M_);
+    let pr=[1n]; for(const u of us) pr=A.mul(pr,u);
+    const Fm=A.scale(A.fromZ(f),binvmod(lc,M_));
+    log(`  提升校验：∏uᵢ ≡ lc⁻¹f (mod p^${k}) → ${arrEq(pr,Fm)?"OK":"FAIL"}`);
+    log(`  提升后的 ${us.length} 个首一因子（mod p^${k}，对称代表元）：`);
+    us.forEach((u,i)=>log(`      û${i} = ${polyStr(A.sym(u))}   ← 提升自  u${i} = ${polyStr(fac[i].map(BigInt))}  (mod ${p})`));
+  }
+
+  /* --- 4. 穷举子集重组 + 试除（BZ 核心） --- */
+  const A=Mm(M_);
+  const factors=[], combos=[], levels={};
+  let rem=f, pool=us.slice(), poolIds=us.map((_,i)=>i);
+  let tried=0, hit=0, capped=false;
+
+  const fails=[];                                 // 记录几个被否决的子集，用于对照展示
+  const testSubset=(prod,path)=>{
+    tried++;
+    if(tried>cap){ capped=true; return null; }
+    const lcr=((Z.lc(rem)%M_)+M_)%M_;
+    const raw=Z.trim(A.sym(A.scale(prod,lcr)));   // lc·∏ûᵢ 的对称代表元
+    if(!raw.length||Z.deg(raw)<1) return null;
+    if(Z.deg(raw)>=Z.deg(rem)) return null;
+    const cand=Z.primitive(raw);
+    const bad=()=>{ // 每个 |S| 层留一个反例样本
+      if(fails.length<5 && !fails.some(x=>x.size===path.length))
+        fails.push({ids:path.map(i=>poolIds[i]), size:path.length, raw, lcUsed:Z.lc(rem)}); };
+    if(rem[0]!==0n && cand[0]!==0n && (rem[0] % cand[0] !== 0n)){ bad(); return null; } // 常数项快筛
+    const q=Z.exactDiv(rem,cand);
+    if(!q){ bad(); return null; }
+    return {cand,raw,q,lcUsed:Z.lc(rem)};
+  };
+
+  let d=1;
+  while(2*d<=pool.length && !capped){
+    let found=null;
+    const before=tried;
+    (function dfs(start,need_,prod,path){
+      if(found||capped) return;
+      for(let i=start;i<=pool.length-need_;i++){
+        const np=A.mul(prod,pool[i]);
+        path.push(i);
+        if(need_===1){
+          const r=testSubset(np,path);
+          if(r){ found={...r,idx:path.slice()}; path.pop(); return; }
+        } else { dfs(i+1,need_-1,np,path); if(found||capped){ path.pop(); return; } }
+        path.pop();
+      }
+    })(0,d,[1n],[]);
+    levels[d]=(levels[d]||0)+(tried-before);
+
+    if(found){
+      hit++;
+      const ids=found.idx.map(i=>poolIds[i]);
+      factors.push(found.cand);
+      combos.push({ids, size:d, factor:found.cand, raw:found.raw, lcUsed:found.lcUsed});
+      rem=found.q;
+      const s=new Set(found.idx);
+      pool  =pool  .filter((_,i)=>!s.has(i));
+      poolIds=poolIds.filter((_,i)=>!s.has(i));
+      log(`  ✔ 合并 |S|=${d}：${ids.map(i=>`(${polyStr(A.sym(us[i]))})`).join(" · ")}`);
+      log(`      → 得到 Z[x] 因子  ${polyStr(found.cand)}`);
+      log(`      剩余待重组 ${pool.length} 个：${poolIds.map(i=>`(${polyStr(A.sym(us[i]))})`).join(" ")||"无"}`);
+      continue;                                  // 同一 d 重新扫描
+    }
+    d++;
+  }
+  if(Z.deg(rem)>0){
+    const last=Z.primitive(rem);
+    factors.push(last);
+    let pr=[1n]; for(const i of poolIds) pr=A.mul(pr,us[i]);
+    const lcU=Z.lc(rem);
+    const rawLast=Z.trim(A.sym(A.scale(pr,((lcU%M_)+M_)%M_)));
+    combos.push({ids:poolIds.slice(), size:poolIds.length, factor:last,
+                 raw:rawLast, lcUsed:lcU, rest:true});
+    if(poolIds.length) log(`  ↳ 余下 ${poolIds.length} 个整体合并（无更小子集可行）：`+
+      `${poolIds.map(i=>`(${polyStr(A.sym(us[i]))})`).join(" · ")} → ${polyStr(last)}`);
+  }
+  log(`  重组结束：试探子集 ${tried} 次，命中 ${hit} 次${capped?"（已达上限，结果可能未完全分解）":""}`);
+  factors.__tried=tried; factors.__capped=capped; factors.__levels=levels;
+  factors.__r=us.length; factors.__p=p; factors.__N=k; factors.__M=M_;
+  factors.__modp=fac;
+  factors.__us=us;
+  factors.__combos=combos;
+  factors.__lcRad=lc;
+  factors.__hist=hist;
+  factors.__fails=fails;
+  factors.__bnd=bnd;                               // Landau–Mignotte 界的各项
+  factors.__trial=trial;                           // 试过的素数（按顺序，含跳过原因）
+  factors.__rad=f;                                 // ① 原本（本原、无平方）
+  factors.__lcInv=binvmod(lc,M_);                  // lc⁻¹ mod p^N
+  factors.__Fm=A.scale(A.fromZ(f),factors.__lcInv);// ② 首一化后的 F mod p^N
+  return factors;
+}
+function arrEq(a,b){ if(a.length!==b.length) return false;
+  for(let i=0;i<a.length;i++) if(a[i]!==b[i]) return false; return true; }
+
+let PRIMES=null;
+function nextPrime(x){
+  if(!PRIMES){ // 简单筛
+    const L=20011, s=new Uint8Array(L+1); PRIMES=[];
+    for(let i=2;i<=L;i++){ if(!s[i]){ PRIMES.push(i); for(let j=i*i;j<=L;j+=i) s[j]=1; } }
+  }
+  for(const p of PRIMES) if(p>=x) return p;
+  return 20011;
+}
+
+/* ---------------- 完整分解（content + 平方free + 重数） ---------------- */
+function factorPoly(f, log, cap){
+  const info={};
+  f=Z.trim(f);
+  if(!f.length) throw new Error("零多项式无法分解");
+  let sign=1n;
+  let cont=Z.content(f);
+  let g=f.map(c=>c/cont);
+  if(Z.lc(g)<0n){ sign=-1n; g=g.map(c=>-c); }
+  info.content=sign*cont;
+  log(`content = ${info.content}${Z.deg(g)>=0?`，本原部分次数 ${Z.deg(g)}`:""}`);
+
+  if(Z.deg(g)===0){ info.factors=[]; return info; }
+
+  /* 无平方部分（radical） */
+  const gp=Z.deriv(g);
+  const gc=Z.gcd(g,gp);
+  let rad;
+  if(Z.deg(gc)<=0){ rad=g; log(`gcd(f,f') 为常数 ⇒ f 无平方因子`); }
+  else{ rad=Z.primitive(Z.exactDiv(g,gc)); log(`gcd(f,f') 次数 ${Z.deg(gc)} ⇒ radical 次数 ${Z.deg(rad)}（存在重因子）`); }
+
+  log(`--- Berlekamp–Zassenhaus on radical (deg ${Z.deg(rad)}) ---`);
+  const irr = Z.deg(rad)===0 ? [] : bzFactorSquarefree(rad, log, cap);
+  info.bz=irr;
+
+  /* 重数 */
+  const out=[];
+  let cur=g;
+  for(let gi=0;gi<irr.length;gi++){
+    const q=irr[gi];
+    let e=0;
+    while(true){ const t=Z.exactDiv(cur,q); if(!t) break; cur=t; e++; }
+    out.push({poly:q,mult:e,gi,combo:(irr.__combos||[])[gi]||null});
+  }
+  if(Z.deg(cur)>0){ log(`⚠ 残余次数 ${Z.deg(cur)} 未被分解（不应发生）`); out.push({poly:cur,mult:1}); }
+  else if(cur.length===1 && cur[0]!==1n){ info.content*= cur[0]; }
+  out.sort((a,b)=>Z.deg(a.poly)-Z.deg(b.poly));
+  info.factors=out;
+  return info;
+}
+
+/* ---------------- 解析器 ---------------- */
+function parsePoly(src){
+  const s=src.replace(/\s+/g,"");
+  let i=0;
+  const peek=()=>s[i];
+  function parseExpr(){
+    let v=parseTerm();
+    while(i<s.length && (s[i]==="+"||s[i]==="-")){
+      const op=s[i++]; const t=parseTerm();
+      v = op==="+" ? Z.add(v,t) : Z.sub(v,t);
+    }
+    return v;
+  }
+  function parseTerm(){
+    let v=parseFactor();
+    while(i<s.length){
+      if(s[i]==="*"){ i++; v=Z.mul(v,parseFactor()); }
+      else if(/[0-9x(]/.test(s[i])){ v=Z.mul(v,parseFactor()); }
+      else break;
+    }
+    return v;
+  }
+  function parseFactor(){
+    let b=parseBase();
+    if(s[i]==="^"){ i++;
+      let neg=false; if(s[i]==="-"){neg=true;i++;}
+      let d=""; while(/[0-9]/.test(s[i]||"")) d+=s[i++];
+      if(!d) throw new Error("^ 后缺少指数");
+      if(neg) throw new Error("不支持负指数");
+      let e=parseInt(d,10);
+      if(e>2000) throw new Error("指数过大");
+      let r=[1n]; for(let k=0;k<e;k++) r=Z.mul(r,b);
+      return r;
+    }
+    return b;
+  }
+  function parseBase(){
+    if(s[i]==="-"){ i++; return Z.neg(parseBase()); }
+    if(s[i]==="+"){ i++; return parseBase(); }
+    if(s[i]==="("){ i++; const v=parseExpr();
+      if(s[i]!==")") throw new Error("缺少 )"); i++; return v; }
+    if(s[i]==="x"||s[i]==="X"){ i++; return [0n,1n]; }
+    let d=""; while(/[0-9]/.test(s[i]||"")) d+=s[i++];
+    if(!d) throw new Error(`位置 ${i} 处无法解析：'${s[i]??"EOF"}'`);
+    return [BigInt(d)];
+  }
+  const v=parseExpr();
+  if(i<s.length) throw new Error(`多余字符：'${s.slice(i)}'`);
+  return Z.trim(v);
+}
+
+/* ---------------- 显示 ---------------- */
+function polyHTML(a){
+  a=Z.trim(a);
+  if(!a.length) return "0";
+  const parts=[];
+  for(let i=a.length-1;i>=0;i--){
+    let c=a[i]; if(c===0n) continue;
+    const neg=c<0n; const ac=neg?-c:c;
+    let body;
+    if(i===0) body=`${ac}`;
+    else{
+      const co = ac===1n?"":`${ac}`;
+      body = i===1 ? `${co}x` : `${co}x<sup>${i}</sup>`;
+    }
+    parts.push((parts.length===0 ? (neg?"−":"") : (neg?" − ":" + ")) + body);
+  }
+  return parts.join("");
+}
+/* 分数系数多项式：num[j]/den 逐项约分显示，如 x^3 − (5/3)x^2 + 1 */
+function ratPolyHTML(num,den){
+  const parts=[];
+  for(let i=num.length-1;i>=0;i--){
+    let a=num[i]||0n; if(a===0n) continue;
+    const neg=a<0n; let q=neg?-a:a, d=den;
+    const g=bgcd(q,d); q/=g; d/=g;
+    let body;
+    if(i===0)      body = d===1n?`${q}`:`${q}/${d}`;
+    else if(d===1n) body = (q===1n?``:`${q}`)+(i===1?`x`:`x<sup>${i}</sup>`);
+    else            body = `(${q}/${d})`+(i===1?`x`:`x<sup>${i}</sup>`);
+    parts.push((parts.length===0?(neg?`−`:``):(neg?` − `:` + `))+body);
+  }
+  return parts.length?parts.join(``):`0`;
+}
+/* 只有多项（≥2 项）才加括号，避免 (x) 这种噪音 */
+function nTerms(a){ let n=0; for(const c of a) if(c!==0n) n++; return n; }
+function polyParen(a){ return nTerms(a)>1 ? `(${polyHTML(a)})` : polyHTML(a); }
+function polyStr(a){
+  a=Z.trim(a); if(!a.length) return "0";
+  const p=[];
+  for(let i=a.length-1;i>=0;i--){ let c=a[i]; if(c===0n) continue;
+    const neg=c<0n, ac=neg?-c:c;
+    let b = i===0?`${ac}`:(ac===1n?"":`${ac}`)+(i===1?"x":`x^${i}`);
+    p.push((p.length?(neg?" - ":" + "):(neg?"-":""))+b); }
+  return p.join("");
+}
+
+/* ---------------- 随机生成 ---------------- */
+function randInt(a,b){ return a+Math.floor(Math.random()*(b-a+1)); }
+function randPoly(d,C){
+  const a=new Array(d+1);
+  for(let i=0;i<d;i++) a[i]=BigInt(randInt(-C,C));
+  let l=0; while(l===0) l=randInt(-C,C);
+  a[d]=BigInt(l);
+  return Z.trim(a);
+}
+
+/* ---------------- UI ---------------- */
+const $=id=>document.getElementById(id);
+let LOG=[];
+function log(s){ LOG.push(s); }
+function flushLog(){ $("outLog").textContent = LOG.length?LOG.join("\n"):"—"; }
+
+let SEEDS=null;                                    // 记录"构造来源"，用于与分解结果对账
+function setInput(str, seedHTML){
+  $("input").value=str;
+  $("outSeed").innerHTML = seedHTML||"";
+}
+/* 构造来源 vs 分解结果 的自动对账 */
+function seedCheckHTML(f, info){
+  if(!SEEDS || !Z.eq(Z.trim(f), SEEDS.product)) return "";
+  const exp=new Map();
+  SEEDS.polys.forEach(s=>{ const k=polyStr(s); exp.set(k,(exp.get(k)||0)+1); });
+  const got=new Map();
+  info.factors.forEach(x=>got.set(polyStr(x.poly), x.mult));
+  const same = exp.size===got.size && [...exp].every(([k,v])=>got.get(k)===v);
+  if(same) return `<div class="ok" style="font-size:12.5px;margin-top:4px">`+
+    `✓ 与构造来源完全一致（${SEEDS.polys.length} 个因子，含重数）—— 说明那些构造因子本来就都不可约</div>`;
+  return `<div class="warn" style="font-size:12.5px;margin-top:4px">`+
+    `↳ 分解结果比构造来源更细：构造用了 ${exp.size} 种因子，分解出 ${got.size} 种。`+
+    `原因是随机生成的因子自身还能再分解（勾选"保证不可约"可避免）。这不是错误，验证行已确认乘积相等。</div>`;
+}
+
+$("btnRand").onclick=()=>{
+  const d=Math.max(1,Math.min(60,+$("rdeg").value|0));
+  const C=Math.max(1,+$("rcoef").value|0);
+  const f=randPoly(d,C);
+  setInput(polyStr(f), `<span class="dim">来源：随机 deg=${d}, |c|≤${C}</span>`);
+  run();
+};
+/* 拒绝采样：随机直到该多项式本身不可约（本原、无重因子、只有一个因子） */
+function randPolyIrreducible(d,C){
+  if(d===1) return Z.primitive(randPoly(1,C));
+  for(let t=0;t<300;t++){
+    const g=Z.primitive(randPoly(d,C));
+    const info=factorPoly(g,()=>{},200000);
+    if(info.factors.length===1 && info.factors[0].mult===1 && Z.deg(info.factors[0].poly)===d)
+      return info.factors[0].poly;
+  }
+  return Z.primitive(randPoly(d,C));               // 兜底
+}
+$("btnProd").onclick=()=>{
+  const k=Math.max(1,Math.min(12,+$("pk").value|0));
+  const dm=Math.max(1,+$("pdeg").value|0);
+  const C=Math.max(1,+$("pcoef").value|0);
+  const rep=$("prep").value==="1";
+  const irr=$("pirr").value==="1";
+  const seeds=[];
+  for(let i=0;i<k;i++){
+    if(rep && seeds.length && Math.random()<0.35) seeds.push(seeds[randInt(0,seeds.length-1)]);
+    else seeds.push(irr ? randPolyIrreducible(randInt(1,dm),C) : randPoly(randInt(1,dm),C));
+  }
+  let f=[1n]; for(const s of seeds) f=Z.mul(f,s);
+  SEEDS={polys:seeds.map(s=>Z.primitive(s)), product:Z.trim(f), irr};
+  const list=seeds.map(s=>`(${polyStr(s)})`).join(" · ");
+  setInput(polyStr(f),
+    `<span class="dim">构造来源（我把这些乘起来得到 f，${irr
+      ?`每个都已验证<b>不可约</b>，所以分解结果应与之一致`
+      :`每个因子<b>自身可能还能再分解</b>，所以分解结果可能比这更细`}）：</span>`+
+    `<div class="poly dim" style="font-size:13px">${list}</div>`);
+  run();
+};
+/* Swinnerton–Dyer 多项式：∏_{符号} (x ± √q1 ± √q2 ± …)，整系数、不可约 */
+function swinnertonDyer(primes){
+  let f=[0n,1n];                                  // x
+  for(const q of primes){
+    const n=f.length-1; let P=[],Q=[];            // f(x+s) = P(x) + s·Q(x), s²=q
+    for(let k=0;k<=n;k++){
+      if(f[k]===0n) continue;
+      let C=1n;
+      for(let j=0;j<=k;j++){
+        const term=f[k]*C*(BigInt(q)**BigInt(j>>1)), dg=k-j;
+        const tgt=(j%2===0)?P:Q;
+        while(tgt.length<=dg) tgt.push(0n);
+        tgt[dg]+=term;
+        C=C*BigInt(k-j)/BigInt(j+1);
+      }
+    }
+    // f(x+s)·f(x−s) = P² − q·Q²
+    f=Z.sub(Z.mul(Z.trim(P),Z.trim(P)), Z.scale(Z.mul(Z.trim(Q),Z.trim(Q)),BigInt(q)));
+  }
+  return f;
+}
+$("btnSD").onclick=()=>{
+  const k=+$("sdk").value;
+  const ps=[2,3,5,7,11,13].slice(0,k);
+  const f=swinnertonDyer(ps);
+  setInput(polyStr(f),
+    `<span class="dim">Swinnerton–Dyer：∏(x ${ps.map(q=>`± √${q}`).join(" ")})，在 Q 上不可约，`+
+    `但 mod 任意 p 都分解成 ${Math.pow(2,k-1)} 个次数 ≤2 的因子 ⇒ 需试探约 2<sup>${Math.pow(2,k-1)}</sup> 个子集</span>`);
+  run();
+};
+$("btnClear").onclick=()=>{ LOG=[]; flushLog(); };
+document.querySelectorAll("button[data-ex]").forEach(b=>{
+  b.onclick=()=>{ setInput(b.dataset.ex,""); run(); };
+});
+$("btnGo").onclick=()=>run();
+$("input").addEventListener("keydown",e=>{ if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)) run(); });
+
+function run(){
+  LOG=[];
+  const cap=Math.max(1000,+$("cap").value|0);
+  let f;
+  try{ f=parsePoly($("input").value); }
+  catch(e){ $("outIn").innerHTML=`<span class="bad">解析错误：${e.message}</span>`;
+    $("outRes").innerHTML="—"; flushLog(); return; }
+
+  $("outIn").innerHTML = `${polyHTML(f)} <span class="badge">deg ${Z.deg(f)}</span>`;
+  const t0=performance.now();
+  let info;
+  try{ info=factorPoly(f,log,cap); }
+  catch(e){ $("outRes").innerHTML=`<span class="bad">失败：${e.message}</span>`; flushLog(); return; }
+  const ms=performance.now()-t0;
+
+  /* 结果 */
+  let html="";
+  const bz=info.bz||[];
+  const AA=bz.__M?Mm(bz.__M):null;
+  const c=info.content;
+
+  /* —— 分解式（一行）—— */
+  {
+    const parts=[];
+    if(c!==1n || !info.factors.length) parts.push(`<span class="poly">${c}</span>`);
+    /* 只在必要时加括号：单项式且不带幂次就不加；x 的幂次可直接写 x^k */
+    const needParen=(poly,mult)=>{
+      const isX = poly.length===2 && poly[0]===0n && poly[1]===1n;
+      return !(nTerms(poly)===1 && (mult===1 || isX));
+    };
+    info.factors.forEach(({poly,mult,gi,combo})=>{
+      const col=combo?gcol(gi):'var(--fg)';
+      const body=needParen(poly,mult)?`(${polyHTML(poly)})`:polyHTML(poly);
+      parts.push(`<span class="poly" style="color:${col}">${body}`+
+        (mult>1?`<sup>${mult}</sup>`:``)+`</span>`);
+    });
+    html+=`<div class="eqline">f = ${parts.join(` <span class="arrow">·</span> `)}</div>`;
+    const plain=(c!==1n||!info.factors.length?`${c}`+(info.factors.length?" * ":""):``)+
+      info.factors.map(({poly,mult})=>
+        (needParen(poly,mult)?`(${polyStr(poly)})`:polyStr(poly))+(mult>1?`^${mult}`:``)).join(" * ");
+    html+=`<div class="eqplain" title="纯文本，可复制">${plain}</div>`;
+  }
+  if(c!==1n || !info.factors.length) html+=`<div class="fac"><span class="poly">${c}</span><span class="badge">content</span></div>`;
+  for(const {poly,mult,gi,combo} of info.factors){
+    html+=`<div class="fac">`+
+          (combo?`${gtag(gi)} `:``)+
+          `<span class="poly">${polyHTML(poly)}</span>`+
+          `<span class="badge">deg ${Z.deg(poly)}</span>`+
+          (mult>1?`<span class="badge">重数 ${mult}</span>`:``);
+    if(combo && AA && bz.__us && combo.ids.length && !bz.__noLift){
+      html+=`<div class="dim" style="font-size:12px;margin-top:2px">`+
+        (combo.ids.length===1?`← 来自提升因子 `:`← 由 ${combo.ids.length} 个提升因子相乘：`)+
+        combo.ids.map(i=>`<span class="poly" style="font-size:12px">${polyParen(AA.sym(bz.__us[i]))}</span>`)
+          .join(` <span class="arrow">·</span> `)+`</div>`;
+    }
+    html+=`</div>`;
+  }
+  /* 验证 */
+  let prod=[c]; for(const {poly,mult} of info.factors) for(let i=0;i<mult;i++) prod=Z.mul(prod,poly);
+  const ok=Z.eq(Z.trim(prod),Z.trim(f));
+  html+=`<div style="margin-top:10px" class="${ok?'ok':'bad'}">`+
+        (ok?`✓ 验证通过：所有因子之积 = f`:`✗ 验证失败`)+`</div>`;
+  html+=seedCheckHTML(f,info);
+  if(bz.__combos && !bz.__noLift)
+    html+=`<div class="dim" style="font-size:12px;margin-top:6px">`+
+      `每个因子的完整推导（相乘 → 取 mod p<sup>${bz.__N}</sup> → 取本原部分 → 试除）见下一节。</div>`;
+  $("outRes").innerHTML=html;
+
+  /* 统计 */
+  const kv=[];
+  kv.push(["耗时",`${ms.toFixed(1)} ms`]);
+  kv.push(["deg f",`${Z.deg(f)}`]);
+  kv.push(["不可约因子个数",`${info.factors.length}`]);
+  if(bz.__p){
+    kv.push(["素数 p",`${bz.__p}`]);
+    kv.push(["mod p 因子数 r",`${bz.__r}`+(bz.__modp?`  次数 [${bz.__modp.map(u=>u.length-1).join(",")}]`:``)]);
+    if(bz.__trial)
+      kv.push(["p 怎么来的（非随机）",
+        `从 3,5,7,… 逐个试，要求 p∤lc(f) 且 f mod p 无平方因子；凑够 5 个候选后取 r 最小者。`+
+        `本次：`+bz.__trial.map(t=>t.skip?`p=${t.p} 跳过(${t.skip})`:`p=${t.p}→r=${t.r}`).join("，")+
+        ` ⇒ 选 p=${bz.__p}`]);
+    kv.push(["提升精度",`p^${bz.__N} = ${bz.__M}`]);
+    if(bz.__bnd){
+      const b=bz.__bnd, dr=Z.deg(bz.__rad);
+      kv.push(["N 怎么来的（非随机）",
+        `Landau–Mignotte 界 B = C(${dr},${dr>>1})·‖f‖₂ = ${b.binom}·${b.nrm} = ${b.B}；`+
+        `要求 p^N > 2·|lc|·B = ${b.need-1n} ⇒ 最小的 N = ${bz.__N}`]);
+    }
+    const lv=Object.entries(bz.__levels||{});
+    kv.push(["试探子集数",`${bz.__tried}${bz.__capped?" (达上限)":""}`+
+      (lv.length?`   (${lv.map(([d,n])=>`|S|=${d}: ${n}`).join("，")})`:``)]);
+    const worst=Math.pow(2,bz.__r);
+    kv.push(["最坏子集规模",`2^${bz.__r} ≈ ${worst>1e15?worst.toExponential(2):worst}`]);
+  } else if(bz.length===1){ kv.push(["说明","radical 在 mod p 下即不可约"]); }
+  $("outStat").innerHTML=kv.map(([a,b])=>`<div>${a}</div><div>${b}</div>`).join("");
+
+  /* 因子中心视图 + 继承关系总表 + ①②③ 三段展示 */
+  LAST=info;
+  renderMerge(info);
+  renderLineage(info);
+  flushLog();
+}
+
+/* =======================================================================
+   继承关系总表：一行 = 一个 mod p 因子；列 = 各精度；
+   同组的行用 rowspan 合并成一格 ⇒ "重组合并" 就是表格上的合并单元格。
+   ======================================================================= */
+let LAST=null;
+
+/* =======================================================================
+   以「最终因子」为中心：每个结果因子 ← 上一层（mod p^N 提升因子）哪几个的乘积
+   ======================================================================= */
+function renderMerge(info){
+  const box=$("outMerge"), bz=info&&info.bz;
+  if(!bz || !bz.__modp){
+    box.innerHTML=`<span class="dim">radical 次数 ≤ 1，没有"上一层"可言</span>`; return;
+  }
+  const p=bz.__p, M=bz.__M, N=bz.__N, us=bz.__us, modp=bz.__modp;
+  const combos=bz.__combos||[], A=Mm(M);
+  const factorsSorted=combos.map((c,gi)=>({c,gi}))
+    .sort((a,b)=>Z.deg(a.c.factor)-Z.deg(b.c.factor));
+
+  let h=`<div class="dim" style="font-size:12.5px;margin-bottom:10px">`+
+    (bz.__noLift
+      ? `f 在 mod ${p} 下就已不可约且次数不变 ⇒ f 本身在 Z[x] 上不可约，没有提升也没有合并。`
+      : `上一层 = mod p<sup>${N}</sup> = ${M} 上的 <b>${us.length}</b> 个首一因子 `+
+        (us.length===1?`û<sub>0</sub>`:`û<sub>0</sub> … û<sub>${us.length-1}</sub>`)+
+        `（乘积 ≡ lc<sup>-1</sup>·f）。下面每一块是一个最终因子，列出它由上一层哪几个乘起来。`+
+        `<div style="margin-top:4px">首一化只做了<b>一次</b>、而且是对 <b>f 整体</b>做的：`+
+        `取 F = lc(f)<sup>-1</sup>·f (mod p<sup>N</sup>)，F 首一 ⇒ 它的每个因子 u<sub>i</sub>、`+
+        `û<sub>i</sub> <b>本来就都是首一的</b>（提升前后都首一，提升不改变这一点）。`+
+        `真正不首一的是最终因子 <b>g 自己</b>：若 lc(g) ≠ 1，那么与 g 对应的就是 g/lc(g)，`+
+        `分数（以及 mod p<sup>N</sup> 下那个巨大整数）就是从这里来的。</div>`+
+        `<div style="margin-top:4px">式子里的乘数是 <b>lc(rem)</b> —— 剥掉先前已找到的因子后、`+
+        `<b>当时剩余待分解多项式</b>的首项系数（不是原多项式的 lc = ${bz.__lcRad}）。`+
+        `之所以用它：真因子 g 必有 lc(g) | lc(rem)，而 ∏û = g / lc(g)，`+
+        `所以 lc(rem)·∏û = (lc(rem)/lc(g))·g 一定是整系数且被 Mignotte 界控住，`+
+        `多出的倍数最后当 content 除掉。</div>`)+
+    `</div>`;
+
+  /* lc(rem) 的递降过程（按发现顺序），解释每块里的乘数为何各不相同 */
+  if(!bz.__noLift && combos.some(c=>c.lcUsed!==undefined && c.lcUsed!==bz.__lcRad)){
+    h+=`<details style="margin:0 0 12px"><summary>lc(rem) 是怎么一步步变小的（按发现顺序）</summary>`+
+       `<table class="t lin" style="width:auto;margin-top:6px">`+
+       `<tr><th>第几个找到</th><th>当时 lc(rem)</th><th>找到的因子 g</th><th>lc(g)</th><th>下一步的 lc(rem)</th></tr>`;
+    combos.forEach((c,gi)=>{
+      const lcg=Z.lc(c.factor), lcu=c.lcUsed===undefined?1n:c.lcUsed;
+      h+=`<tr><td class="gcell">${gi+1}</td><td>${lcu}</td>`+
+         `<td class="pcell">${gtag(gi)} ${polyHTML(c.factor)}</td>`+
+         `<td>${lcg}</td><td>${lcu%lcg===0n?`${lcu} / ${lcg} = ${lcu/lcg}`:`—`}</td></tr>`;
+    });
+    h+=`</table></details>`;
+  }
+
+  /* ===== 顶层流水线：原本 f → 首一化 F → F_p 分解 → 提升到 Z/p^N → 重组 ===== */
+  {
+    const rad=bz.__rad, Fm=bz.__Fm, lcf=bz.__lcRad;
+    const dot=` <span class="arrow">·</span> `;
+    const prodLine=list=>list.map(a=>`<span class="poly">${polyParen(a)}</span>`).join(dot);
+    h+=`<table class="stg" style="margin-bottom:14px">`;
+    const row=(st,val,note)=>{ h+=`<tr><td class="st">${st}</td><td class="val">${val}</td>`+
+      `<td class="note">${note||``}</td></tr>`; };
+    row(`① 原本`, `f = ${polyHTML(rad)}`,
+        `本原、无重因子；lc(f) = <b>${lcf}</b>${lcf===1n?`（已首一）`:`（<b>不首一</b>）`}`);
+    if(lcf===1n)
+      row(`② 首一化`, `F = f`, `f 本来就首一，无需处理`);
+    else if(bz.__noLift)
+      row(`② 首一化 (mod ${p})`, `F = lc(f)<sup>-1</sup>·f ≡ ${polyHTML(Mm(BigInt(p)).sym(Fm))}`,
+          `lc(f)<sup>-1</sup> = ${bz.__lcInv} (mod ${p})；F <b>首一</b>`);
+    else
+      row(`② 首一化 (mod ${p}<sup>${N}</sup>)`, `F = lc(f)<sup>-1</sup>·f = ${polyHTML(A.sym(Fm))}`,
+          `Z 上不能除以 lc(f) = ${lcf}，但 mod ${p}<sup>k</sup> 可以：因为选 p 时保证了 p ∤ lc(f)，`+
+          `所以 lc(f)<sup>-1</sup> 存在，= ${bz.__lcInv} (mod ${p}<sup>${N}</sup>)。`+
+          `这一步在 <b>每一级精度都重做</b>（p → p² → … → p<sup>${N}</sup>），`+
+          `而 lc(f)<sup>-1</sup> mod p<sup>k</sup> 彼此相容，低位不变。`+
+          `F <b>首一</b> ⇒ 它的所有因子 u<sub>i</sub>、û<sub>i</sub> 天然都首一`);
+    row(`③ 在 F<sub>${p}</sub>[x] 上分解`, `F ≡ ${prodLine(modp.map(u=>u.map(BigInt)))}`,
+        `(mod ${p})；${modp.length} 个首一不可约因子，次数 [${modp.map(u=>u.length-1).join(",")}]`+
+        (bz.__noLift?` —— 只有 1 个且次数 = deg f ⇒ f 在 Z[x] 上就不可约，无需提升与重组`:``));
+    if(!bz.__noLift)
+      row(`④ Hensel 提升到 Z/${p}<sup>${N}</sup>`, `F ≡ ${prodLine(us.map(u=>A.sym(u)))}`,
+          `(mod ${p}<sup>${N}</sup>)；因子个数不变，每个都 ≡ ③ 中对应者 (mod ${p})`);
+    const fin=(info.factors||[]);
+    row(`⑤ 重组回 Z[x]`,
+        `f = ${fin.map(x=>`<span class="poly" style="color:${x.combo?gcol(x.gi):'var(--fg)'}">`+
+          `${polyParen(x.poly)}${x.mult>1?`<sup>${x.mult}</sup>`:``}</span>`).join(dot)}`,
+        `把 ④ 的因子分组相乘再试除；每组的推导见下面各块`);
+    h+=`</table>`;
+  }
+
+  factorsSorted.forEach(({c,gi})=>{
+    const F=(info.factors||[]).find(x=>x.gi===gi);
+    const n=c.ids.length;
+    h+=`<div class="mblk" style="border-left-color:${gcol(gi)}">`;
+    h+=`<div class="mhead">${gtag(gi)}<span class="poly">${polyHTML(c.factor)}</span>`+
+       `<span class="badge">deg ${Z.deg(c.factor)}</span>`+
+       (F&&F.mult>1?`<span class="badge">在 f 中的重数 ${F.mult}</span>`:``)+`</div>`;
+    h+=`<div class="mnote">← 由上一层的 <b>${n}</b> 个因子`+
+       (n===1?`（单独一个，不需要合并）`:`合并（相乘）`)+`而来：</div>`;
+    h+=`<table class="t mtab">`;
+    c.ids.forEach((i,ri)=>{
+      const glyph = n===1 ? "─" : (ri===0 ? "┌" : ri===n-1 ? "└" : "├");
+      h+=`<tr><td class="tg">${glyph}</td>`+
+         `<td class="idx" style="color:${gcol(gi)}">û<sub>${i}</sub></td>`+
+         `<td class="pcell">${polyHTML(A.sym(us[i]))}</td>`+
+         `<td class="dim">(mod p<sup>${N}</sup>)</td>`+
+         `<td class="arrow">↤ 提升自</td>`+
+         `<td class="idx">u<sub>${i}</sub></td>`+
+         `<td class="pcell">${polyHTML(modp[i].map(BigInt))}</td>`+
+         `<td class="dim">(mod ${p})</td></tr>`;
+    });
+    h+=`</table>`;
+    if(c.raw){
+      const cont=Z.content(c.raw), lcg=Z.lc(c.factor);
+      const lbl = n===1 ? `û<sub>${c.ids[0]}</sub>` : `∏û`;
+      const uLbl= n===1 ? `u<sub>${c.ids[0]}</sub>` : `∏u`;
+      let pu=[1n]; c.ids.forEach(i=>pu=A.mul(pu,us[i]));
+      const puS=A.sym(pu);                        // ∏û 的对称代表元
+      h+=`<div class="mcalc"><table class="stg">`;
+      const row=(st,val,note)=>{ h+=`<tr><td class="st">${st}</td><td class="val">${val}</td>`+
+        `<td class="note">${note||``}</td></tr>`; };
+
+      /* ⑤.1 取的子集：④ 里挑出的这 n 个之积 */
+      const dot2=` <span class="arrow">·</span> `;
+      row(`⑤.1 从 ④ 取子集`,
+          (n===1 ? `${lbl} = ${polyHTML(puS)}`
+                 : c.ids.map(i=>`<span class="poly">${polyParen(A.sym(us[i]))}</span>`).join(dot2)+
+                   ` <span class="arrow">=</span> ${polyHTML(puS)}`),
+          `<b>首一</b>；`+
+          `对 ${p} 取模就是 ③ 里的 `+
+          c.ids.map(i=>`u<sub>${i}</sub> = <span class="poly">${polyParen(modp[i].map(BigInt))}</span>`)
+               .join(`，`));
+
+      if(Z.eq(c.factor,puS)){
+        row(`⑤.2 它就是因子 g`, `g = ${polyHTML(c.factor)}`,
+            `g 恰好首一（lc(g) = 1）且本原`+
+            (c.lcUsed===1n?``:`；× lc(rem) = ${c.lcUsed} 与 ÷ content = ${c.lcUsed} 抵消`));
+      } else {
+        if(lcg!==1n){
+          /* ③ 解读：û 在 Q 上等于 g / lc(g) —— 分母的来处 */
+          let j=0; for(let k=0;k<puS.length;k++) if(babs(puS[k]||0n)>babs(puS[j]||0n)) j=k;
+          const v=puS[j]||0n, a=c.factor[j]||0n;
+          let note=`因子 g = ${polyHTML(c.factor)} <b>本身不首一</b>（lc(g) = ${lcg}），`+
+                   `把它首一化才出现分母 ${lcg}`;
+          if(v!==0n && (lcg*v-a)%M===0n){
+            const q=(lcg*v-a)/M, gg=bgcd(babs(a),lcg)||1n;
+            note+=`；对上 ⑤.1：x<sup>${j}</sup> 项 ${lcg} × (${v}) = (${a}) `+
+              `${q<0n?`−`:`+`} ${babs(q)===1n?``:`${babs(q)} × `}${p}<sup>${N}</sup>`+
+              ` ⇒ ${v} ≡ ${a/gg}${lcg/gg===1n?``:`/${lcg/gg}`}`;
+          }
+          row(`⑤.2 它在 Q 上其实是`, `${lbl} = ${ratPolyHTML(c.factor,lcg)} = g / lc(g)`, note);
+        } else {
+          row(`⑤.2 已是整系数`, `${lbl} = ${polyHTML(puS)}`, `lc(g) = 1，无分母`);
+        }
+        if(c.lcUsed!==1n)
+          row(`⑤.3 × lc(rem) = ${c.lcUsed}`, `= ${polyHTML(c.raw)}`,
+              lcg!==1n?`清掉分母：${c.lcUsed} × (a/${lcg}) 成整数`:`只是放大 ${c.lcUsed} 倍`);
+        else if(!Z.eq(c.raw,puS)) row(`⑤.3 取对称代表元`, `= ${polyHTML(c.raw)}`, `|系数| ≤ ${M/2n}`);
+        if(cont!==1n)
+          row(`⑤.4 ÷ content = ${cont}`, `= ${polyHTML(c.factor)}`,
+              `${cont} = lc(rem)/lc(g) = ${c.lcUsed}/${lcg}`);
+      }
+      row(`⑤.5 试除`, `<span class="ok">${polyHTML(c.factor)} 在 Z[x] 中整除 f ✓</span>`, `确认是真因子 g`);
+      h+=`</table></div>`;
+    }
+    h+=`</div>`;
+  });
+
+  /* 反例：被否决的子集 —— 说明为什么必须试除 */
+  const fails=(bz.__fails||[]).filter(x=>x.ids.length)
+    .sort((a,b)=>b.size-a.size);                  // 取 |S| 最大的那个反例，最有说服力
+  if(fails.length){
+    const fx=fails[0];
+    h+=`<div class="mblk fail">`+
+       `<div class="mhead"><span class="gtag" style="background:var(--bad)">✗</span>`+
+       `<span style="font-size:13.5px">反例：这 ${fx.ids.length} 个的组合被否决</span></div>`+
+       `<table class="t mtab">`+
+       fx.ids.map((i,ri)=>`<tr><td class="tg">`+
+         (fx.ids.length===1?"─":ri===0?"┌":ri===fx.ids.length-1?"└":"├")+`</td>`+
+         `<td class="idx">û<sub>${i}</sub></td><td class="pcell">${polyHTML(A.sym(us[i]))}</td></tr>`).join("")+
+       `</table>`+
+       `<div class="mnote">同样地相乘、乘 lc = ${fx.lcUsed}、取对称代表元，得到的却是：</div>`+
+       `<div class="poly" style="font-size:12.5px">${polyHTML(fx.raw)}</div>`+
+       `<div class="dim" style="font-size:12.5px;margin-top:6px">`+
+       `系数没有变小、且在 Z[x] 中除不尽 f ⇒ 这几个 û 不构成一个整系数因子，丢弃。`+
+       `<b>真因子的特征就是系数会突然变小</b>（被 Mignotte 界控制），这也是必须逐个子集试除的原因；`+
+       `本次共试探了 ${bz.__tried} 个子集。</div></div>`;
+  }
+  box.innerHTML=h;
+}
+
+function renderLineage(info){
+  const box=$("outLine"), hint=$("lineHint");
+  const bz=info&&info.bz;
+  if(!bz || !bz.__modp){
+    box.innerHTML=`<span class="dim">radical 次数 ≤ 1，无 mod p → 提升 → 重组 过程</span>`;
+    hint.textContent=""; return;
+  }
+  const p=bz.__p, N=bz.__N, combos=bz.__combos||[];
+  const hist=bz.__hist||[{k:1,m:BigInt(p),us:bz.__modp.map(u=>u.map(BigInt))}];
+  const mode=$("lineRep").value, all=$("chkAllPrec").checked;
+
+  let cols = (all||hist.length<=2) ? hist : [hist[0], hist[hist.length-1]];
+  const maxK=cols[cols.length-1].k;
+  hint.innerHTML = mode==='padic'
+    ? `每格 = 系数 c<sub>0</sub>|c<sub>1</sub>|… 的 ${p} 进数字，低位在左；`+
+      `<span class="new">黄色</span>为该步新增高位 ⇒ 后一列以前一列为前缀，即继承`
+    : (hist.length>2&&!all ? `共 ${hist.length} 个精度，已折叠中间列` : ``);
+
+  /* mod p 概览 + 继承校验（原①②卡片的信息，合并到这里） */
+  const modp=bz.__modp, us=bz.__us;
+  const degs=modp.map(u=>u.length-1);
+  const allInherit=us.every((u,i)=>{
+    const red=Mp(p).norm(u.map(c=>Number(((c%BigInt(p))+BigInt(p))%BigInt(p))));
+    return red.length===modp[i].length && red.every((c,j)=>c===modp[i][j]);
+  });
+
+  const mult=gi=>{ const F=(info.factors||[]).find(x=>x.gi===gi); return F?F.mult:1; };
+
+  const cell=(st,i,prevK,isModP)=>{
+    const u=st.us[i];
+    if(mode==='padic')
+      return `<td class="dcell">${polyDigitLine(u,p,st.k,maxK,prevK)}</td>`;
+    /* mod p 列固定用 0…p−1（F_p 惯例，与上一节 ③ 一致）；提升列才受表示法开关影响 */
+    const poly = (mode==='sym' && !isModP) ? Mm(st.m).sym(u) : Z.trim(u.slice());
+    return `<td class="pcell">${polyHTML(poly)}</td>`;
+  };
+
+  let h=`<div class="dim" style="font-size:12.5px;margin-bottom:8px">`+
+    `lc<sup>-1</sup>·f ≡ ∏ u<sub>i</sub> (mod ${p})：共 <b>${modp.length}</b> 个首一不可约因子，`+
+    `次数 [${degs.join(", ")}]，∑ = ${degs.reduce((a,b)=>a+b,0)} = deg(radical)。`+
+    `提升后 <span class="${allInherit?'ok':'bad'}">${allInherit?`全部满足 û<sub>i</sub> ≡ u<sub>i</sub> (mod ${p}) ✓`:'继承校验失败'}</span>。`+
+    `</div>`;
+  h+=`<div class="scrollx"><table class="t lin"><tr><th style="width:38px">i</th><th style="width:38px">deg</th>`;
+  cols.forEach((c,ci)=>{
+    h+=`<th>${ci===0 ? `u<sub>i</sub><br><span class="dim">mod ${p}　(0…${p-1})</span>`
+                     : `û<sub>i</sub><br><span class="dim">mod p<sup>${c.k}</sup>`+
+                       `${mode==='sym'?`　(对称)`:``}</span>`}</th>`;
+  });
+  h+=`<th style="width:44px">组</th><th style="width:34px">|S|</th>`+
+     `<th>Z[x] 不可约因子<br><span class="dim">本原部分( lc·∏<sub>i∈S</sub>û<sub>i</sub> )</span></th>`+
+     `<th style="width:44px">重数</th></tr>`;
+
+  combos.forEach((c,gi)=>{
+    const rs=Math.max(1,c.ids.length);
+    if(!c.ids.length){                            // 兜底：无对应 û（理论上不会出现）
+      h+=`<tr><td class="idx">—</td><td class="dim">—</td>`+cols.map(()=>`<td class="dim">—</td>`).join("")+
+         `<td class="gcell">${gtag(gi)}</td><td class="gcell dim">0</td>`+
+         `<td class="pcell fcell">${polyHTML(c.factor)}</td>`+
+         `<td class="gcell dim">${mult(gi)>1?'^'+mult(gi):'1'}</td></tr>`;
+      return;
+    }
+    c.ids.forEach((i,ri)=>{
+      h+=`<tr>`;
+      h+=`<td class="idx" style="border-left:3px solid ${gcol(gi)}">${i}</td>`;
+      h+=`<td class="dim">${modp[i].length-1}</td>`;
+      cols.forEach((st,ci)=>{ h+=cell(st,i,ci>0?cols[ci-1].k:0, ci===0); });
+      if(ri===0){
+        h+=`<td class="gcell" rowspan="${rs}" style="background:${gcol(gi)}22">${gtag(gi)}</td>`+
+           `<td class="gcell dim" rowspan="${rs}">${c.size}</td>`+
+           `<td class="pcell fcell" rowspan="${rs}" style="background:${gcol(gi)}14">`+
+             `${polyHTML(c.factor)}${c.rest&&rs>1?` <span class="badge">余项</span>`:``}</td>`+
+           `<td class="gcell dim" rowspan="${rs}">${mult(gi)>1?'^'+mult(gi):'1'}</td>`;
+      }
+      h+=`</tr>`;
+    });
+  });
+  h+=`</table></div>`;
+  h+=`<div class="dim" style="font-size:12px;margin-top:8px">`+
+     `行按<b>组</b>排列（同组相邻才能合并单元格），i 是 mod ${p} 因子的编号，与上一节和日志一致。`+
+     `每一行从左到右就是一个因子的一生：F<sub>${p}</sub>[x] 里的 u<sub>i</sub> `+
+     `→ Hensel 提升成 Z/p<sup>${N}</sup> 里的 û<sub>i</sub>（同一行，低位不变）`+
+     `→ 右侧被 <b>合并单元格</b> 圈在一起的若干行，其 û 之积恰好还原出一个 Z[x] 不可约因子。</div>`;
+  box.innerHTML=h;
+}
+$("lineRep").onchange=()=>{ if(LAST) renderLineage(LAST); };
+$("chkAllPrec").onchange=()=>{ if(LAST) renderLineage(LAST); };
+
+/* ---- 分组配色：让 uᵢ / ûᵢ / Z[x] 因子的归属一眼可见 ---- */
+const GCOL=['#6ea8fe','#5ad19a','#f0c26b','#f08a8a','#c58af9','#7fd7e8',
+            '#e88ab8','#a7d97a','#d9a06b','#8fa0f0','#63c9a8','#cfd06b',
+            '#f0a06b','#9ad1f0','#d18ac5','#b0d18a'];
+const gcol=i=>GCOL[i%GCOL.length];
+/* 多项式最大系数的十进制位数，用来判断"系数是否突然变小" */
+function bigLen(a){ let m=0n; for(const c of (a||[])){ const b=babs(c); if(b>m) m=b; }
+  return m.toString().length; }
+function gtag(gi){ return `<span class="gtag" style="background:${gcol(gi)}">G${gi+1}</span>`; }
+
+/* 系数的 p 进展开：低位在左，右端补空位到最终精度 maxK。
+   Hensel 提升只在右端追加高位数字 ⇒ 每行的左侧数字与上一行完全相同。 */
+function digitWidth(p){ return String(p-1).length; }
+function cellWidth(p,maxK){ const w=digitWidth(p); return maxK*w+(w>1?maxK-1:0); }
+function digitCell(c,p,k,maxK,prevK){
+  const w=digitWidth(p), P=BigInt(p), Pk=P**BigInt(k), sep=w>1?",":"";
+  let x=((c%Pk)+Pk)%Pk;
+  const digs=[];
+  for(let i=0;i<k;i++){ digs.push(String(x%P).padStart(w," ")); x/=P; }
+  const known=digs.join(sep);
+  const pad=" ".repeat(Math.max(0,(maxK-k)*(w+(w>1?1:0))));   // 右端留空，列对齐
+  if(prevK>0 && k>prevK){
+    const cut=prevK*w+(w>1?prevK-1:0);
+    return known.slice(0,cut)+`<span class="new">`+known.slice(cut)+`</span>`+pad;
+  }
+  return known+pad;
+}
+function polyDigitLine(u,p,k,maxK,prevK){
+  const cells=[];
+  for(let i=0;i<u.length;i++) cells.push(digitCell(u[i],p,k,maxK,prevK));
+  return cells.join(" | ");
+}
+function digitHeader(n,p,maxK){
+  const cw=cellWidth(p,maxK), cells=[];
+  for(let i=0;i<n;i++){ const lb="c"+i; cells.push(cw>=lb.length?lb.padEnd(cw," "):lb); }
+  return "      "+cells.join(" | ");
+}
+
+
+run();
+</script>
+</body>
+</html>
