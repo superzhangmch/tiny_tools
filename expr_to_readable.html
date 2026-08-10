@@ -25,7 +25,9 @@
 	}
     </style>
     <script>
-	MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], processEscapes: true } };
+	// startup.typeset=false: 不自动扫描全页（否则定界符控件里的 "$$…$$" 标签文字会被当公式渲染），
+	// 只渲染代码里主动 typesetPromise 的预览区
+	MathJax = { tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], processEscapes: true }, startup: { typeset: false } };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
