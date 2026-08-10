@@ -1121,16 +1121,31 @@ function renderMerge(info){
         row(`3. 试除`, `<span class="ok">${polyHTML(c.factor)} 在 Z[x] 中整除 f ✓</span>`, `确认是真因子 g`);
       } else {
         let k=2;
-        if(c.lcUsed!==1n)
+        if(c.lcUsed!==1n){
+          /* 逐项验算：lc(rem) × ûⱼ ≡ rawⱼ (mod p^N)，挑 |ûⱼ| 最大的一项 */
+          let j2=0; for(let t=0;t<puS.length;t++) if(babs(puS[t]||0n)>babs(puS[j2]||0n)) j2=t;
+          const v2=puS[j2]||0n, b2=c.raw[j2]||0n;
+          let n2=`(mod ${p}<sup>${N}</sup>，对称代表元 |系数| ≤ ${M/2n})；`+
+                 `<b>系数突然变小</b>就是"这个子集可能是真因子"的信号`;
+          if(v2!==0n && (c.lcUsed*v2-b2)%M===0n && bigLen([c.lcUsed*v2])<=80){
+            const q2=(c.lcUsed*v2-b2)/M;
+            n2+=`<br>验算 x<sup>${j2}</sup> 项：${c.lcUsed} × (${v2}) = ${c.lcUsed*v2}`+
+                ` = (${b2}) ${q2<0n?`−`:`+`} ${babs(q2)===1n?``:`${babs(q2)} × `}${p}<sup>${N}</sup>`+
+                `，即 ${c.lcUsed} × (${v2}) ≡ ${b2} (mod ${p}<sup>${N}</sup>)`;
+          }
           row(`${k++}. × lc(rem) = ${c.lcUsed}`,
-              `<span class="arrow">≡</span> ${polyHTML(c.raw)}`,
-              `(mod ${p}<sup>${N}</sup>，对称代表元 |系数| ≤ ${M/2n})；`+
-              `<b>系数突然变小</b>就是"这个子集可能是真因子"的信号`);
-        else
+              `<span class="arrow">≡</span> ${polyHTML(c.raw)}`, n2);
+        } else
           row(`${k++}. 取对称代表元`, `= ${polyHTML(c.raw)}`, `|系数| ≤ ${M/2n}`);
-        if(cont!==1n)
+        if(cont!==1n){
+          /* 把 gcd 的对象直接写出来，而不是"各系数的 gcd" */
+          const cf=c.raw.slice().reverse().filter(v=>v!==0n).map(v=>babs(v));
+          const gs = cf.length<=8 ? `gcd(${cf.join(", ")})`
+                                  : `gcd(${cf.slice(0,7).join(", ")}, … 共 ${cf.length} 项)`;
           row(`${k++}. ÷ content = ${cont}`, `= ${polyHTML(c.factor)} <span class="dim">= g</span>`,
-              `content = 各系数的 gcd；除完才<b>第一次看到</b> g，也才知道 lc(g) = ${lcg}`);
+              `content = ${gs} = <b>${cont}</b>（上一行各系数的 gcd）；`+
+              `除完才<b>第一次看到</b> g，也才知道 lc(g) = ${lcg}`);
+        }
         row(`${k++}. 试除`, `<span class="ok">${polyHTML(c.factor)} 在 Z[x] 中整除 f ✓</span>`, `确认是真因子 g`);
         /* 事后解释：û 作为有理系数多项式是什么 —— 分母是此刻才知道的 lc(g) */
         if(lcg!==1n){
