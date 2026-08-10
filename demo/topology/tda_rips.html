@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>持续同调 mini-TDA：点云 → Rips 复形 → 条形码</title>
+<style>
+  body { margin: 0; padding: 16px; background: #06070d; color: #ddd; font-family: Arial, "PingFang SC", sans-serif; }
+  h1 { font-size: 19px; }
+  .hint { color: #8a92a8; font-size: 12.5px; line-height: 1.6; }
+  canvas { display: block; background: #0d0f18; border: 1px solid #3a3f55; border-radius: 4px; }
+  button { padding: 3px 10px; font-size: 13px; cursor: pointer; background: #2a2e3e; color: #ddd;
+    border: 1px solid #555; border-radius: 3px; margin: 1px; }
+  button:hover { background: #3a4058; }
+  .bar { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  #stats { font-size: 15px; font-weight: bold; font-family: Menlo, monospace; }
+  .ok { color: #9be89b; } .no { color: #7dc4ff; }
+</style>
+</head>
+<body>
+<h1>持续同调 mini-TDA：数据的形状</h1>
+<div class="hint">
+  左图:<b>手绘涂鸦</b>(拖拽即沿笔迹采样成点;单击加单点;也可用预设)造点云;拖 ε 滑杆给每对距离 ≤ ε 的点连边、三点两两相连即填三角形——
+  <b>Vietoris–Rips 单纯复形</b>从数据里自动生长。右图:<b>条形码</b>——每个拓扑特征是一根横条,
+  横条起点 = 它在哪个 ε 出生,终点 = 在哪个 ε 被填死;<span class="ok">绿色 = H₀(连通块)</span>,
+  <span class="no">蓝色 = H₁(洞)</span>。<b>长条 = 数据的真实结构,短条 = 噪声</b>——这就是 TDA 的全部哲学。
+  红竖线 = 当前 ε。撒一圈点,看那根长长的蓝条:数据"是个环"这件事,机器自己发现了。<br>
+  <b>bᵢ 是什么</b>:Betti 数,第 i 维"洞"的数目——<b>b₀ = 连通块数</b>(复形分成几坨互不相连的)、
+  <b>b₁ = 一维洞数</b>(几个独立的圈,围着填不平的空腔)。三维数据还会有 b₂ = 空腔数(被曲面整个包住的空洞),平面点云到 b₁ 为止。
+</div>
+<div class="bar">
+  预设:
+  <button data-p="ring">圆环点云</button>
+  <button data-p="two">两簇</button>
+  <button data-p="eight">8 字</button>
+  <button data-p="rand">均匀随机</button>
+  <button data-p="clear">清空</button>
+  ε: <input type="range" id="eps" min="0" max="160" value="0" style="width:220px">
+  <span class="mono" id="epsShow"></span>
+  <label><input type="checkbox" id="ballsChk" checked>显示小球（半径 ε/2，相碰即连边）</label>
+  <span id="stats"></span>
+  <span class="mono hint" id="complexInfo"></span>
+</div>
+<div class="row">
+  <div><canvas id="cvP" width="520" height="430"></canvas><div class="hint">点云与 Rips 复形（拖拽手绘 / 单击加点）</div></div>
+  <div>
+    <canvas id="cvB" width="400" height="290"></canvas><div class="hint">持续同调条形码（横轴 = ε）</div>
+    <canvas id="cvC" width="400" height="120" style="margin-top:6px"></canvas>
+    <div class="hint">Betti 曲线：<span class="ok">b₀(ε) 左轴</span>　<span class="no">b₁(ε) 右轴</span></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ================= 核心算法（无 DOM, 供测试提取） =================
+const MAXEPS = 160;
+
+function buildRips(pts, eps) {
+  const n = pts.length, edges = [], tris = [];
+  const d = (i, j) => Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+  const has = Array.from({ length: n }, () => new Set());
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++)
+    if (d(i, j) <= eps) { edges.push([i, j]); has[i].add(j); }
+  for (const [i, j] of edges)
+    for (const k of has[j]) if (has[i].has(k)) tris.push([i, j, k]);
+  return { edges, tris };
+}
+
+// 持续同调(Z/2 系数, 标准列约化), 返回条形 {dim, birth, death}
+function persistence(pts, maxEps = MAXEPS) {
+  const n = pts.length;
+  const d = (i, j) => Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+  const simp = [];
+  for (let i = 0; i < n; i++) simp.push({ dim: 0, v: [i], t: 0 });
+  const has = Array.from({ length: n }, () => new Map());
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const t = d(i, j);
+    if (t <= maxEps) { simp.push({ dim: 1, v: [i, j], t }); has[i].set(j, t); }
+  }
+  for (let i = 0; i < n; i++) for (const [j, tij] of has[i])
+    for (const [k, tjk] of has[j]) {
+      const tik = has[i].get(k);
+      if (tik !== undefined) simp.push({ dim: 2, v: [i, j, k], t: Math.max(tij, tjk, tik) });
+    }
+  simp.sort((a, b) => a.t - b.t || a.dim - b.dim);
+  const m = simp.length;
+  if (m > 20000) throw new Error('单纯形过多(' + m + '), 请减少点数');
+  const idx = new Map(simp.map((s, i2) => [s.dim + ':' + s.v.join(','), i2]));
+  const W = (m >> 5) + 1;
+  const cols = new Array(m).fill(null);
+  for (let j = 0; j < m; j++) {
+    const s = simp[j];
+    if (s.dim === 0) continue;
+    const col = new Uint32Array(W);
+    const facets = s.dim === 1
+      ? [[s.v[0]], [s.v[1]]]
+      : [[s.v[0], s.v[1]], [s.v[0], s.v[2]], [s.v[1], s.v[2]]];
+    for (const f of facets) {
+      const fi = idx.get((s.dim - 1) + ':' + f.join(','));
+      col[fi >> 5] ^= 1 << (fi & 31);
+    }
+    cols[j] = col;
+  }
+  const lowOf = c => {
+    for (let w = W - 1; w >= 0; w--) if (c[w]) return (w << 5) + (31 - Math.clz32(c[w]));
+    return -1;
+  };
+  const lowToCol = new Int32Array(m).fill(-1);
+  const pairs = [];
+  for (let j = 0; j < m; j++) {
+    const c = cols[j];
+    if (!c) continue;
+    let lo = lowOf(c);
+    while (lo >= 0 && lowToCol[lo] >= 0) {
+      const ck = cols[lowToCol[lo]];
+      for (let w = 0; w < W; w++) c[w] ^= ck[w];
+      lo = lowOf(c);
+    }
+    if (lo >= 0) { lowToCol[lo] = j; pairs.push([lo, j]); }
+    else cols[j] = null;                   // 正单纯形(生成新类)
+  }
+  const paired = new Set();
+  const bars = [];
+  for (const [i, j] of pairs) {
+    paired.add(i); paired.add(j);
+    if (simp[j].t > simp[i].t + 1e-9)
+      bars.push({ dim: simp[i].dim, birth: simp[i].t, death: simp[j].t });
+  }
+  for (let i = 0; i < m; i++)
+    if (!paired.has(i) && cols[i] === null && simp[i].dim <= 1)
+      bars.push({ dim: simp[i].dim, birth: simp[i].t, death: Infinity });
+  return bars;
+}
+function aliveCount(bars, dim, eps) {
+  return bars.filter(b => b.dim === dim && b.birth <= eps && eps < b.death).length;
+}
+// ================= 核心结束 =================
+
+// ================= UI =================
+const cvP = document.getElementById('cvP'), gP = cvP.getContext('2d');
+const cvB = document.getElementById('cvB'), gB = cvB.getContext('2d');
+let points = [], bars = [];
+
+function recompute() {
+  try { bars = persistence(points); document.getElementById('complexInfo').textContent = ''; }
+  catch (e) { bars = []; document.getElementById('complexInfo').textContent = e.message; }
+  render();
+}
+function render() {
+  const eps = +document.getElementById('eps').value;
+  document.getElementById('epsShow').textContent = 'ε = ' + eps;
+  // 左: 点云 + 复形
+  gP.clearRect(0, 0, cvP.width, cvP.height);
+  const { edges, tris } = points.length ? buildRips(points, eps) : { edges: [], tris: [] };
+  // 小球: 半径 ε/2, 两球相交 ⟺ 距离 ≤ ε ⟺ Rips 连边
+  if (document.getElementById('ballsChk').checked && eps > 0) {
+    gP.fillStyle = 'rgba(247,201,107,0.10)';
+    gP.strokeStyle = 'rgba(247,201,107,0.30)';
+    for (const [x, y] of points) {
+      gP.beginPath(); gP.arc(x, y, eps / 2, 0, 2 * Math.PI);
+      gP.fill(); gP.stroke();
+    }
+  }
+  gP.fillStyle = 'rgba(61,111,174,0.25)';
+  for (const [i, j, k] of tris) {
+    gP.beginPath();
+    gP.moveTo(...points[i]); gP.lineTo(...points[j]); gP.lineTo(...points[k]);
+    gP.closePath(); gP.fill();
+  }
+  gP.strokeStyle = '#5a7fb0'; gP.lineWidth = 1;
+  for (const [i, j] of edges) {
+    gP.beginPath(); gP.moveTo(...points[i]); gP.lineTo(...points[j]); gP.stroke();
+  }
+  gP.fillStyle = '#f7c96b';
+  for (const [x, y] of points) { gP.beginPath(); gP.arc(x, y, 3, 0, 2 * Math.PI); gP.fill(); }
+  document.getElementById('complexInfo').textContent =
+    `　V=${points.length} E=${edges.length} T=${tris.length}`;
+  // 读数
+  document.getElementById('stats').innerHTML = points.length
+    ? `b₀ = <span class="ok">${aliveCount(bars, 0, eps)}</span> <span style="font-weight:normal;font-size:12px">个连通块(几坨)</span>　` +
+      `b₁ = <span class="no">${aliveCount(bars, 1, eps)}</span> <span style="font-weight:normal;font-size:12px">个洞(独立的圈)</span>`
+    : '';
+  // 右: 条形码
+  gB.clearRect(0, 0, cvB.width, cvB.height);
+  const Wb = cvB.width, Hb = cvB.height, padL = 8, padR = 12;
+  const X = t => padL + Math.min(t, MAXEPS) / MAXEPS * (Wb - padL - padR);
+  const sorted = [...bars].sort((a, b) => a.dim - b.dim || (b.death - b.birth) - (a.death - a.birth));
+  const rowH = Math.min(10, (Hb - 30) / Math.max(sorted.length, 1));
+  let y = 14;
+  gB.font = '11px Menlo';
+  let lastDim = -1;
+  for (const b of sorted) {
+    if (b.dim !== lastDim) {
+      gB.fillStyle = '#8a92a8';
+      gB.fillText(b.dim === 0 ? 'H₀ (连通块)' : 'H₁ (洞)', padL, y + 4);
+      y += 14; lastDim = b.dim;
+    }
+    gB.strokeStyle = b.dim === 0 ? '#9be89b' : '#7dc4ff';
+    gB.lineWidth = Math.max(2, rowH - 4);
+    gB.beginPath();
+    gB.moveTo(X(b.birth), y);
+    gB.lineTo(b.death === Infinity ? Wb - 4 : X(b.death), y);
+    gB.stroke();
+    if (b.death === Infinity) { gB.fillStyle = gB.strokeStyle; gB.fillText('∞', Wb - 12, y + 4); }
+    y += rowH;
+    if (y > Hb - 8) break;
+  }
+  // 当前 ε 竖线
+  gB.strokeStyle = '#e05555'; gB.lineWidth = 1;
+  gB.beginPath(); gB.moveTo(X(+document.getElementById('eps').value), 4);
+  gB.lineTo(X(+document.getElementById('eps').value), Hb - 4); gB.stroke();
+
+  // --- Betti 曲线: b0(ε) 绿(左轴), b1(ε) 蓝(右轴) ---
+  const gC = document.getElementById('cvC').getContext('2d');
+  const Wc = 400, Hc = 120, padB = 14, padT = 8;
+  gC.clearRect(0, 0, Wc, Hc);
+  gC.strokeStyle = '#3a3f55'; gC.strokeRect(0.5, 0.5, Wc - 1, Hc - 1);
+  const nPts = Math.max(points.length, 1);
+  let maxB1 = 1;
+  for (let px = 0; px <= Wc; px += 2) maxB1 = Math.max(maxB1, aliveCount(bars, 1, px / Wc * MAXEPS));
+  const Y0 = v => Hc - padB - v / nPts * (Hc - padT - padB);
+  const Y1 = v => Hc - padB - v / maxB1 * (Hc - padT - padB);
+  // b1 整数刻度虚线(右轴)
+  gC.setLineDash([2, 4]); gC.strokeStyle = '#28304a';
+  for (let v = 1; v <= maxB1; v++) {
+    gC.beginPath(); gC.moveTo(2, Y1(v)); gC.lineTo(Wc - 2, Y1(v)); gC.stroke();
+  }
+  gC.setLineDash([]);
+  for (const [dim, color, Y] of [[0, '#9be89b', Y0], [1, '#7dc4ff', Y1]]) {
+    gC.strokeStyle = color; gC.lineWidth = 1.8; gC.beginPath();
+    for (let px = 0; px <= Wc; px++) {
+      const v = aliveCount(bars, dim, px / Wc * MAXEPS);
+      px ? gC.lineTo(px, Y(v)) : gC.moveTo(px, Y(v));
+    }
+    gC.stroke();
+  }
+  gC.font = '11px Menlo';
+  gC.fillStyle = '#9be89b'; gC.fillText('b₀: 0→' + nPts, 6, 12);
+  gC.fillStyle = '#7dc4ff'; gC.fillText('b₁: 0→' + maxB1, Wc - 74, 12);
+  const ex = +document.getElementById('eps').value / MAXEPS * Wc;
+  gC.strokeStyle = '#e05555'; gC.lineWidth = 1;
+  gC.beginPath(); gC.moveTo(ex, 2); gC.lineTo(ex, Hc - 2); gC.stroke();
+}
+
+// 手绘: 拖拽沿笔迹按间距采样成点; 单击 = 加一个点。持续同调在松手时才算(拖动中只更新复形)
+let stroking = false, lastPt = null;
+const SAMPLE_D = 20;
+function addSample(e, force) {
+  const r = cvP.getBoundingClientRect();
+  const p = [e.clientX - r.left, e.clientY - r.top];
+  if (!force && lastPt && Math.hypot(p[0] - lastPt[0], p[1] - lastPt[1]) < SAMPLE_D) return;
+  lastPt = p;
+  points.push(p);
+  if (points.length > 90) points.shift();
+  render();
+}
+cvP.addEventListener('pointerdown', e => { stroking = true; lastPt = null; addSample(e, true); });
+cvP.addEventListener('pointermove', e => { if (stroking) addSample(e, false); });
+addEventListener('pointerup', () => { if (stroking) { stroking = false; recompute(); } });
+document.getElementById('eps').addEventListener('input', render);
+document.getElementById('ballsChk').addEventListener('change', render);
+
+const rnd = (a, b) => a + Math.random() * (b - a);
+const PRESETS = {
+  clear: () => [],
+  ring: () => Array.from({ length: 26 }, (_, i) => {
+    const t = 2 * Math.PI * i / 26;
+    return [260 + 130 * Math.cos(t) + rnd(-9, 9), 215 + 130 * Math.sin(t) + rnd(-9, 9)];
+  }),
+  two: () => [
+    ...Array.from({ length: 14 }, () => [150 + rnd(-45, 45), 215 + rnd(-45, 45)]),
+    ...Array.from({ length: 14 }, () => [380 + rnd(-45, 45), 215 + rnd(-45, 45)]),
+  ],
+  eight: () => {
+    const P = [];
+    for (const cx of [170, 350]) for (let i = 0; i < 16; i++) {
+      const t = 2 * Math.PI * i / 16;
+      P.push([cx + 88 * Math.cos(t) + rnd(-7, 7), 215 + 88 * Math.sin(t) + rnd(-7, 7)]);
+    }
+    return P;
+  },
+  rand: () => Array.from({ length: 36 }, () => [rnd(40, 480), rnd(40, 400)]),
+};
+document.querySelector('.bar').addEventListener('click', e => {
+  const p = e.target.dataset && e.target.dataset.p;
+  if (!p) return;
+  points = PRESETS[p]();
+  recompute();
+});
+points = PRESETS.ring();
+document.getElementById('eps').value = 55;
+recompute();
+</script>
+</body>
+</html>
