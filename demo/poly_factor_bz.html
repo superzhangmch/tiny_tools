@@ -489,7 +489,7 @@ function bzFactorSquarefree(f, log, cap){
     res.__tried=0; res.__capped=false; res.__levels={};
     res.__r=1; res.__p=p; res.__N=1; res.__M=BigInt(p);
     res.__modp=fac; res.__us=fac.map(u=>u.map(BigInt));
-    res.__combos=[{ids:[0],size:1,factor:f,raw:null,rest:true}];
+    res.__combos=[{ids:[0],size:1,factor:f,raw:null,rest:true,remBefore:f}];  // 未做任何乘除，无 lcUsed
     res.__lcRad=lc; res.__noLift=true;
     res.__rad=f; res.__lcInv=binvmod(lc,BigInt(p));
     res.__Fm=Mm(BigInt(p)).scale(Mm(BigInt(p)).fromZ(f),res.__lcInv);
@@ -578,7 +578,8 @@ function bzFactorSquarefree(f, log, cap){
       hit++;
       const ids=found.idx.map(i=>poolIds[i]);
       factors.push(found.cand);
-      combos.push({ids, size:d, factor:found.cand, raw:found.raw, lcUsed:found.lcUsed});
+      combos.push({ids, size:d, factor:found.cand, raw:found.raw, lcUsed:found.lcUsed,
+                   remBefore:rem});
       rem=found.q;
       const s=new Set(found.idx);
       pool  =pool  .filter((_,i)=>!s.has(i));
@@ -597,7 +598,7 @@ function bzFactorSquarefree(f, log, cap){
     const lcU=Z.lc(rem);
     const rawLast=Z.trim(A.sym(A.scale(pr,((lcU%M_)+M_)%M_)));
     combos.push({ids:poolIds.slice(), size:poolIds.length, factor:last,
-                 raw:rawLast, lcUsed:lcU, rest:true});
+                 raw:rawLast, lcUsed:lcU, rest:true, remBefore:rem});
     if(poolIds.length) log(`  ↳ 余下 ${poolIds.length} 个整体合并（无更小子集可行）：`+
       `${poolIds.map(i=>`(${polyStr(A.sym(us[i]))})`).join(" · ")} → ${polyStr(last)}`);
   }
@@ -999,15 +1000,15 @@ function renderMerge(info){
   }
   const p=bz.__p, M=bz.__M, N=bz.__N, us=bz.__us, modp=bz.__modp;
   const combos=bz.__combos||[], A=Mm(M);
-  const factorsSorted=combos.map((c,gi)=>({c,gi}))
-    .sort((a,b)=>Z.deg(a.c.factor)-Z.deg(b.c.factor));
+  /* 按发现顺序（而非次数）排，这样各块的 rem 才是逐块变小的 */
+  const factorsSorted=combos.map((c,gi)=>({c,gi}));
 
   let h=`<div class="dim" style="font-size:12.5px;margin-bottom:10px">`+
     (bz.__noLift
       ? `f 在 mod ${p} 下就已不可约且次数不变 ⇒ f 本身在 Z[x] 上不可约，没有提升也没有合并。`
       : `上一层 = mod p<sup>${N}</sup> = ${M} 上的 <b>${us.length}</b> 个首一因子 `+
         (us.length===1?`û<sub>0</sub>`:`û<sub>0</sub> … û<sub>${us.length-1}</sub>`)+
-        `（乘积 ≡ lc<sup>-1</sup>·f）。下面每一块是一个最终因子，列出它由上一层哪几个乘起来。`+
+        `（乘积 ≡ lc<sup>-1</sup>·f）。下面每一块是一个最终因子，列出它由上一层哪几个乘起来；<b>各块按发现顺序排列</b>，所以 rem 会一块比一块小。`+
         `<div style="margin-top:4px">首一化只做了<b>一次</b>、而且是对 <b>f 整体</b>做的：`+
         `取 F = lc(f)<sup>-1</sup>·f (mod p<sup>N</sup>)，F 首一 ⇒ 它的每个因子 u<sub>i</sub>、`+
         `û<sub>i</sub> <b>本来就都是首一的</b>（提升前后都首一，提升不改变这一点）。</div>`+
@@ -1105,9 +1106,18 @@ function renderMerge(info){
       const row=(st,val,note)=>{ h+=`<tr><td class="st">${st}</td><td class="val">${val}</td>`+
         `<td class="note">${note||``}</td></tr>`; };
 
-      /* 计算顺序：取子集 → ×lc(rem) → ÷content 得到 g → 试除；最后才回头解释 û 是什么 */
+      /* 计算顺序：剩余多项式 → 取子集 → ×lc(rem) → ÷content 得到 g → 试除；最后才回头解释 */
       const dot2=` <span class="arrow">·</span> `;
-      row(`1. 从 ④ 取子集`,
+      let k=1;
+
+      /* 先摆出"当时还剩什么没分解"，lc(rem) 就是它的最高次项系数 */
+      if(c.remBefore)
+        row(`${k++}. 当时还没分解的部分`,
+            `rem = ${polyHTML(c.remBefore)}`,
+            `deg ${Z.deg(c.remBefore)}；<b>lc(rem) = ${c.lcUsed} 就是这一行的最高次项系数</b>。`+
+            `开头 rem = f，每命中一个因子就 rem ← rem / g，所以 lc(rem) 逐块变小`);
+
+      row(`${k++}. 从 ④ 取子集`,
           (n===1 ? `${lbl} = ${polyHTML(puS)}`
                  : c.ids.map(i=>`<span class="poly">${polyParen(A.sym(us[i]))}</span>`).join(dot2)+
                    ` <span class="arrow">=</span> ${polyHTML(puS)}`),
@@ -1115,54 +1125,54 @@ function renderMerge(info){
           c.ids.map(i=>`u<sub>${i}</sub> = <span class="poly">${polyParen(modp[i].map(BigInt))}</span>`).join(`，`));
 
       if(Z.eq(c.factor,puS)){
-        row(`2. 它就是因子 g`, `g = ${polyHTML(c.factor)}`,
+        row(`${k++}. 它就是因子 g`, `g = ${polyHTML(c.factor)}`,
             `lc(g) = 1（本身首一且本原）`+
-            (c.lcUsed===1n?``:`；× lc(rem) = ${c.lcUsed} 与 ÷ content = ${c.lcUsed} 恰好抵消`));
-        row(`3. 试除`, `<span class="ok">${polyHTML(c.factor)} 在 Z[x] 中整除 f ✓</span>`, `确认是真因子 g`);
+            (c.lcUsed===1n?``:`；乘 ${c.lcUsed} 再除 ${c.lcUsed} 恰好抵消`));
       } else {
-        let k=2;
         if(c.lcUsed!==1n){
           /* 逐项验算：lc(rem) × ûⱼ ≡ rawⱼ (mod p^N)，挑 |ûⱼ| 最大的一项 */
           let j2=0; for(let t=0;t<puS.length;t++) if(babs(puS[t]||0n)>babs(puS[j2]||0n)) j2=t;
           const v2=puS[j2]||0n, b2=c.raw[j2]||0n;
-          let n2=`(mod ${p}<sup>${N}</sup>，对称代表元 |系数| ≤ ${M/2n})；`+
-                 `<b>系数突然变小</b>就是"这个子集可能是真因子"的信号`;
+          let n2=`乘数 = lc(rem) = <b>${c.lcUsed}</b>。结果取 mod ${p}<sup>${N}</sup> 的对称代表元`+
+                 `（|系数| ≤ ${M/2n}）；<b>系数突然变小</b>就是"这个子集可能是真因子"的信号`;
           if(v2!==0n && (c.lcUsed*v2-b2)%M===0n && bigLen([c.lcUsed*v2])<=80){
             const q2=(c.lcUsed*v2-b2)/M;
             n2+=`<br>验算 x<sup>${j2}</sup> 项：${c.lcUsed} × (${v2}) = ${c.lcUsed*v2}`+
                 ` = (${b2}) ${q2<0n?`−`:`+`} ${babs(q2)===1n?``:`${babs(q2)} × `}${p}<sup>${N}</sup>`+
                 `，即 ${c.lcUsed} × (${v2}) ≡ ${b2} (mod ${p}<sup>${N}</sup>)`;
           }
-          row(`${k++}. × lc(rem) = ${c.lcUsed}`,
+          row(`${k++}. 上一行 <b>× ${c.lcUsed}</b>`,
               `<span class="arrow">≡</span> ${polyHTML(c.raw)}`, n2);
         } else
           row(`${k++}. 取对称代表元`, `= ${polyHTML(c.raw)}`, `|系数| ≤ ${M/2n}`);
         if(cont!==1n){
-          /* 把 gcd 的对象直接写出来，而不是"各系数的 gcd" */
           const cf=c.raw.slice().reverse().filter(v=>v!==0n).map(v=>babs(v));
           const gs = cf.length<=8 ? `gcd(${cf.join(", ")})`
                                   : `gcd(${cf.slice(0,7).join(", ")}, … 共 ${cf.length} 项)`;
-          row(`${k++}. ÷ content = ${cont}`, `= ${polyHTML(c.factor)} <span class="dim">= g</span>`,
-              `content = ${gs} = <b>${cont}</b>（上一行各系数的 gcd）；`+
+          row(`${k++}. 上一行 <b>÷ ${cont}</b>`,
+              `= ${polyHTML(c.factor)} <span class="dim">= g</span>`,
+              `除数 = content = ${gs} = <b>${cont}</b>（上一行各系数的 gcd）；`+
               `除完才<b>第一次看到</b> g，也才知道 lc(g) = ${lcg}`);
         }
-        row(`${k++}. 试除`, `<span class="ok">${polyHTML(c.factor)} 在 Z[x] 中整除 f ✓</span>`, `确认是真因子 g`);
-        /* 事后解释：û 作为有理系数多项式是什么 —— 分母是此刻才知道的 lc(g) */
-        if(lcg!==1n){
-          let jj=0; for(let t=0;t<puS.length;t++) if(babs(puS[t]||0n)>babs(puS[jj]||0n)) jj=t;
-          const v=puS[jj]||0n, a=c.factor[jj]||0n;
-          let note=`分母 ${lcg} = lc(g) = lc(rem) / content = ${c.lcUsed} / ${cont}`+
-                   `<br><b>事先并不知道是 ${lcg}</b>：只知道它是 lc(rem) = ${c.lcUsed} 的某个约数，`+
-                   `具体是哪个，要等上面 content 除完才浮现`;
-          if(v!==0n && (lcg*v-a)%M===0n){
-            const q=(lcg*v-a)/M, gg=bgcd(babs(a),lcg)||1n;
-            note+=`<br>验算 x<sup>${jj}</sup> 项：${lcg} × (${v}) = (${a}) `+
-              `${q<0n?`−`:`+`} ${babs(q)===1n?``:`${babs(q)} × `}${p}<sup>${N}</sup>`+
-              ` ⇒ ${v} ≡ ${a/gg}${lcg/gg===1n?``:`/${lcg/gg}`}`;
-          }
-          row(`事后解释：${n===1?`û`:`∏û`} 是什么<br><span class="dim">（不参与推导）</span>`,
-              `${lbl} = ${ratPolyHTML(c.factor,lcg)} = g / lc(g)`, note);
+      }
+      row(`${k++}. 试除`, `<span class="ok">${polyHTML(c.factor)} 在 Z[x] 中整除 rem ✓</span>`,
+          `确认是真因子 g；随后 rem ← rem / g，lc(rem) 变成 ${lcg===0n?'?':(c.lcUsed/lcg)}`);
+
+      /* 事后解释：û 作为有理系数多项式是什么 —— 分母是此刻才知道的 lc(g) */
+      if(!Z.eq(c.factor,puS) && lcg!==1n){
+        let jj=0; for(let t=0;t<puS.length;t++) if(babs(puS[t]||0n)>babs(puS[jj]||0n)) jj=t;
+        const v=puS[jj]||0n, a=c.factor[jj]||0n;
+        let note=`分母 ${lcg} = lc(g) = lc(rem) / content = ${c.lcUsed} / ${cont}`+
+                 `<br><b>事先并不知道是 ${lcg}</b>：只知道它是 lc(rem) = ${c.lcUsed} 的某个约数，`+
+                 `具体是哪个，要等上面 content 除完才浮现`;
+        if(v!==0n && (lcg*v-a)%M===0n){
+          const q=(lcg*v-a)/M, gg=bgcd(babs(a),lcg)||1n;
+          note+=`<br>验算 x<sup>${jj}</sup> 项：${lcg} × (${v}) = (${a}) `+
+            `${q<0n?`−`:`+`} ${babs(q)===1n?``:`${babs(q)} × `}${p}<sup>${N}</sup>`+
+            ` ⇒ ${v} ≡ ${a/gg}${lcg/gg===1n?``:`/${lcg/gg}`}`;
         }
+        row(`事后解释：${n===1?`û`:`∏û`} 是什么<br><span class="dim">（不参与推导）</span>`,
+            `${lbl} = ${ratPolyHTML(c.factor,lcg)} = g / lc(g)`, note);
       }
       h+=`</table></div>`;
     }
