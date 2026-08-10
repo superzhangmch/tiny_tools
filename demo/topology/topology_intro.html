@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>同伦与同调：收缩闭环 + 数洞画板</title>
+<style>
+  body { margin: 0; padding: 16px; background: #06070d; color: #ddd; font-family: Arial, "PingFang SC", sans-serif; }
+  h1 { font-size: 19px; } h2 { font-size: 15px; margin: 20px 0 6px; }
+  .hint { color: #8a92a8; font-size: 12.5px; line-height: 1.6; }
+  canvas { display: block; background: #0d0f18; border: 1px solid #3a3f55; border-radius: 4px; }
+  button { padding: 3px 10px; font-size: 13px; cursor: pointer; background: #2a2e3e; color: #ddd;
+    border: 1px solid #555; border-radius: 3px; margin: 1px; }
+  button:hover { background: #3a4058; }
+  .bar { margin: 6px 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  #verdict1 { font-size: 15px; font-weight: bold; }
+  #betti { font-size: 22px; font-weight: bold; font-family: Menlo, monospace; }
+  .ok { color: #9be89b; } .warn { color: #f7c96b; } .no { color: #7dc4ff; }
+</style>
+</head>
+<body>
+<h1>代数拓扑双厅：同伦（收缩闭环）与 同调（剖分数洞）</h1>
+
+<h2>一、同伦厅：闭环能不能缩成一点？</h2>
+<div class="hint">
+  灰色圆盘是被挖掉的洞（禁区）。<b>手绘一条闭环</b>（按住拖动，松手自动闭合）或用预设，然后点「收缩」——
+  曲线做收缩流（每点向邻居中点挪，禁区外推）。<b>缩没了 = 平凡类；卡住了 = 非平凡类</b>。
+  右上角实时显示对两个洞的绕数 (m, n)——这是<b>同调 H₁ 能看到的签名</b>。
+  重点试「换位子 aba⁻¹b⁻¹」：绕数 (0,0)，同调以为它平凡，收缩却卡死——<b>同调是同伦的影子，影子相同实体可以不同</b>。
+</div>
+<div class="bar">
+  预设:
+  <button data-l="a">绕左洞 a</button>
+  <button data-l="b">绕右洞 b</button>
+  <button data-l="a2">a²（绕左洞两圈）</button>
+  <button data-l="ab">围住两洞</button>
+  <button data-l="triv">不围任何洞</button>
+  <button data-l="comm">换位子 aba⁻¹b⁻¹</button>
+  <button id="shrink" style="font-weight:bold">收缩</button>
+  <button id="stopBtn">停</button>
+  <span class="mono" id="wind1"></span>
+  <span id="verdict1"></span>
+</div>
+<div id="word1" class="mono" style="font-size:13px;margin:4px 0"></div>
+<canvas id="cv1" width="720" height="400"></canvas>
+
+<h2>二、同调厅：涂个形状，Betti 数实时出账</h2>
+<div class="hint">
+  左键涂、右键擦（或按「擦除」切换）。每个小方格是一个 2-胞腔，程序实时统计
+  V(角点) − E(边) + F(格) = χ，并用并查集数连通块：<b>b₀ = 几块，b₁ = b₀ − χ = 几个洞</b>。
+  这就是同调的全部机械：剖分 → 数格子 → 线性代数。试试把一个环涂断、或把洞填上，看数字怎么跳。
+</div>
+<div class="bar">
+  <button data-s="disk">实心盘</button>
+  <button data-s="ring">圆环（1 个洞）</button>
+  <button data-s="two">双环（2 洞）</button>
+  <button data-s="eight">8 字</button>
+  <button data-s="clear">清空</button>
+  <button id="eraseTgl">擦除: 关</button>
+  <span id="betti"></span>
+  <span class="mono hint" id="chi"></span>
+</div>
+<canvas id="cv2" width="720" height="360"></canvas>
+
+<script>
+'use strict';
+// ================= 核心算法（无 DOM, 供测试提取） =================
+// --- 同伦厅 ---
+const HOLES = [{ x: 250, y: 200, r: 46 }, { x: 470, y: 200, r: 46 }];
+
+function windingAround(pts, cx, cy) {
+  let tot = 0, prev = null;
+  for (let i = 0; i <= pts.length; i++) {
+    const p = pts[i % pts.length];
+    const a = Math.atan2(p[1] - cy, p[0] - cx);
+    if (prev !== null) {
+      let d = a - prev;
+      if (d > Math.PI) d -= 2 * Math.PI;
+      if (d < -Math.PI) d += 2 * Math.PI;
+      tot += d;
+    }
+    prev = a;
+  }
+  return Math.round(tot / (2 * Math.PI));
+}
+function curveLength(pts) {
+  let L = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const q = pts[(i + 1) % pts.length];
+    L += Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]);
+  }
+  return L;
+}
+function resampleClosed(pts, spacing) {
+  const L = curveLength(pts);
+  const n = Math.max(24, Math.round(L / spacing));
+  const out = [];
+  let i = 0, acc = 0;
+  let seg = Math.hypot(pts[1 % pts.length][0] - pts[0][0], pts[1 % pts.length][1] - pts[0][1]);
+  for (let k = 0; k < n; k++) {
+    const target = k * L / n;
+    while (acc + seg < target) { acc += seg; i++;
+      const p = pts[i % pts.length], q = pts[(i + 1) % pts.length];
+      seg = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    }
+    const p = pts[i % pts.length], q = pts[(i + 1) % pts.length];
+    const f = seg === 0 ? 0 : (target - acc) / seg;
+    out.push([p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f]);
+  }
+  return out;
+}
+function contractStep(pts, holes, lambda = 0.3) {
+  const n = pts.length, out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n], p = pts[i];
+    let x = p[0] + lambda * ((a[0] + b[0]) / 2 - p[0]);
+    let y = p[1] + lambda * ((a[1] + b[1]) / 2 - p[1]);
+    for (const h of holes) {          // 禁区外推
+      const dx = x - h.x, dy = y - h.y, d = Math.hypot(dx, dy), rr = h.r + 4;
+      if (d < rr) { x = h.x + dx / (d || 1) * rr; y = h.y + dy / (d || 1) * rr; }
+    }
+    out[i] = [x, y];
+  }
+  return out;
+}
+// 同步收缩到底(测试用): 返回 {len, winds, collapsed}
+function contractToEnd(pts, holes, maxIter = 30000) {
+  let cur = resampleClosed(pts, 5);
+  let lastL = curveLength(cur), still = 0;
+  for (let it = 0; it < maxIter; it++) {
+    cur = contractStep(cur, holes);
+    if (it % 10 === 0) cur = resampleClosed(cur, 5);
+    const L = curveLength(cur);
+    if (L < 30) return { collapsed: true, len: L, winds: [0, 0] };
+    if (Math.abs(lastL - L) < 0.001) { if (++still > 300) break; } else still = 0;
+    lastL = L;
+  }
+  return { collapsed: false, len: lastL,
+           winds: holes.map(h => windingAround(cur, h.x, h.y)), pts: cur };
+}
+
+// --- 割线读词: π₁ 的精确判决 ---
+// 每个洞向下引一条割线; 沿环行进, 穿越割线的次序生成自由群 F_k 中的词。
+// 自由化简后为空词 ⟺ 环可缩(自由群词问题可解, 这是严格算法, 非物理模拟)。
+function loopWord(pts, holes) {
+  const ev = [], n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const p = pts[i], q = pts[(i + 1) % n];
+    for (let hi = 0; hi < holes.length; hi++) {
+      const h = holes[hi];
+      const LR = p[0] < h.x && q[0] >= h.x, RL = p[0] >= h.x && q[0] < h.x;
+      if (!LR && !RL) continue;
+      const t = (h.x - p[0]) / (q[0] - p[0]);
+      if (p[1] + (q[1] - p[1]) * t > h.y) ev.push({ k: i + t, h: hi, s: RL ? 1 : -1 });
+    }
+  }
+  ev.sort((a, b) => a.k - b.k);
+  const raw = ev.map(e => ({ h: e.h, s: e.s }));
+  const reduced = [];
+  for (const l of raw) {
+    const top = reduced[reduced.length - 1];
+    if (top && top.h === l.h && top.s === -l.s) reduced.pop(); else reduced.push(l);
+  }
+  return { raw, reduced };
+}
+function wordStr(w) {
+  return w.length ? w.map(l => 'ab'[l.h] + (l.s > 0 ? '' : '⁻¹')).join('·') : 'e（空词）';
+}
+
+// --- 同调厅: 方格复形的 Betti 数 ---
+function betti(cells) {           // cells: Set of "x,y"
+  if (cells.size === 0) return { b0: 0, b1: 0, V: 0, E: 0, F: 0, chi: 0 };
+  const V = new Set(), E = new Set();
+  for (const key of cells) {
+    const [x, y] = key.split(',').map(Number);
+    V.add(x + ',' + y); V.add((x + 1) + ',' + y); V.add(x + ',' + (y + 1)); V.add((x + 1) + ',' + (y + 1));
+    E.add('h' + x + ',' + y); E.add('h' + x + ',' + (y + 1));      // 上下横边
+    E.add('v' + x + ',' + y); E.add('v' + (x + 1) + ',' + y);      // 左右竖边
+  }
+  // b0: 并查集(4 邻接)
+  const idx = new Map([...cells].map((k, i) => [k, i]));
+  const par = [...idx.values()];
+  const find = a => { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; };
+  for (const key of cells) {
+    const [x, y] = key.split(',').map(Number);
+    for (const nb of [(x + 1) + ',' + y, x + ',' + (y + 1)]) {
+      if (cells.has(nb)) {
+        const ra = find(idx.get(key)), rb = find(idx.get(nb));
+        if (ra !== rb) par[ra] = rb;
+      }
+    }
+  }
+  const b0 = new Set([...idx.values()].map(find)).size;
+  const chi = V.size - E.size + cells.size;
+  return { b0, b1: b0 - chi, V: V.size, E: E.size, F: cells.size, chi };
+}
+// ================= 核心结束 =================
+
+// ================= 同伦厅 UI =================
+const cv1 = document.getElementById('cv1'), g1 = cv1.getContext('2d');
+let loop = [], animating = false;
+
+function makePreset(name) {
+  const P = [], push = (x, y) => P.push([x, y]);
+  const circle = (cx, cy, r, a0, a1, steps = 60) => {
+    for (let i = 0; i <= steps; i++) push(cx + r * Math.cos(a0 + (a1 - a0) * i / steps),
+                                          cy + r * Math.sin(a0 + (a1 - a0) * i / steps));
+  };
+  const [A, B] = HOLES;
+  if (name === 'a') circle(A.x, A.y, 95, 0, 2 * Math.PI);
+  if (name === 'b') circle(B.x, B.y, 95, 0, 2 * Math.PI);
+  if (name === 'a2') circle(A.x, A.y, 95, 0, 4 * Math.PI, 120);
+  if (name === 'ab') circle(360, 200, 175, 0, 2 * Math.PI, 90);
+  if (name === 'triv') circle(360, 330, 50, 0, 2 * Math.PI);
+  if (name === 'comm') {
+    // aba⁻¹b⁻¹: 从基点出发, 依次绕 A 正、B 正、A 反、B 反
+    const base = [360, 335];
+    const lasso = (h, dir) => {
+      push(...base);
+      const ang = Math.atan2(base[1] - h.y, base[0] - h.x);
+      const r = 70;
+      const entry = [h.x + r * Math.cos(ang), h.y + r * Math.sin(ang)];
+      push(...entry);
+      for (let i = 1; i <= 72; i++) {
+        const t = ang + dir * 2 * Math.PI * i / 72;
+        push(h.x + r * Math.cos(t), h.y + r * Math.sin(t));
+      }
+      push(...base);
+    };
+    lasso(HOLES[0], 1); lasso(HOLES[1], 1); lasso(HOLES[0], -1); lasso(HOLES[1], -1);
+  }
+  return resampleClosed(P, 5);
+}
+
+function draw1(verdictText) {
+  g1.clearRect(0, 0, cv1.width, cv1.height);
+  for (const [i, h] of HOLES.entries()) {
+    g1.setLineDash([4, 5]); g1.strokeStyle = '#3a4060';
+    g1.beginPath(); g1.moveTo(h.x, h.y + h.r); g1.lineTo(h.x, cv1.height); g1.stroke();
+    g1.setLineDash([]);
+    g1.fillStyle = '#5a6488'; g1.font = '12px Menlo';
+    g1.fillText('ab'[i] + ' 割线', h.x + 6, cv1.height - 10);
+    g1.fillStyle = '#2a2e42';
+    g1.beginPath(); g1.arc(h.x, h.y, h.r, 0, 2 * Math.PI); g1.fill();
+    g1.strokeStyle = '#4a5070'; g1.stroke();
+    g1.fillStyle = '#8a92a8'; g1.font = '13px Menlo';
+    g1.fillText(i === 0 ? 'A' : 'B', h.x - 4, h.y + 5);
+  }
+  if (loop.length > 2) {
+    const w = loopWord(loop, HOLES);
+    const rawTxt = w.raw.length > 24 ? `（${w.raw.length} 次穿越）` : wordStr(w.raw);
+    document.getElementById('word1').innerHTML =
+      `割线读词: ${rawTxt} → 自由化简: <b>${wordStr(w.reduced)}</b> → ` +
+      (w.reduced.length
+        ? `<span class="warn">非平凡, π₁ 元素如左</span>`
+        : `<span class="ok">平凡, 必可缩</span>`) +
+      `　<span class="hint">(精确算法, 与收缩动画互为印证)</span>`;
+  } else {
+    document.getElementById('word1').textContent = '';
+  }
+  if (loop.length > 2) {
+    g1.strokeStyle = '#f7c96b'; g1.lineWidth = 2; g1.beginPath();
+    loop.forEach(([x, y], i) => i ? g1.lineTo(x, y) : g1.moveTo(x, y));
+    g1.closePath(); g1.stroke();
+    const w = HOLES.map(h => windingAround(loop, h.x, h.y));
+    document.getElementById('wind1').textContent = `绕数 (m,n) = (${w[0]}, ${w[1]})　长度 ${curveLength(loop).toFixed(0)}`;
+  } else {
+    document.getElementById('wind1').textContent = '';
+  }
+  if (verdictText !== undefined) document.getElementById('verdict1').innerHTML = verdictText;
+}
+
+let drawing1 = false;
+cv1.addEventListener('pointerdown', e => {
+  animating = false; drawing1 = true; loop = [];
+  const r = cv1.getBoundingClientRect();
+  loop.push([e.clientX - r.left, e.clientY - r.top]);
+});
+cv1.addEventListener('pointermove', e => {
+  if (!drawing1) return;
+  const r = cv1.getBoundingClientRect();
+  loop.push([e.clientX - r.left, e.clientY - r.top]);
+  draw1('');
+});
+addEventListener('pointerup', () => {
+  if (!drawing1) return;
+  drawing1 = false;
+  if (loop.length > 8) loop = resampleClosed(loop, 5);
+  draw1('');
+});
+
+document.querySelector('.bar').addEventListener('click', e => {
+  const l = e.target.dataset && e.target.dataset.l;
+  if (!l) return;
+  animating = false; loop = makePreset(l); draw1('');
+});
+document.getElementById('stopBtn').addEventListener('click', () => animating = false);
+document.getElementById('shrink').addEventListener('click', () => {
+  if (loop.length < 8 || animating) return;
+  animating = true;
+  let lastL = curveLength(loop), still = 0, tick = 0;
+  (function step() {
+    if (!animating) return;
+    for (let k = 0; k < 6; k++) loop = contractStep(loop, HOLES);
+    if (++tick % 4 === 0) loop = resampleClosed(loop, 5);
+    const L = curveLength(loop);
+    if (L < 30) {
+      animating = false;
+      draw1('<span class="ok">缩成点了 → 平凡类（同伦意义下 = 常值环）</span>');
+      loop = [];
+      return;
+    }
+    if (Math.abs(lastL - L) < 0.02) {
+      if (++still > 120) {
+        animating = false;
+        const w = HOLES.map(h => windingAround(loop, h.x, h.y));
+        const shadow = (w[0] === 0 && w[1] === 0)
+          ? '——注意! 绕数 (0,0), 同调看不出它, 但它确实缩不掉: 同调是同伦的影子'
+          : '';
+        draw1(`<span class="warn">卡住了 → 非平凡类, H₁ 签名 (${w[0]}, ${w[1]})${shadow}</span>`);
+        return;
+      }
+    } else still = 0;
+    lastL = L;
+    draw1();
+    requestAnimationFrame(step);
+  })();
+});
+loop = makePreset('comm'); draw1('← 先点「收缩」看这个著名反例');
+
+// ================= 同调厅 UI =================
+const cv2 = document.getElementById('cv2'), g2 = cv2.getContext('2d');
+const CS = 20, GW = Math.floor(cv2.width / CS), GH = Math.floor(cv2.height / CS);
+let cells = new Set(), erasing = false;
+
+function draw2() {
+  g2.clearRect(0, 0, cv2.width, cv2.height);
+  g2.strokeStyle = '#191c2a';
+  for (let x = 0; x <= GW; x++) { g2.beginPath(); g2.moveTo(x * CS, 0); g2.lineTo(x * CS, GH * CS); g2.stroke(); }
+  for (let y = 0; y <= GH; y++) { g2.beginPath(); g2.moveTo(0, y * CS); g2.lineTo(GW * CS, y * CS); g2.stroke(); }
+  g2.fillStyle = '#3d6fae';
+  for (const key of cells) {
+    const [x, y] = key.split(',').map(Number);
+    g2.fillRect(x * CS + 1, y * CS + 1, CS - 2, CS - 2);
+  }
+  const B = betti(cells);
+  document.getElementById('betti').innerHTML =
+    `b₀ = <span class="ok">${B.b0}</span> 块　b₁ = <span class="no">${B.b1}</span> 洞`;
+  document.getElementById('chi').textContent =
+    `　χ = V−E+F = ${B.V}−${B.E}+${B.F} = ${B.chi}`;
+}
+let painting = false;
+function cellAt(e) {
+  const r = cv2.getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left) / r.width * cv2.width / CS);
+  const y = Math.floor((e.clientY - r.top) / r.height * cv2.height / CS);
+  return (x >= 0 && x < GW && y >= 0 && y < GH) ? x + ',' + y : null;
+}
+function applyCell(e, forceErase) {
+  const k = cellAt(e);
+  if (!k) return;
+  if (erasing || forceErase) cells.delete(k); else cells.add(k);
+  draw2();
+}
+cv2.addEventListener('contextmenu', e => e.preventDefault());
+cv2.addEventListener('pointerdown', e => { painting = true; applyCell(e, e.button === 2); });
+cv2.addEventListener('pointermove', e => { if (painting) applyCell(e, (e.buttons & 2) !== 0); });
+addEventListener('pointerup', () => painting = false);
+document.getElementById('eraseTgl').addEventListener('click', e => {
+  erasing = !erasing;
+  e.target.textContent = '擦除: ' + (erasing ? '开' : '关');
+});
+const SHAPES = {
+  clear: () => new Set(),
+  disk: () => {
+    const s = new Set();
+    for (let x = 0; x < GW; x++) for (let y = 0; y < GH; y++)
+      if ((x - 17) ** 2 + (y - 9) ** 2 < 49) s.add(x + ',' + y);
+    return s;
+  },
+  ring: () => {
+    const s = new Set();
+    for (let x = 0; x < GW; x++) for (let y = 0; y < GH; y++) {
+      const d2 = (x - 17) ** 2 + (y - 9) ** 2;
+      if (d2 < 64 && d2 > 16) s.add(x + ',' + y);
+    }
+    return s;
+  },
+  two: () => {
+    const s = new Set();
+    for (let x = 0; x < GW; x++) for (let y = 0; y < GH; y++) {
+      for (const cx of [10, 26]) {
+        const d2 = (x - cx) ** 2 + (y - 9) ** 2;
+        if (d2 < 36 && d2 > 9) s.add(x + ',' + y);
+      }
+    }
+    return s;
+  },
+  eight: () => {
+    const s = new Set();
+    for (let x = 0; x < GW; x++) for (let y = 0; y < GH; y++) {
+      for (const cx of [12, 22]) {
+        const d2 = (x - cx) ** 2 + (y - 9) ** 2;
+        if (d2 < 36 && d2 > 9) s.add(x + ',' + y);
+      }
+    }
+    return s;
+  },
+};
+document.querySelectorAll('.bar')[1].addEventListener('click', e => {
+  const sName = e.target.dataset && e.target.dataset.s;
+  if (!sName) return;
+  cells = SHAPES[sName]();
+  draw2();
+});
+cells = SHAPES.ring(); draw2();
+</script>
+</body>
+</html>
