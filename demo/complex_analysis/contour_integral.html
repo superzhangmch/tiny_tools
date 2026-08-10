@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回路积分游乐场：手绘回路 vs 留数定理</title>
+<style>
+  body { margin: 0; background: #fff; color: #222; overflow: hidden;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  #cv { display: block; cursor: crosshair; }
+  button { padding: 2px 9px; font-size: 12px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  .bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12px; margin: 3px 0; }
+  .hint { color: #666; font-size: 11.5px; line-height: 1.5; }
+  #panel { position: absolute; top: 10px; left: 10px; z-index: 10; width: 560px; max-width: 94vw;
+    background: rgba(255,255,255,0.94); border: 1px solid #ccc; border-radius: 8px;
+    padding: 6px 10px 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
+  #fin { font-family: Menlo, Consolas, monospace; font-size: 13px; padding: 2px 6px; width: 200px; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  #result { font-family: Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.6; }
+  #result table { border-collapse: collapse; }
+  #result td, #result th { padding: 1px 8px; border-bottom: 1px solid #eee; font-weight: normal; text-align: left; }
+  .ok { color: #1a7f37; font-weight: bold; } .warn { color: #b7791f; }
+  #err { color: #c0392b; font-family: Menlo, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <div class="bar">
+    f(z) = <input type="text" id="fin" value="1/z">
+    <button id="go" style="font-weight:bold">应用</button>
+    <span id="err"></span>
+  </div>
+  <div class="bar">
+    预设:
+    <button data-f="1/z">1/z</button>
+    <button data-f="1/z^2">1/z²（留数为 0!）</button>
+    <button data-f="1/(z^2+1)">1/(z²+1)</button>
+    <button data-f="exp(z)/z">eᶻ/z</button>
+    <button data-f="tan(z)">tan z</button>
+    <button data-f="1/(z*(z-1)^2)">1/(z(z−1)²)</button>
+    <button data-f="z^2">z²（无奇点）</button>
+    <button id="clearLoop">清空回路和历史</button>
+    视野半宽: <input type="range" id="range" min="1" max="6" step="0.5" value="2.5" style="width:70px;vertical-align:middle">
+    <span id="rangeShow" class="hint">2.5</span>
+  </div>
+  <div class="hint">背景 = 相位域染色（亮点 = 极点，暗点 = 零点）。<b>按住拖动手绘路径</b>（画到哪算到哪：不吸附、不代闭合，开口原样保留），
+    程序沿路径原样积分 ∫f dz，绕数 = 逐段累加的实测 Δarg/2π（连续量，画多少测多少，无任何取整），∫ 同时折算成 2πi 的倍数显示，与 Σ(实测绕数×留数) 直接可比——路径闭合时即留数定理。
+    试试：绕极点转两圈；画个不含极点的疯狂曲线（必得 0）；1/z² 绕原点（有奇点但留数为 0，积分照样为 0）。</div>
+  <div id="result"></div>
+</div>
+<canvas id="cv"></canvas>
+
+<script>
+// ================= 复数运算 & 表达式编译器（无依赖, 供测试提取） =================
+'use strict';
+const CX = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1]],
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1]],
+  mul: (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]],
+  div: (a, b) => { const d = b[0] * b[0] + b[1] * b[1];
+    return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; },
+  exp: a => { const e = Math.exp(a[0]); return [e * Math.cos(a[1]), e * Math.sin(a[1])]; },
+  log: a => [Math.log(Math.hypot(a[0], a[1])), Math.atan2(a[1], a[0])],
+  sqrt: a => { const m = Math.sqrt(Math.hypot(a[0], a[1])), t = Math.atan2(a[1], a[0]) / 2;
+    return [m * Math.cos(t), m * Math.sin(t)]; },
+  sin: a => [Math.sin(a[0]) * Math.cosh(a[1]), Math.cos(a[0]) * Math.sinh(a[1])],
+  cos: a => [Math.cos(a[0]) * Math.cosh(a[1]), -Math.sin(a[0]) * Math.sinh(a[1])],
+  sinh: a => [Math.sinh(a[0]) * Math.cos(a[1]), Math.cosh(a[0]) * Math.sin(a[1])],
+  cosh: a => [Math.cosh(a[0]) * Math.cos(a[1]), Math.sinh(a[0]) * Math.sin(a[1])],
+  tan: a => CX.div(CX.sin(a), CX.cos(a)),
+  pow: (a, b) => {          // a^b = exp(b·log a)
+    if (a[0] === 0 && a[1] === 0) return (b[0] > 0) ? [0, 0] : [Infinity, 0];
+    return CX.exp(CX.mul(b, CX.log(a)));
+  },
+  ipow: (a, n) => {          // 整数幂, 精确快速
+    if (n === 0) return [1, 0];
+    let neg = n < 0; n = Math.abs(n);
+    let r = [1, 0], base = a;
+    while (n) { if (n & 1) r = CX.mul(r, base); base = CX.mul(base, base); n >>= 1; }
+    return neg ? CX.div([1, 0], r) : r;
+  },
+  gamma: z => {              // Lanczos 近似 (g=7), Re<0.5 用反射公式
+    if (z[0] < 0.5) {
+      const s = CX.sin([Math.PI * z[0], Math.PI * z[1]]);
+      return CX.div([Math.PI, 0], CX.mul(s, CX.gamma([1 - z[0], -z[1]])));
+    }
+    const P = [0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+      771.32342877765313, -176.61502916214059, 12.507343278686905,
+      -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    const w = [z[0] - 1, z[1]];
+    let x = [P[0], 0];
+    for (let i = 1; i < 9; i++) x = CX.add(x, CX.div([P[i], 0], [w[0] + i, w[1]]));
+    const t = [w[0] + 7.5, w[1]];
+    const r = CX.mul(CX.pow(t, [w[0] + 0.5, w[1]]), CX.exp([-t[0], -t[1]]));
+    return CX.mul([Math.sqrt(2 * Math.PI), 0], CX.mul(r, x));
+  },
+  zeta: s => {               // Euler–Maclaurin; Re<0.5 用函数方程
+    if (Math.abs(s[0]) < 1e-8 && Math.abs(s[1]) < 1e-8) {
+      // s=0 处函数方程是 0·∞, 用 Laurent 展开 ζ(s) = -1/2 - ln(2π)/2·s + O(s²)
+      const c = 0.9189385332046727;
+      return [-0.5 - c * s[0], -c * s[1]];
+    }
+    if (s[0] < 0.5) {
+      const s1 = [1 - s[0], -s[1]];
+      return CX.mul(
+        CX.mul(CX.pow([2, 0], s), CX.pow([Math.PI, 0], [s[0] - 1, s[1]])),
+        CX.mul(CX.mul(CX.sin([s[0] * Math.PI / 2, s[1] * Math.PI / 2]), CX.gamma(s1)),
+               CX.zeta(s1)));
+    }
+    const N = Math.max(12, Math.ceil(9 + 0.9 * Math.abs(s[1])));
+    let sum = [0, 0];
+    for (let n = 1; n < N; n++) {
+      const ln = Math.log(n);
+      sum = CX.add(sum, CX.exp([-s[0] * ln, -s[1] * ln]));
+    }
+    const lnN = Math.log(N);
+    const Nms = CX.exp([-s[0] * lnN, -s[1] * lnN]);          // N^{-s}
+    sum = CX.add(sum, CX.div([Nms[0] * N, Nms[1] * N], [s[0] - 1, s[1]]));  // N^{1-s}/(s-1)
+    sum = CX.add(sum, [Nms[0] / 2, Nms[1] / 2]);             // N^{-s}/2
+    const B = [1 / 6, -1 / 30, 1 / 42, -1 / 30, 5 / 66, -691 / 2730, 7 / 6];
+    let poch = s, fact = 2, Npow = [Nms[0] / N, Nms[1] / N]; // N^{-s-1}
+    for (let k = 1; k <= 7; k++) {
+      sum = CX.add(sum, CX.mul([B[k - 1] / fact, 0], CX.mul(poch, Npow)));
+      poch = CX.mul(poch, CX.mul([s[0] + 2 * k - 1, s[1]], [s[0] + 2 * k, s[1]]));
+      fact *= (2 * k + 1) * (2 * k + 2);
+      Npow = [Npow[0] / (N * N), Npow[1] / (N * N)];
+    }
+    return sum;
+  },
+};
+
+// f(z) 表达式 -> 函数 (zr, zi) => [re, im]
+// 语法: + - * / ^, 括号, 数字, z, i, pi, e, 函数 sin cos tan exp log sqrt sinh cosh
+function compileExpr(src) {
+  // 容错预处理: 数学排版字符 → ASCII; 剥掉 "f(z) ≈ " 前缀和截断省略号 "+ …"
+  src = src.replace(/^\s*f\(z\)\s*[≈=]\s*/, '')
+           .replace(/[−–]/g, '-').replace(/[·×]/g, '*')
+           .replace(/\s*\+\s*(…|\.\.\.)/g, '').replace(/…/g, '');
+  const toks = [];
+  const re = /\s*(\d+\.?\d*|[a-zA-Z_]+|\*\*|[-+*/^(),])/y;
+  let pos = 0;
+  while (pos < src.length) {
+    re.lastIndex = pos;
+    const m = re.exec(src);
+    if (!m) throw new Error('无法识别: "' + src.slice(pos, pos + 8) + '"');
+    toks.push(m[1] === '**' ? '^' : m[1]);
+    pos = re.lastIndex;
+  }
+  let p = 0;
+  const peek = () => toks[p], eat = t => {
+    if (toks[p] !== t) throw new Error(`期望 ${t}, 遇到 ${toks[p] ?? '结尾'}`);
+    p++;
+  };
+  const FN = { sin: 1, cos: 1, tan: 1, exp: 1, log: 1, sqrt: 1, sinh: 1, cosh: 1, gamma: 1, zeta: 1 };
+  const CONST = { i: [0, 1], pi: [Math.PI, 0], e: [Math.E, 0] };
+  // 节点: {f: (zr,zi)=>[re,im], hasZ: bool, cval: 常量值或null}
+  function mk(f, hasZ, kids) {
+    if (!hasZ) { const v = f(0, 0); return { f: () => v, hasZ: false, cval: v }; }
+    return { f, hasZ: true, cval: null };
+  }
+  function atom() {
+    const t = peek();
+    if (t === '(') { eat('('); const e = expr(); eat(')'); return e; }
+    if (t === '-') { eat('-'); const a = atom2(); return mk((zr, zi) => { const v = a.f(zr, zi); return [-v[0], -v[1]]; }, a.hasZ); }
+    if (t === '+') { eat('+'); return atom2(); }
+    if (/^\d/.test(t)) { eat(t); const v = [parseFloat(t), 0]; return mk(() => v, false); }
+    if (t === 'z') { eat('z'); return { f: (zr, zi) => [zr, zi], hasZ: true, cval: null }; }
+    if (t in CONST) { eat(t); const v = CONST[t]; return mk(() => v, false); }
+    if (t in FN) {
+      eat(t); eat('(');
+      const a = expr(); eat(')');
+      const fn = CX[t];
+      return mk((zr, zi) => fn(a.f(zr, zi)), a.hasZ);
+    }
+    throw new Error('意外的 ' + (t ?? '结尾'));
+  }
+  function atom2() { return power(); }   // 一元负号作用于整个幂
+  function power() {
+    const b = atom();
+    if (peek() === '^') {
+      eat('^');
+      const e = power();               // 右结合
+      if (!e.hasZ) {
+        const ev = e.f(0, 0);
+        if (ev[1] === 0 && Number.isInteger(ev[0]) && Math.abs(ev[0]) <= 99) {
+          const n = ev[0];
+          return mk((zr, zi) => CX.ipow(b.f(zr, zi), n), b.hasZ);
+        }
+      }
+      return mk((zr, zi) => CX.pow(b.f(zr, zi), e.f(zr, zi)), b.hasZ || e.hasZ);
+    }
+    return b;
+  }
+  function term() {
+    let a = power();
+    while (true) {
+      const t = peek();
+      let op;
+      if (t === '*' || t === '/') { op = t; eat(t); }
+      else if (t !== undefined && t !== ')' && t !== ',' && !'+-^'.includes(t)) op = '*'; // 隐式乘法: 2z, 0.079i, 3sin(z), 2(z+1)
+      else break;
+      const b = power();
+      const fn = op === '/' ? CX.div : CX.mul;
+      const aa = a, bb = b;
+      a = mk((zr, zi) => fn(aa.f(zr, zi), bb.f(zr, zi)), aa.hasZ || bb.hasZ);
+    }
+    return a;
+  }
+  function expr() {
+    let a = term();
+    while (peek() === '+' || peek() === '-') {
+      const op = peek(); eat(op);
+      const b = term();
+      const fn = op === '+' ? CX.add : CX.sub;
+      const aa = a, bb = b;
+      a = mk((zr, zi) => fn(aa.f(zr, zi), bb.f(zr, zi)), aa.hasZ || bb.hasZ);
+    }
+    return a;
+  }
+  const root = expr();
+  if (p !== toks.length) throw new Error('多余的 ' + toks[p]);
+  return (zr, zi) => root.f(zr, zi);
+}
+// ================= 编译器结束 =================
+
+// ================= 回路积分核心（无 DOM, 供测试提取） =================
+// 沿闭合折线数值积分 ∮ f dz (中点法)
+function contourIntegral(f, pts) {   // 沿路径原样积分, 不替用户补闭合边
+  let re = 0, im = 0;
+  const n = pts.length;
+  for (let i = 0; i < n - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    const v = f(mx, my);
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    re += v[0] * dx - v[1] * dy;          // f·dz = (u+iv)(dx+idy)
+    im += v[0] * dy + v[1] * dx;
+  }
+  return [re, im];
+}
+function circlePts(cx, cy, r, n = 512) {
+  const P = [];
+  for (let i = 0; i < n; i++) {
+    const t = 2 * Math.PI * i / n;
+    P.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]);
+  }
+  P.push(P[0].slice());               // 显式闭合
+  return P;
+}
+// 留数 = (1/2πi) ∮小圆 f dz
+function residueAt(f, cx, cy, r = 0.02) {
+  const I = contourIntegral(f, circlePts(cx, cy, r, 256));
+  return [I[1] / (2 * Math.PI), -I[0] / (2 * Math.PI)];   // 除以 2πi
+}
+// 极点探测: 网格找 |f| 的高值局部极大, 再用 Newton 迭代 1/f 的零点精化
+function findPoles(f, cx0, cy0, R, grid = 160) {
+  const cand = [];
+  const h = 2 * R / grid;
+  const mag = [];
+  for (let iy = 0; iy <= grid; iy++) {
+    const row = [];
+    for (let ix = 0; ix <= grid; ix++) {
+      const v = f(cx0 - R + ix * h, cy0 - R + iy * h);
+      const m = Math.hypot(v[0], v[1]);
+      row.push(isFinite(m) ? m : 1e18);
+    }
+    mag.push(row);
+  }
+  for (let iy = 1; iy < grid; iy++)
+    for (let ix = 1; ix < grid; ix++) {
+      const m = mag[iy][ix];
+      if (m < 5) continue;                        // 候选阈值(宁滥勿缺, Newton 精化后再验尸)
+      if (m >= mag[iy][ix-1] && m >= mag[iy][ix+1] && m >= mag[iy-1][ix] && m >= mag[iy+1][ix])
+        cand.push([cx0 - R + ix * h, cy0 - R + iy * h]);
+    }
+  // Newton 精化 g=1/f 的零点(数值导数); 去重
+  const poles = [];
+  for (let [x, y] of cand) {
+    const g = (a, b) => { const v = f(a, b); const d = v[0]*v[0]+v[1]*v[1];
+      if (!isFinite(d)) return [0, 0];          // f=∞: 恰好踩中极点, 1/f=0
+      return [v[0]/d, -v[1]/d]; };
+    let ok = false;
+    for (let it = 0; it < 60; it++) {
+      const eps = 1e-6;
+      const g0 = g(x, y);
+      const gx = g(x + eps, y), gy = g(x, y + eps);
+      const dr = [(gx[0]-g0[0])/eps, (gx[1]-g0[1])/eps];   // g'(数值, 沿实轴)
+      const d2 = dr[0]*dr[0] + dr[1]*dr[1];
+      if (d2 < 1e-30) break;
+      const sx = (g0[0]*dr[0] + g0[1]*dr[1]) / d2;
+      const sy = (g0[1]*dr[0] - g0[0]*dr[1]) / d2;
+      x -= sx; y -= sy;
+      if (Math.hypot(sx, sy) < 1e-10) { ok = true; break; }
+    }
+    if (!ok) continue;
+    const gm = Math.hypot(...g(x, y));
+    if (gm > 1e-4) continue;                      // 不是真极点
+    if (Math.abs(x - cx0) > R || Math.abs(y - cy0) > R) continue;
+    if (poles.some(p => Math.hypot(p[0]-x, p[1]-y) < 0.03)) continue;
+    poles.push([x, y]);
+  }
+  return poles;
+}
+function windingRaw(pts, cx, cy) {  // 实测辐角变化/2π, 路径原样, 不取整不回绕
+  let tot = 0, prev = null;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const a = Math.atan2(p[1] - cy, p[0] - cx);
+    if (prev !== null) {
+      let d = a - prev;
+      if (d > Math.PI) d -= 2 * Math.PI;
+      if (d < -Math.PI) d += 2 * Math.PI;
+      tot += d;
+    }
+    prev = a;
+  }
+  return tot / (2 * Math.PI);
+}
+function windingOf(pts, cx, cy) { return Math.round(windingRaw(pts, cx, cy)); }
+// ================= 核心结束 =================
+
+// ================= UI =================
+const cv = document.getElementById('cv'), g = cv.getContext('2d');
+let F = null, loop = [], poles = [];
+let history = [];                 // 每条闭合回路存档: {pts, I, winds}
+const PALETTE = ['#e05555', '#3b78d8', '#1a9f4b', '#b05bd6', '#e08a2e', '#2aa8a8', '#8a6d3b', '#d6488f'];
+let VIEW = 2.5;
+
+function resize() {
+  cv.width = innerWidth; cv.height = innerHeight;
+  renderBG();
+  redraw();
+}
+const w2px = (x, y) => [cv.width / 2 + x / VIEW * (Math.min(cv.width, cv.height) / 2),
+                        cv.height / 2 - y / VIEW * (Math.min(cv.width, cv.height) / 2)];
+const px2w = (px, py) => [(px - cv.width / 2) / (Math.min(cv.width, cv.height) / 2) * VIEW,
+                          -(py - cv.height / 2) / (Math.min(cv.width, cv.height) / 2) * VIEW];
+
+let bg = null;
+function renderBG() {
+  if (!F) return;
+  const S = 340;                            // 低清渲染再放大
+  const off = new OffscreenCanvas(S, S);
+  const og = off.getContext('2d');
+  const img = og.createImageData(S, S);
+  for (let py = 0; py < S; py++)
+    for (let px = 0; px < S; px++) {
+      // 注意: 域染色方块以画布中心为准, 覆盖短边; 采样用同一坐标系
+      const x = (px / (S - 1) * 2 - 1) * VIEW * (cv.width / Math.min(cv.width, cv.height));
+      const y = -(py / (S - 1) * 2 - 1) * VIEW * (cv.height / Math.min(cv.width, cv.height));
+      const v = F(x, y);
+      const m = Math.hypot(v[0], v[1]);
+      const hue = ((Math.atan2(v[1], v[0]) / (2 * Math.PI)) + 1) % 1;
+      let light = 0.85 - 0.35 / (1 + m);             // 零点暗
+      light += 0.13 * Math.min(1, Math.log(1 + m) / 6);  // 极点亮
+      const c = hsl2rgb(hue, 0.5, Math.min(0.97, light));
+      const i = (py * S + px) * 4;
+      img.data[i] = c[0]; img.data[i+1] = c[1]; img.data[i+2] = c[2]; img.data[i+3] = 255;
+    }
+  og.putImageData(img, 0, 0);
+  bg = off;
+}
+function hsl2rgb(h, s, l) {
+  const f = n => {
+    const k = (n + h * 12) % 12;
+    const a = s * Math.min(l, 1 - l);
+    return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+  };
+  return [f(0), f(8), f(4)];
+}
+
+function redraw() {
+  g.clearRect(0, 0, cv.width, cv.height);
+  if (bg) g.drawImage(bg, 0, 0, cv.width, cv.height);
+  // 坐标轴 + 单位刻度
+  g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 1;
+  const [ox, oy] = w2px(0, 0);
+  g.beginPath(); g.moveTo(0, oy); g.lineTo(cv.width, oy); g.moveTo(ox, 0); g.lineTo(ox, cv.height); g.stroke();
+  g.fillStyle = 'rgba(0,0,0,0.55)'; g.font = '11px Menlo';
+  for (let k = -Math.floor(VIEW); k <= Math.floor(VIEW); k++) {
+    if (!k) continue;
+    const [tx, ty] = w2px(k, 0); g.fillText(String(k), tx - 3, oy + 13);
+    const [ux, uy] = w2px(0, k); g.fillText(k + 'i', ox + 5, uy + 4);
+  }
+  // 极点标记
+  for (const [x, y] of poles) {
+    const [px, py] = w2px(x, y);
+    g.strokeStyle = '#c0392b'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(px-5, py-5); g.lineTo(px+5, py+5);
+    g.moveTo(px-5, py+5); g.lineTo(px+5, py-5); g.stroke();
+  }
+  // 历史回路(各按配色) + 进行中的当前回路(黑)
+  const strokeLoop = (pts, color, lw, closed) => {
+    g.strokeStyle = color; g.lineWidth = lw; g.beginPath();
+    pts.forEach(([x, y], i) => {
+      const [px, py] = w2px(x, y);
+      i ? g.lineTo(px, py) : g.moveTo(px, py);
+    });
+    if (closed) g.closePath();
+    g.stroke();
+    if (pts.length > 10) {                       // 方向箭头
+      const a = pts[0], b = pts[3];
+      const [ax, ay] = w2px(a[0], a[1]), [bx, by] = w2px(b[0], b[1]);
+      const ang = Math.atan2(by - ay, bx - ax);
+      g.fillStyle = color;
+      g.beginPath(); g.moveTo(bx, by);
+      g.lineTo(bx - 11 * Math.cos(ang - 0.4), by - 11 * Math.sin(ang - 0.4));
+      g.lineTo(bx - 11 * Math.cos(ang + 0.4), by - 11 * Math.sin(ang + 0.4));
+      g.closePath(); g.fill();
+    }
+  };
+  history.forEach((hst, i) => strokeLoop(hst.pts, PALETTE[i % PALETTE.length], 2, false));
+  if (loop.length > 1 && drawing) {
+    strokeLoop(loop, '#111', 2.2, false);
+    const [sx, sy] = w2px(...loop[0]);
+    g.fillStyle = '#1a7f37';
+    g.beginPath(); g.arc(sx, sy, 5, 0, 2 * Math.PI); g.fill();
+  }
+}
+
+const fmtC = ([re, im], d = 4) => {
+  const r = Math.abs(re) < 5e-5 ? '0' : re.toFixed(d);
+  const i = Math.abs(im) < 5e-5 ? '' : (im > 0 ? ' + ' + im.toFixed(d) + 'i' : ' − ' + Math.abs(im).toFixed(d) + 'i');
+  return r + (i || (r === '0' ? '' : ''));
+};
+
+function historyHtml() {
+  if (!history.length) return '';
+  const rows = history.map((h, i) =>
+    `<tr><td><span style="color:${PALETTE[i % PALETTE.length]};font-size:15px">■</span> ${i + 1}</td>` +
+    `<td>${fmtC(h.I)}</td><td>(${h.winds.join(', ')})</td></tr>`).join('');
+  return `<div style="margin-top:5px"><b>历史回路</b><span class="hint">——绕数组合相同 ⟹ ∮ 必相同(形状无关/同伦不变)</span></div>` +
+         `<table><tr><th>#</th><th>∮f dz</th><th>绕数${poles.length ? '(按左侧极点表顺序)' : ''}</th></tr>${rows}</table>`;
+}
+
+function compute(record = false) {
+  const res = document.getElementById('result');
+  if (!F || loop.length < 8) { res.innerHTML = historyHtml(); return; }
+  const I = contourIntegral(F, loop);
+  let rows = '', sum = [0, 0];
+  const winds = [];
+  const a0 = loop[0], a1 = loop[loop.length - 1];
+  const gap = Math.hypot(a1[0] - a0[0], a1[1] - a0[1]);
+  for (const [x, y] of poles) {
+    const wRaw = windingRaw(loop, x, y);          // 实测, 连续: 差一点闭合就是 0.95
+    const r = residueAt(F, x, y);
+    winds.push(wRaw.toFixed(2));
+    sum[0] += wRaw * r[0]; sum[1] += wRaw * r[1];
+    rows += `<tr><td>${fmtC([x, y], 3)}</td><td>${fmtC(r)}</td><td>${wRaw.toFixed(2)}</td></tr>`;
+  }
+  const rhs = [-2 * Math.PI * sum[1], 2 * Math.PI * sum[0]];
+  const diff = Math.hypot(I[0] - rhs[0], I[1] - rhs[1]);
+  const scale = Math.max(Math.hypot(...I), Math.hypot(...rhs), 1);
+  const match = diff / scale < 0.02;
+  const gapNote = gap > 0.02 ? `<div class="hint">路径未闭合(缺口 ${gap.toFixed(3)}), 上式对开口路径只是近似; 缺口越小越准</div>` : '';
+  if (record) {
+    history.push({ pts: loop.map(q => q.slice()), I, winds: winds.slice() });
+    if (history.length > 8) history.shift();
+  }
+  const unit = [I[1] / (2 * Math.PI), -I[0] / (2 * Math.PI)];   // I / 2πi
+  res.innerHTML =
+    `<div>∫ f dz（沿路径直接积分）= <b>${fmtC(I)}</b> = <b>(${fmtC(unit)})</b> × 2πi</div>` +
+    (poles.length ? `<table><tr><th>极点</th><th>留数(小圆积分)</th><th>绕数</th></tr>${rows}</table>` : '<div class="hint">视野内未检测到极点</div>') +
+    `<div>2πi × Σ(绕数×留数) = <b>${fmtC(rhs)}</b></div>` +
+    `<div class="${match ? 'ok' : 'warn'}">${match ? '✔ 两本账相符 —— 留数定理' : '⚠ 有差额(开口缺口或太贴近极点)'}</div>` + gapNote +
+    historyHtml();
+}
+
+// 手绘回路
+let drawing = false;
+cv.addEventListener('pointerdown', e => {
+  drawing = true; loop = [];
+  loop.push(px2w(e.clientX, e.clientY));
+});
+cv.addEventListener('pointermove', e => {
+  if (!drawing) return;
+  loop.push(px2w(e.clientX, e.clientY));
+  redraw();
+});
+addEventListener('pointerup', () => {
+  if (!drawing) return;
+  drawing = false;
+  compute(loop.length > 8); redraw();
+});
+
+function apply() {
+  const err = document.getElementById('err');
+  err.textContent = '';
+  try { F = compileExpr(document.getElementById('fin').value); }
+  catch (e) { err.textContent = e.message; return; }
+  VIEW = +document.getElementById('range').value;
+  document.getElementById('rangeShow').textContent = VIEW;
+  poles = findPoles(F, 0, 0, VIEW * 1.0);
+  history = [];                     // 换函数, 旧账作废
+  renderBG(); compute(loop.length > 8); redraw();
+}
+document.getElementById('go').addEventListener('click', apply);
+document.getElementById('fin').addEventListener('keydown', e => { if (e.key === 'Enter') apply(); });
+document.getElementById('range').addEventListener('change', apply);
+document.getElementById('range').addEventListener('input', e => {
+  document.getElementById('rangeShow').textContent = e.target.value;
+});
+document.getElementById('clearLoop').addEventListener('click', () => {
+  loop = []; history = [];
+  redraw(); compute();
+});
+document.getElementById('panel').addEventListener('click', e => {
+  const f = e.target.dataset && e.target.dataset.f;
+  if (!f) return;
+  document.getElementById('fin').value = f;
+  apply();
+});
+addEventListener('resize', resize);
+resize();
+apply();
+</script>
+</body>
+</html>

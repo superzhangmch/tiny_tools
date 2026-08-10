@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>手绘 |f| 反推解析函数（outer function + Blaschke）</title>
+<style>
+  body { margin: 0; background: #fff; color: #222; overflow: hidden;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  button { padding: 2px 9px; font-size: 12px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  select { font-size: 12px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12px; margin: 3px 0; }
+  .hint { color: #666; font-size: 11.5px; line-height: 1.45; }
+  #panel { position: absolute; top: 10px; left: 10px; z-index: 10; width: 578px; max-width: 94vw;
+    background: rgba(255,255,255,0.94); border: 1px solid #ccc; border-radius: 8px;
+    padding: 6px 10px 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
+  #drawCv { display: block; background: #10131e; border: 1px solid #999; cursor: crosshair;
+            width: 540px; margin: 4px 0 2px 18px; }
+  #expr { font-family: Menlo, Consolas, monospace; font-size: 11px; color: #9a6b00;
+          white-space: nowrap; overflow-x: auto; padding: 1px 0; }
+  #info { font-family: Menlo, Consolas, monospace; font-size: 11.5px; }
+  .ok { color: #1a7f37; }
+  details { font-size: 11.5px; color: #555; margin: 1px 0; }
+  summary { cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <div class="bar">
+    <button id="panelTgl" style="font-weight:bold">收起 ▲</button>
+    <button data-p="expcos">e^cosθ</button>
+    <button data-p="sin">1.2+0.8·sinθ</button>
+    <button data-p="const">常数2</button>
+    <button data-p="bumps">双峰</button>
+    <button data-p="rand">随机</button>
+    <button id="smooth">平滑</button>
+    <button id="clearZeros">清空零点</button>
+    <span id="info"></span>
+  </div>
+  <div id="panelBody">
+    <div class="bar">
+      图形大小: <input type="range" id="vsize" min="25" max="150" value="50" style="width:76px;vertical-align:middle">
+      <span id="vsizeShow" class="hint">50%</span>
+      上下位置: <input type="range" id="vlift" min="-200" max="200" value="0" style="width:76px;vertical-align:middle">
+      <span id="vliftShow" class="hint">0</span>
+      拟合级别: <select id="kSel">
+        <option value="1">1 谐波（只剩大势）</option>
+        <option value="2">2 谐波</option>
+        <option value="4">4 谐波（骨架）</option>
+        <option value="8">8</option>
+        <option value="16" selected>16（中）</option>
+        <option value="48">48（逐笔复刻）</option>
+      </select>
+      <span class="hint">在条带里手绘边界 |f|(θ)↓</span>
+    </div>
+    <canvas id="drawCv" height="110"></canvas>
+    <div class="hint">白线 = 你画的　<span style="color:#1a7f37">绿虚线</span> = 反推函数的边界 |f|。
+      <b>双击 3D 曲面</b>塞零点（Blaschke）：绿线不动，盘内出漏斗。</div>
+    <div id="expr"></div>
+    <details>
+      <summary>完整表达式（可粘回 complex_landscape.html）
+        <button id="copyExpr" style="font-size:11px;padding:0 7px">复制</button></summary>
+      <textarea id="exprFull" rows="3" readonly
+        style="width:100%;box-sizing:border-box;font-family:Menlo,monospace;font-size:11px"></textarea>
+    </details>
+    <details>
+      <summary>原理说明</summary>
+      解析函数由边界 |f| 唯一决定（差一个旋转 + 圈内零点）：f = exp(c₀ + 2Σcₙzⁿ)，cₙ 是 log|f| 的 Fourier 系数。
+      黑色边界环外的降饱和区 = 截断级数在圆外的解析延拓。操作：左键拖 = 旋转，右键拖(触控板双指按压拖) = 平移(上下左右)，滚轮 = 缩放。
+    </details>
+  </div>
+</div>
+<div id="loading" style="position:absolute;top:45%;width:100%;text-align:center">正在加载 three.js …（需联网）</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+
+<script>
+// ================= 核心数学（无依赖, 供测试提取） =================
+'use strict';
+const M = 256;                 // 边界采样数
+const K = 48;                  // 保留谐波数
+const cmul = (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]];
+const cdiv = (a, b) => { const d = b[0] * b[0] + b[1] * b[1];
+  return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; };
+const cexp = a => { const e = Math.exp(a[0]); return [e * Math.cos(a[1]), e * Math.sin(a[1])]; };
+
+// log m 的 Fourier 系数 c_n, n=0..K
+function coeffsFromCurve(m) {
+  const c = [];
+  for (let n = 0; n <= K; n++) {
+    let re = 0, im = 0;
+    for (let j = 0; j < M; j++) {
+      const lg = Math.log(Math.max(m[j], 1e-6));
+      const th = -n * 2 * Math.PI * j / M;
+      re += lg * Math.cos(th); im += lg * Math.sin(th);
+    }
+    c.push([re / M, im / M]);
+  }
+  return c;
+}
+// outer function: F(z) = exp(c0 + 2 Σ c_n z^n); zeros: 乘 Blaschke (z-a)/(1-conj(a)z)
+function makeF(c, zeros) {
+  const KU = c.length - 1;               // 用传入的系数长度决定谐波数(拟合级别)
+  return (zr, zi) => {
+    let w = [c[0][0], c[0][1]];
+    let p = [1, 0];                      // z^n
+    for (let n = 1; n <= KU; n++) {
+      p = cmul(p, [zr, zi]);
+      // 消噪: DFT 的浮点噪声(~1e-16)会被圆外 z^n 放大成边缘异常点, 直接跳过
+      if (Math.abs(c[n][0]) < 1e-12 && Math.abs(c[n][1]) < 1e-12) continue;
+      w = [w[0] + 2 * (c[n][0] * p[0] - c[n][1] * p[1]),
+           w[1] + 2 * (c[n][0] * p[1] + c[n][1] * p[0])];
+    }
+    let F = cexp(w);
+    for (const [ar, ai] of zeros) {
+      // B = (z-a)/(1 - conj(a)·z); 分母 = [1 - ar·zr - ai·zi, ai·zr - ar·zi]
+      F = cmul(F, cdiv([zr - ar, zi - ai], [1 - ar * zr - ai * zi, ai * zr - ar * zi]));
+    }
+    return F;
+  };
+}
+// 生成 complex_landscape.html 可直接粘贴的表达式
+function landscapeExpr(c, zeros, tol = 1e-4) {
+  const parts = [c[0][0].toFixed(6)];
+  for (let n = 1; n < c.length; n++) {
+    const re = 2 * c[n][0], im = 2 * c[n][1];
+    if (Math.hypot(re, im) < tol) continue;
+    const co = Math.abs(im) < tol ? re.toFixed(6)
+      : `(${re.toFixed(6)}${im < 0 ? '-' : '+'}${Math.abs(im).toFixed(6)}*i)`;
+    parts.push(`${co}*z^${n}`);
+  }
+  let s = `exp(${parts.join(' + ')})`;
+  for (const [a, b] of zeros) {
+    const A = `(${a.toFixed(4)}${b < 0 ? '-' : '+'}${Math.abs(b).toFixed(4)}*i)`;
+    const Ac = `(${a.toFixed(4)}${-b < 0 ? '-' : '+'}${Math.abs(b).toFixed(4)}*i)`;
+    s += `*((z-${A})/(1-${Ac}*z))`;
+  }
+  return s;
+}
+// ================= 核心结束 =================
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+document.getElementById('loading').remove();
+
+// ---------- 状态 ----------
+let mCurve = new Float64Array(M);          // 手绘 |f|(θ), 数值尺度 0..2
+let zeros = [];                            // Blaschke 零点 [re, im]
+let coeffs = null, F = null;
+
+// ---------- three.js 场景 ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+const world = new THREE.Group();           // 全部内容装进可缩放的组, 滑杆控制图形大小
+scene.add(world);
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.01, 100);
+camera.position.set(1.8, 2.1, 2.6);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+// 图占满整个窗口(红框); 面板浮在左上角可收起; 滑杆缩放的是图形本身
+renderer.domElement.style.cssText =
+  'position:fixed;left:0;top:0;box-sizing:border-box;border:2px solid #e05555';
+function setViewSize() {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+}
+document.getElementById('panelTgl').addEventListener('click', e => {
+  const b = document.getElementById('panelBody');
+  const hidden = b.style.display === 'none';
+  b.style.display = hidden ? '' : 'none';
+  e.target.textContent = hidden ? '收起 ▲' : '展开 ▼';
+});
+function setGraphScale() {
+  const s = (+document.getElementById('vsize').value) / 100;
+  document.getElementById('vsizeShow').textContent = Math.round(s * 100) + '%';
+  world.scale.setScalar(s);
+}
+setViewSize();
+setGraphScale();
+document.getElementById('vsize').addEventListener('input', setGraphScale);
+document.getElementById('vlift').addEventListener('input', e => {
+  const y = (+e.target.value) / 100;          // -2 .. +2 世界单位, 沿高度轴平移
+  world.position.y = y;
+  document.getElementById('vliftShow').textContent = y.toFixed(1);
+});
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.screenSpacePanning = true;   // 右键拖动 = 屏幕空间平移(竖直拖 = 沿高度轴移动)
+controls.target.set(0, 0.4, 0);
+world.add(new THREE.AmbientLight(0xffffff, 0.55));
+const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(3, 6, 4); world.add(dl);
+const dl2 = new THREE.DirectionalLight(0x8899ff, 0.4); dl2.position.set(-4, 2, -3); world.add(dl2);
+
+// ---------- 复平面参照系(静态): 网格 + Re/Im 轴 + 单位圆投影 ----------
+world.add(new THREE.GridHelper(3.0, 12, 0x4a5070, 0x252838));
+function axisLine(p1, p2, color) {
+  const l = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...p1), new THREE.Vector3(...p2)]),
+    new THREE.LineBasicMaterial({ color }));
+  world.add(l);
+}
+axisLine([-1.5, 0.004, 0], [1.6, 0.004, 0], 0xcc6666);   // Re 轴 (x)
+axisLine([0, 0.004, 1.5], [0, 0.004, -1.6], 0x6688dd);   // Im 轴 (-z 方向为 +Im)
+{ // 单位圆地面投影
+  const pts = [];
+  for (let i = 0; i <= 128; i++) {
+    const t = 2 * Math.PI * i / 128;
+    pts.push(new THREE.Vector3(Math.cos(t), 0.004, -Math.sin(t)));
+  }
+  const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: 0x8890b0 }));
+  world.add(l);
+}
+function textSprite(text, color, x, y, z) {
+  const cv = document.createElement('canvas'); cv.width = 96; cv.height = 48;
+  const g = cv.getContext('2d');
+  g.font = 'bold 30px Menlo'; g.fillStyle = color; g.fillText(text, 8, 34);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(cv), transparent: true }));
+  sp.scale.set(0.3, 0.15, 1); sp.position.set(x, y, z);
+  world.add(sp);
+}
+textSprite('Re', '#c0392b', 1.68, 0.06, 0);
+textSprite('Im', '#1665d8', 0, 0.06, -1.68);
+textSprite('1',  '#556', 1.06, 0.06, 0.1);
+textSprite('i',  '#556', 0.08, 0.06, -1.08);
+
+const N = 220, CAPH = 2.6;
+let mesh = null, ringLine = null, zeroDots = [];
+
+function heightOf(m) { return Math.min(m, CAPH); }
+
+function rebuild() {
+  const kUse = +document.getElementById('kSel').value;
+  coeffs = coeffsFromCurve(mCurve).slice(0, kUse + 1);
+  F = makeF(coeffs, zeros);
+
+  const geo = new THREE.PlaneGeometry(3.0, 3.0, N, N);   // 显示区 = 1.5×直径的正方形(按用户口径, 圆直径=1 则画 1.5), 圆外为解析延拓
+  geo.rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const col = new THREE.Color();
+  for (let k = 0; k < pos.count; k++) {
+    const zr = pos.getX(k), zi = -pos.getZ(k);
+    const outside = zr * zr + zi * zi > 1;
+    const v = F(zr, zi);
+    pos.setY(k, heightOf(Math.hypot(v[0], v[1])));
+    if (isNaN(v[0]) || isNaN(v[1])) col.setRGB(0.4, 0.4, 0.4);
+    else col.setHSL(((Math.atan2(v[1], v[0]) / (2 * Math.PI)) + 1) % 1,
+                    outside ? 0.45 : 0.85, outside ? 0.38 : 0.55);   // 圆外降饱和度以示区分
+    colors[k * 3] = col.r; colors[k * 3 + 1] = col.g; colors[k * 3 + 2] = col.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  if (mesh) { world.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
+  mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    vertexColors: true, side: THREE.DoubleSide, roughness: 0.75, metalness: 0.05 }));
+  world.add(mesh);
+
+  // 边界白环: 反推函数在 |z|=1 上的 |F|
+  const pts = [];
+  let maxErr = 0;
+  for (let j = 0; j <= M; j++) {
+    const th = 2 * Math.PI * j / M;
+    const v = F(Math.cos(th), Math.sin(th));
+    const mv = Math.hypot(v[0], v[1]);
+    if (j < M) maxErr = Math.max(maxErr, Math.abs(mv - mCurve[j]));
+    pts.push(new THREE.Vector3(Math.cos(th), heightOf(mv) + 0.01, -Math.sin(th)));
+  }
+  if (ringLine) { world.remove(ringLine); ringLine.geometry.dispose(); }
+  ringLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: 0x111111 }));
+  world.add(ringLine);
+
+  for (const d of zeroDots) world.remove(d);
+  zeroDots = zeros.map(([ar, ai]) => {
+    const d = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 10),
+      new THREE.MeshBasicMaterial({ color: 0x7dc4ff }));
+    d.position.set(ar, 0.02, -ai);
+    world.add(d);
+    return d;
+  });
+
+  drawStrip();
+  showExpr(maxErr);
+}
+
+// ---------- 手绘条带 ----------
+const dcv = document.getElementById('drawCv'), dg = dcv.getContext('2d');
+function stripLayout() { dcv.width = dcv.clientWidth; return { W: dcv.width, H: dcv.height }; }
+const mToY = (m, H) => H - 6 - (m / 2.2) * (H - 12);
+const yToM = (y, H) => Math.max(0.02, Math.min(2.2, (H - 6 - y) / (H - 12) * 2.2));
+
+function drawStrip() {
+  const { W, H } = stripLayout();
+  dg.clearRect(0, 0, W, H);
+  dg.strokeStyle = '#2a2e42';
+  for (const m of [0.5, 1, 1.5, 2]) {
+    dg.beginPath(); dg.moveTo(0, mToY(m, H)); dg.lineTo(W, mToY(m, H)); dg.stroke();
+  }
+  // 用户曲线(白); 重画全曲线模式下旧曲线立即隐藏, 只显示已画部分
+  const upto = (drawing && closureMode && lastJ !== null) ? lastJ : M - 1;
+  dg.strokeStyle = '#fff'; dg.lineWidth = 1.6; dg.beginPath();
+  for (let j = 0; j <= upto; j++) {
+    const x = j / (M - 1) * W;
+    j ? dg.lineTo(x, mToY(mCurve[j], H)) : dg.moveTo(x, mToY(mCurve[j], H));
+  }
+  dg.stroke();
+  // 全曲线模式下: 笔尖 → 右端周期点(m[0]) 的动态连线预览
+  if (drawing && closureMode && lastJ !== null) {
+    dg.strokeStyle = '#f7c96b'; dg.setLineDash([3, 4]); dg.beginPath();
+    dg.moveTo(lastJ / (M - 1) * W, mToY(lastM, H));
+    dg.lineTo(W, mToY(mCurve[0], H));
+    dg.stroke(); dg.setLineDash([]);
+    dg.fillStyle = '#f7c96b';
+    dg.beginPath(); dg.arc(W - 3, mToY(mCurve[0], H), 3, 0, 2 * Math.PI); dg.fill();
+  }
+  // 反推边界(绿虚线); 重画全曲线时暂时隐藏(它属于旧曲线)
+  if (F && !(drawing && closureMode)) {
+    dg.strokeStyle = '#7ee87e'; dg.setLineDash([5, 4]); dg.beginPath();
+    for (let j = 0; j < M; j++) {
+      const th = 2 * Math.PI * j / M;
+      const v = F(Math.cos(th), Math.sin(th));
+      const x = j / (M - 1) * W;
+      const y = mToY(Math.hypot(v[0], v[1]), H);
+      j ? dg.lineTo(x, y) : dg.moveTo(x, y);
+    }
+    dg.stroke(); dg.setLineDash([]);
+  }
+}
+
+let drawing = false, lastJ = null, lastM = null, closureMode = false;
+function paint(e) {
+  const r = dcv.getBoundingClientRect();
+  const j = Math.max(0, Math.min(M - 1, Math.round((e.clientX - r.left) / r.width * (M - 1))));
+  const m = yToM((e.clientY - r.top) / r.height * dcv.height, dcv.height);
+  if (lastJ === null) {
+    // 落笔: 从最左 10% 起笔 = 重画全曲线模式(左端顺势填平, 右端将自动接回周期点)
+    closureMode = j <= M * 0.1;
+    if (closureMode) for (let t = 0; t <= j; t++) mCurve[t] = m;
+    else mCurve[j] = m;
+  } else {
+    // 沿拖动方向线性插值, 快速划过不再是台阶
+    const a = Math.min(lastJ, j), b = Math.max(lastJ, j);
+    for (let t = a; t <= b; t++) {
+      const f = b === a ? 0 : (t - a) / (b - a);
+      mCurve[t] = lastJ <= j ? lastM + (m - lastM) * f : m + (lastM - m) * f;
+    }
+  }
+  lastJ = j; lastM = m;
+  drawStrip();
+}
+dcv.addEventListener('pointerdown', e => { drawing = true; lastJ = null; lastM = null; paint(e); });
+dcv.addEventListener('pointermove', e => { if (drawing) paint(e); });
+addEventListener('pointerup', () => {
+  if (!drawing) return;
+  // 周期闭合: m(2π) 必须 = m(0)。全曲线模式下把笔尖到右端的缺口线性接回 m[0]
+  if (closureMode && lastJ !== null && lastJ < M - 1) {
+    const target = mCurve[0];
+    for (let t = lastJ + 1; t < M; t++)
+      mCurve[t] = lastM + (target - lastM) * (t - lastJ) / (M - 1 - lastJ + 1);
+  }
+  drawing = false; lastJ = null; lastM = null; closureMode = false;
+  rebuild();
+});
+
+// ---------- 表达式显示 ----------
+function showExpr(maxErr) {
+  // 与「完整表达式」同源: 整行都是 landscape 合法语法, 从哪复制都能用
+  document.getElementById('expr').textContent =
+    'f(z) ≈ ' + landscapeExpr(coeffs, zeros, 5e-4);
+  document.getElementById('info').innerHTML =
+    ` <span class="ok">边界最大偏差 ${maxErr.toFixed(4)}</span>　零点 ${zeros.length} 个`;
+  document.getElementById('exprFull').value = landscapeExpr(coeffs, zeros);
+}
+document.getElementById('copyExpr').addEventListener('click', e => {
+  e.preventDefault();
+  const ta = document.getElementById('exprFull');
+  ta.select();
+  navigator.clipboard.writeText(ta.value).then(
+    () => e.target.textContent = '已复制✓',
+    () => document.execCommand('copy'));
+  setTimeout(() => e.target.textContent = '复制', 1500);
+});
+
+// ---------- 零点交互 ----------
+const ray = new THREE.Raycaster();
+renderer.domElement.addEventListener('dblclick', e => {
+  if (!mesh) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2(
+    ((e.clientX - r.left) / r.width) * 2 - 1,
+    -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  const hit = ray.intersectObject(mesh)[0];
+  if (!hit) return;
+  const s = world.scale.x;                            // 图形被整体缩放, 拾取坐标要除回去
+  const a = [hit.point.x / s, -hit.point.z / s];
+  if (a[0] * a[0] + a[1] * a[1] > 0.96) return;      // 只许放圆盘内
+  zeros.push(a);
+  rebuild();
+});
+document.getElementById('clearZeros').addEventListener('click', () => { zeros = []; rebuild(); });
+document.getElementById('kSel').addEventListener('change', rebuild);
+document.getElementById('smooth').addEventListener('click', () => {
+  const s = new Float64Array(M);
+  for (let j = 0; j < M; j++)
+    s[j] = (mCurve[(j - 1 + M) % M] + 2 * mCurve[j] + mCurve[(j + 1) % M]) / 4;
+  mCurve = s;
+  rebuild();
+});
+
+// ---------- 预设 ----------
+const PRESETS = {
+  expcos: j => Math.exp(Math.cos(2 * Math.PI * j / M)),
+  sin:    j => 1.2 + 0.8 * Math.sin(2 * Math.PI * j / M),
+  const:  () => 2,
+  bumps:  j => 1 + 0.7 * Math.exp(-30 * (j / M - 0.28) ** 2) + 0.5 * Math.exp(-40 * (j / M - 0.7) ** 2),
+  rand:   j => { const t = 2 * Math.PI * j / M;
+    return 1 + 0.45 * Math.sin(t + 1) + 0.3 * Math.sin(3 * t + 2) + 0.18 * Math.sin(5 * t); },
+};
+document.getElementById('panel').addEventListener('click', e => {
+  const p = e.target.dataset && e.target.dataset.p;
+  if (!p) return;
+  for (let j = 0; j < M; j++) mCurve[j] = PRESETS[p](j);
+  zeros = [];
+  rebuild();
+});
+
+// ---------- 启动 ----------
+for (let j = 0; j < M; j++) mCurve[j] = PRESETS.expcos(j);
+rebuild();
+renderer.domElement.addEventListener('webglcontextlost', e => e.preventDefault());
+renderer.domElement.addEventListener('webglcontextrestored', rebuild);
+(function loop() {
+  requestAnimationFrame(loop);
+  controls.update();
+  try { renderer.render(scene, camera); } catch (e) {}
+})();
+addEventListener('resize', () => { setViewSize(); drawStrip(); });
+</script>
+</body>
+</html>
