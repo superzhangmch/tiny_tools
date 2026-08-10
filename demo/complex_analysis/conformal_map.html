@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>共形映射：网格保角 + Joukowski 机翼</title>
+<style>
+  body { margin: 0; background: #fff; color: #222; overflow: hidden;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  #cv { display: block; cursor: crosshair; }
+  button { padding: 2px 9px; font-size: 12px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  .bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12px; margin: 3px 0; }
+  .hint { color: #666; font-size: 11.5px; line-height: 1.5; }
+  #panel { position: absolute; top: 10px; left: 10px; z-index: 10; width: 600px; max-width: 94vw;
+    background: rgba(255,255,255,0.94); border: 1px solid #ccc; border-radius: 8px;
+    padding: 6px 10px 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
+  #fin { font-family: Menlo, Consolas, monospace; font-size: 13px; padding: 2px 6px; width: 170px; }
+  #err { color: #c0392b; font-family: Menlo, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <div class="bar">
+    f(z) = <input type="text" id="fin" value="z^2">
+    <button id="go" style="font-weight:bold">应用</button>
+    网格:
+    <select id="gridKind">
+      <option value="cart" selected>直角网格</option>
+      <option value="polar">极坐标网格</option>
+    </select>
+    密度: <input type="range" id="dens" min="6" max="24" value="12" style="width:60px;vertical-align:middle">
+    <span id="err"></span>
+  </div>
+  <div class="bar">
+    预设:
+    <button data-f="z^2">z²</button>
+    <button data-f="exp(z)">eᶻ</button>
+    <button data-f="1/z">1/z</button>
+    <button data-f="sin(z)">sin z</button>
+    <button data-f="(z-1)/(z+1)">Möbius</button>
+    <button data-f="z+1/z" data-air="1">Joukowski 机翼 ✈</button>
+    <button id="clearStroke">清除手绘</button>
+    左视野: <input type="range" id="zview" min="1" max="4" step="0.5" value="2" style="width:56px;vertical-align:middle"><span id="zviewShow" class="hint">2</span>
+    右视野: <input type="range" id="wview" min="1" max="8" step="0.5" value="4" style="width:56px;vertical-align:middle"><span id="wviewShow" class="hint">4</span>
+  </div>
+  <div class="hint">
+    左 = z 平面（定义域），右 = w = f(z) 平面（像）。网格线被弯成曲线，但看任意交点：
+    <b>两族曲线依旧互相垂直</b>——解析映射处处保角（f′≠0 处）。
+    <b>在左边手绘任意曲线</b>，右边实时画出它的像；鼠标移动时，左边小圆 → 右边的像仍近似为圆（保角 = 无穷小处只旋转缩放，不变形）。
+    「Joukowski ✈」预设：一个过 z=1 的偏心圆被 z+1/z 映成<b>机翼剖面</b>——空气动力学的第一课。
+  </div>
+</div>
+<canvas id="cv"></canvas>
+
+<script>
+// ================= 复数运算 & 表达式编译器（无依赖, 供测试提取） =================
+'use strict';
+const CX = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1]],
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1]],
+  mul: (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]],
+  div: (a, b) => { const d = b[0] * b[0] + b[1] * b[1];
+    return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; },
+  exp: a => { const e = Math.exp(a[0]); return [e * Math.cos(a[1]), e * Math.sin(a[1])]; },
+  log: a => [Math.log(Math.hypot(a[0], a[1])), Math.atan2(a[1], a[0])],
+  sqrt: a => { const m = Math.sqrt(Math.hypot(a[0], a[1])), t = Math.atan2(a[1], a[0]) / 2;
+    return [m * Math.cos(t), m * Math.sin(t)]; },
+  sin: a => [Math.sin(a[0]) * Math.cosh(a[1]), Math.cos(a[0]) * Math.sinh(a[1])],
+  cos: a => [Math.cos(a[0]) * Math.cosh(a[1]), -Math.sin(a[0]) * Math.sinh(a[1])],
+  sinh: a => [Math.sinh(a[0]) * Math.cos(a[1]), Math.cosh(a[0]) * Math.sin(a[1])],
+  cosh: a => [Math.cosh(a[0]) * Math.cos(a[1]), Math.sinh(a[0]) * Math.sin(a[1])],
+  tan: a => CX.div(CX.sin(a), CX.cos(a)),
+  pow: (a, b) => {          // a^b = exp(b·log a)
+    if (a[0] === 0 && a[1] === 0) return (b[0] > 0) ? [0, 0] : [Infinity, 0];
+    return CX.exp(CX.mul(b, CX.log(a)));
+  },
+  ipow: (a, n) => {          // 整数幂, 精确快速
+    if (n === 0) return [1, 0];
+    let neg = n < 0; n = Math.abs(n);
+    let r = [1, 0], base = a;
+    while (n) { if (n & 1) r = CX.mul(r, base); base = CX.mul(base, base); n >>= 1; }
+    return neg ? CX.div([1, 0], r) : r;
+  },
+  gamma: z => {              // Lanczos 近似 (g=7), Re<0.5 用反射公式
+    if (z[0] < 0.5) {
+      const s = CX.sin([Math.PI * z[0], Math.PI * z[1]]);
+      return CX.div([Math.PI, 0], CX.mul(s, CX.gamma([1 - z[0], -z[1]])));
+    }
+    const P = [0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+      771.32342877765313, -176.61502916214059, 12.507343278686905,
+      -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    const w = [z[0] - 1, z[1]];
+    let x = [P[0], 0];
+    for (let i = 1; i < 9; i++) x = CX.add(x, CX.div([P[i], 0], [w[0] + i, w[1]]));
+    const t = [w[0] + 7.5, w[1]];
+    const r = CX.mul(CX.pow(t, [w[0] + 0.5, w[1]]), CX.exp([-t[0], -t[1]]));
+    return CX.mul([Math.sqrt(2 * Math.PI), 0], CX.mul(r, x));
+  },
+  zeta: s => {               // Euler–Maclaurin; Re<0.5 用函数方程
+    if (Math.abs(s[0]) < 1e-8 && Math.abs(s[1]) < 1e-8) {
+      // s=0 处函数方程是 0·∞, 用 Laurent 展开 ζ(s) = -1/2 - ln(2π)/2·s + O(s²)
+      const c = 0.9189385332046727;
+      return [-0.5 - c * s[0], -c * s[1]];
+    }
+    if (s[0] < 0.5) {
+      const s1 = [1 - s[0], -s[1]];
+      return CX.mul(
+        CX.mul(CX.pow([2, 0], s), CX.pow([Math.PI, 0], [s[0] - 1, s[1]])),
+        CX.mul(CX.mul(CX.sin([s[0] * Math.PI / 2, s[1] * Math.PI / 2]), CX.gamma(s1)),
+               CX.zeta(s1)));
+    }
+    const N = Math.max(12, Math.ceil(9 + 0.9 * Math.abs(s[1])));
+    let sum = [0, 0];
+    for (let n = 1; n < N; n++) {
+      const ln = Math.log(n);
+      sum = CX.add(sum, CX.exp([-s[0] * ln, -s[1] * ln]));
+    }
+    const lnN = Math.log(N);
+    const Nms = CX.exp([-s[0] * lnN, -s[1] * lnN]);          // N^{-s}
+    sum = CX.add(sum, CX.div([Nms[0] * N, Nms[1] * N], [s[0] - 1, s[1]]));  // N^{1-s}/(s-1)
+    sum = CX.add(sum, [Nms[0] / 2, Nms[1] / 2]);             // N^{-s}/2
+    const B = [1 / 6, -1 / 30, 1 / 42, -1 / 30, 5 / 66, -691 / 2730, 7 / 6];
+    let poch = s, fact = 2, Npow = [Nms[0] / N, Nms[1] / N]; // N^{-s-1}
+    for (let k = 1; k <= 7; k++) {
+      sum = CX.add(sum, CX.mul([B[k - 1] / fact, 0], CX.mul(poch, Npow)));
+      poch = CX.mul(poch, CX.mul([s[0] + 2 * k - 1, s[1]], [s[0] + 2 * k, s[1]]));
+      fact *= (2 * k + 1) * (2 * k + 2);
+      Npow = [Npow[0] / (N * N), Npow[1] / (N * N)];
+    }
+    return sum;
+  },
+};
+
+// f(z) 表达式 -> 函数 (zr, zi) => [re, im]
+// 语法: + - * / ^, 括号, 数字, z, i, pi, e, 函数 sin cos tan exp log sqrt sinh cosh
+function compileExpr(src) {
+  // 容错预处理: 数学排版字符 → ASCII; 剥掉 "f(z) ≈ " 前缀和截断省略号 "+ …"
+  src = src.replace(/^\s*f\(z\)\s*[≈=]\s*/, '')
+           .replace(/[−–]/g, '-').replace(/[·×]/g, '*')
+           .replace(/\s*\+\s*(…|\.\.\.)/g, '').replace(/…/g, '');
+  const toks = [];
+  const re = /\s*(\d+\.?\d*|[a-zA-Z_]+|\*\*|[-+*/^(),])/y;
+  let pos = 0;
+  while (pos < src.length) {
+    re.lastIndex = pos;
+    const m = re.exec(src);
+    if (!m) throw new Error('无法识别: "' + src.slice(pos, pos + 8) + '"');
+    toks.push(m[1] === '**' ? '^' : m[1]);
+    pos = re.lastIndex;
+  }
+  let p = 0;
+  const peek = () => toks[p], eat = t => {
+    if (toks[p] !== t) throw new Error(`期望 ${t}, 遇到 ${toks[p] ?? '结尾'}`);
+    p++;
+  };
+  const FN = { sin: 1, cos: 1, tan: 1, exp: 1, log: 1, sqrt: 1, sinh: 1, cosh: 1, gamma: 1, zeta: 1 };
+  const CONST = { i: [0, 1], pi: [Math.PI, 0], e: [Math.E, 0] };
+  // 节点: {f: (zr,zi)=>[re,im], hasZ: bool, cval: 常量值或null}
+  function mk(f, hasZ, kids) {
+    if (!hasZ) { const v = f(0, 0); return { f: () => v, hasZ: false, cval: v }; }
+    return { f, hasZ: true, cval: null };
+  }
+  function atom() {
+    const t = peek();
+    if (t === '(') { eat('('); const e = expr(); eat(')'); return e; }
+    if (t === '-') { eat('-'); const a = atom2(); return mk((zr, zi) => { const v = a.f(zr, zi); return [-v[0], -v[1]]; }, a.hasZ); }
+    if (t === '+') { eat('+'); return atom2(); }
+    if (/^\d/.test(t)) { eat(t); const v = [parseFloat(t), 0]; return mk(() => v, false); }
+    if (t === 'z') { eat('z'); return { f: (zr, zi) => [zr, zi], hasZ: true, cval: null }; }
+    if (t in CONST) { eat(t); const v = CONST[t]; return mk(() => v, false); }
+    if (t in FN) {
+      eat(t); eat('(');
+      const a = expr(); eat(')');
+      const fn = CX[t];
+      return mk((zr, zi) => fn(a.f(zr, zi)), a.hasZ);
+    }
+    throw new Error('意外的 ' + (t ?? '结尾'));
+  }
+  function atom2() { return power(); }   // 一元负号作用于整个幂
+  function power() {
+    const b = atom();
+    if (peek() === '^') {
+      eat('^');
+      const e = power();               // 右结合
+      if (!e.hasZ) {
+        const ev = e.f(0, 0);
+        if (ev[1] === 0 && Number.isInteger(ev[0]) && Math.abs(ev[0]) <= 99) {
+          const n = ev[0];
+          return mk((zr, zi) => CX.ipow(b.f(zr, zi), n), b.hasZ);
+        }
+      }
+      return mk((zr, zi) => CX.pow(b.f(zr, zi), e.f(zr, zi)), b.hasZ || e.hasZ);
+    }
+    return b;
+  }
+  function term() {
+    let a = power();
+    while (true) {
+      const t = peek();
+      let op;
+      if (t === '*' || t === '/') { op = t; eat(t); }
+      else if (t !== undefined && t !== ')' && t !== ',' && !'+-^'.includes(t)) op = '*'; // 隐式乘法: 2z, 0.079i, 3sin(z), 2(z+1)
+      else break;
+      const b = power();
+      const fn = op === '/' ? CX.div : CX.mul;
+      const aa = a, bb = b;
+      a = mk((zr, zi) => fn(aa.f(zr, zi), bb.f(zr, zi)), aa.hasZ || bb.hasZ);
+    }
+    return a;
+  }
+  function expr() {
+    let a = term();
+    while (peek() === '+' || peek() === '-') {
+      const op = peek(); eat(op);
+      const b = term();
+      const fn = op === '+' ? CX.add : CX.sub;
+      const aa = a, bb = b;
+      a = mk((zr, zi) => fn(aa.f(zr, zi), bb.f(zr, zi)), aa.hasZ || bb.hasZ);
+    }
+    return a;
+  }
+  const root = expr();
+  if (p !== toks.length) throw new Error('多余的 ' + toks[p]);
+  return (zr, zi) => root.f(zr, zi);
+}
+// ================= 编译器结束 =================
+
+// ================= UI =================
+const cv = document.getElementById('cv'), g = cv.getContext('2d');
+let F = null, stroke = [], airfoil = false;
+let ZV = 2, WV = 4;
+
+function resize() { cv.width = innerWidth; cv.height = innerHeight; redraw(); }
+const half = () => cv.width / 2;
+
+// 左半屏(z) 与右半屏(w) 的坐标变换
+function zw2px(x, y, right) {
+  const w = half(), h = cv.height;
+  const V = right ? WV : ZV;
+  const sc = Math.min(w, h) / 2 / V * 0.92;
+  return [(right ? w : 0) + w / 2 + x * sc, h / 2 - y * sc];
+}
+function px2z(px, py) {
+  const w = half(), h = cv.height;
+  const sc = Math.min(w, h) / 2 / ZV * 0.92;
+  return [(px - w / 2) / sc, -(py - h / 2) / sc];
+}
+
+// 把 z 平面折线映到 w 平面并画出(自动截断飞出视野/极点爆炸的段)
+function drawMapped(pts, color, lw) {
+  g.strokeStyle = color; g.lineWidth = lw;
+  let pen = false;
+  g.beginPath();
+  for (const [x, y] of pts) {
+    const v = F(x, y);
+    if (!isFinite(v[0]) || !isFinite(v[1]) || Math.hypot(v[0], v[1]) > WV * 8) { pen = false; continue; }
+    const [px, py] = zw2px(v[0], v[1], true);
+    pen ? g.lineTo(px, py) : g.moveTo(px, py);
+    pen = true;
+  }
+  g.stroke();
+}
+function drawPlain(pts, color, lw, right) {
+  g.strokeStyle = color; g.lineWidth = lw;
+  g.beginPath();
+  pts.forEach(([x, y], i) => {
+    const [px, py] = zw2px(x, y, right);
+    i ? g.lineTo(px, py) : g.moveTo(px, py);
+  });
+  g.stroke();
+}
+
+function gridLines() {
+  const kind = document.getElementById('gridKind').value;
+  const n = +document.getElementById('dens').value;
+  const lines = [];          // {pts, family}
+  if (kind === 'cart') {
+    for (let i = 0; i <= n; i++) {
+      const c = -ZV + 2 * ZV * i / n;
+      const v = [], hz = [];
+      for (let k = 0; k <= 240; k++) {
+        const t = -ZV + 2 * ZV * k / 240;
+        v.push([c, t]); hz.push([t, c]);
+      }
+      lines.push({ pts: v, fam: 0, level: i / n });
+      lines.push({ pts: hz, fam: 1, level: i / n });
+    }
+  } else {
+    for (let i = 1; i <= n; i++) {         // 同心圆
+      const r = ZV * i / n, ring = [];
+      for (let k = 0; k <= 240; k++) {
+        const t = 2 * Math.PI * k / 240;
+        ring.push([r * Math.cos(t), r * Math.sin(t)]);
+      }
+      lines.push({ pts: ring, fam: 0, level: i / n });
+    }
+    for (let i = 0; i < n; i++) {          // 射线
+      const th = 2 * Math.PI * i / n, ray = [];
+      for (let k = 0; k <= 120; k++) {
+        const r = 0.02 + (ZV - 0.02) * k / 120;
+        ray.push([r * Math.cos(th), r * Math.sin(th)]);
+      }
+      lines.push({ pts: ray, fam: 1, level: i / n });
+    }
+  }
+  return lines;
+}
+const famColor = (fam, level) =>
+  fam === 0 ? `hsl(${210 + level * 40}, 65%, ${35 + level * 30}%)`
+            : `hsl(${10 + level * 40}, 70%, ${40 + level * 28}%)`;
+
+// Joukowski 专用: 过 z=1 的偏心圆
+function joukowskiCircle() {
+  const c = [-0.09, 0.09];
+  const r = Math.hypot(1 - c[0], c[1]);
+  const P = [];
+  for (let k = 0; k <= 300; k++) {
+    const t = 2 * Math.PI * k / 300;
+    P.push([c[0] + r * Math.cos(t), c[1] + r * Math.sin(t)]);
+  }
+  return P;
+}
+
+let hoverZ = null;
+function redraw() {
+  g.clearRect(0, 0, cv.width, cv.height);
+  // 分隔线 + 标题
+  g.strokeStyle = '#999'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(half(), 0); g.lineTo(half(), cv.height); g.stroke();
+  g.fillStyle = '#555'; g.font = '13px Menlo';
+  g.fillText('z 平面', 12, cv.height - 12);
+  g.fillText('w = f(z)', half() + 12, cv.height - 12);
+  // 轴
+  for (const right of [false, true]) {
+    const [ox, oy] = zw2px(0, 0, right);
+    g.strokeStyle = '#ddd';
+    g.beginPath();
+    g.moveTo(right ? half() : 0, oy); g.lineTo(right ? cv.width : half(), oy);
+    g.moveTo(ox, 0); g.lineTo(ox, cv.height);
+    g.stroke();
+  }
+  if (!F) return;
+  // 网格: 左原样, 右映射
+  for (const L of gridLines()) {
+    drawPlain(L.pts, famColor(L.fam, L.level), 1, false);
+    drawMapped(L.pts, famColor(L.fam, L.level), 1.3);
+  }
+  // Joukowski 偏心圆
+  if (airfoil) {
+    const C = joukowskiCircle();
+    drawPlain(C, '#111', 2.2, false);
+    drawMapped(C, '#111', 2.6);
+  }
+  // 手绘
+  if (stroke.length > 1) {
+    drawPlain(stroke, '#111', 2, false);
+    drawMapped(stroke, '#111', 2.4);
+  }
+  // 悬停小圆 → 像
+  if (hoverZ) {
+    const eps = ZV * 0.05, C = [];
+    for (let k = 0; k <= 60; k++) {
+      const t = 2 * Math.PI * k / 60;
+      C.push([hoverZ[0] + eps * Math.cos(t), hoverZ[1] + eps * Math.sin(t)]);
+    }
+    drawPlain(C, '#1a9f4b', 1.8, false);
+    drawMapped(C, '#1a9f4b', 2);
+  }
+}
+
+let drawing = false;
+cv.addEventListener('pointerdown', e => {
+  if (e.clientX > half()) return;          // 只在左半屏画
+  drawing = true; stroke = [];
+  stroke.push(px2z(e.clientX, e.clientY));
+});
+cv.addEventListener('pointermove', e => {
+  if (drawing && e.clientX <= half()) {
+    stroke.push(px2z(e.clientX, e.clientY));
+  }
+  hoverZ = e.clientX <= half() ? px2z(e.clientX, e.clientY) : null;
+  redraw();
+});
+addEventListener('pointerup', () => drawing = false);
+
+function apply() {
+  const err = document.getElementById('err');
+  err.textContent = '';
+  try { F = compileExpr(document.getElementById('fin').value); }
+  catch (e) { err.textContent = e.message; return; }
+  ZV = +document.getElementById('zview').value;
+  WV = +document.getElementById('wview').value;
+  document.getElementById('zviewShow').textContent = ZV;
+  document.getElementById('wviewShow').textContent = WV;
+  redraw();
+}
+document.getElementById('go').addEventListener('click', () => { airfoil = false; apply(); });
+document.getElementById('fin').addEventListener('keydown', e => { if (e.key === 'Enter') { airfoil = false; apply(); } });
+for (const id of ['gridKind', 'dens', 'zview', 'wview'])
+  document.getElementById(id).addEventListener('input', apply);
+document.getElementById('clearStroke').addEventListener('click', () => { stroke = []; redraw(); });
+document.getElementById('panel').addEventListener('click', e => {
+  const f = e.target.dataset && e.target.dataset.f;
+  if (!f) return;
+  document.getElementById('fin').value = f;
+  airfoil = !!e.target.dataset.air;
+  if (airfoil) {
+    document.getElementById('gridKind').value = 'polar';
+    document.getElementById('zview').value = 2;
+    document.getElementById('wview').value = 3;
+  }
+  apply();
+});
+addEventListener('resize', resize);
+resize();
+apply();
+</script>
+</body>
+</html>

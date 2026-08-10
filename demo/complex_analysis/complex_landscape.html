@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>复变函数 |f(z)| 地形图（解析景观）v3</title>
+<style>
+  body { margin: 0; background: #06070d; color: #ddd; font-family: Arial, "PingFang SC", sans-serif; overflow: hidden; }
+  #ui {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+    background: rgba(10,12,20,0.88); padding: 10px 14px; font-size: 13px; line-height: 1.6;
+  }
+  #ui input[type=text] { font-family: Menlo, Consolas, monospace; font-size: 14px; padding: 3px 6px;
+    background: #1a1d28; color: #eee; border: 1px solid #444; border-radius: 3px; width: 260px; }
+  #ui button { padding: 3px 10px; font-size: 13px; cursor: pointer; background: #2a2e3e; color: #ddd;
+    border: 1px solid #555; border-radius: 3px; margin: 1px; }
+  #ui button:hover { background: #3a4058; }
+  #ui button.active { background: #2f4a75; border-color: #7dc4ff; box-shadow: 0 0 4px #7dc4ff66; }
+  #ui select, #ui input[type=number] { background: #1a1d28; color: #eee; border: 1px solid #444; font-size: 13px; }
+  .hint { color: #8a92a8; font-size: 12px; }
+  #err { color: #ff7b6b; font-family: Menlo, monospace; font-size: 12px; }
+  b.zero { color: #7dc4ff; } b.pole { color: #ffb36b; } b.ana { color: #9be89b; }
+  #loading { position: absolute; top: 45%; width: 100%; text-align: center; z-index: 5; }
+  #probe {
+    position: absolute; right: 12px; bottom: 12px; z-index: 10; display: none;
+    background: rgba(10,12,20,0.92); border: 1px solid #3a3f55; border-radius: 6px; padding: 8px 10px;
+    font-size: 12px; line-height: 1.5;
+  }
+  #probe canvas { background: #10131e; border: 1px solid #333; display: block; }
+  #probeInfo { font-family: Menlo, Consolas, monospace; }
+  .vd-ana { color: #9be89b; } .vd-zero { color: #7dc4ff; } .vd-pole { color: #ffb36b; }
+  #contour {
+    position: absolute; left: 12px; bottom: 12px; z-index: 10;
+    background: rgba(10,12,20,0.92); border: 1px solid #3a3f55; border-radius: 6px; padding: 8px 10px;
+    font-size: 12px;
+  }
+  #contour canvas { display: block; cursor: crosshair; border: 1px solid #333; }
+</style>
+</head>
+<body>
+<div id="ui">
+  f(z) = <input type="text" id="fin" value="(z^2-1)/z">
+  <button id="go" style="font-weight:bold">绘制</button>
+  高度: <select id="hmode"><option value="lin" selected>|f| 线性</option><option value="log">log|f|（跨量级）</option></select>
+  高度缩放: <input type="range" id="hscale" min="20" max="400" value="100" style="width:80px;vertical-align:middle"><span id="hscaleShow" class="hint">1.0×</span>
+  视野半宽: <input type="range" id="range" min="0.5" max="30" step="0.5" value="2.5" style="width:90px;vertical-align:middle"><span id="rangeShow" class="hint">2.5</span>
+  图形大小: <input type="range" id="gsize" min="25" max="200" value="100" style="width:70px;vertical-align:middle"><span id="gsizeShow" class="hint">100%</span>
+  上下位置: <input type="range" id="glift" min="-300" max="300" value="-120" style="width:70px;vertical-align:middle"><span id="gliftShow" class="hint">-1.2</span>
+  中心: Re <input type="number" id="cx" value="0" step="0.5" style="width:48px">
+  Im <input type="number" id="cy" value="0" step="0.5" style="width:48px">
+  <span id="status" style="color:#9be89b;font-family:Menlo,monospace"></span>
+  <span id="err"></span><br>
+  预设:
+  <button data-f="z^5-1">z^5−1</button>
+  <button data-f="1/(z^2+1)">1/(z²+1)</button>
+  <button data-f="(z^2-1)/z">(z²−1)/z</button>
+  <button data-f="(z-1)^3/(z+1)^2">(z−1)³/(z+1)²</button>
+  <button data-f="sin(z)">sin z</button>
+  <button data-f="tan(z)">tan z</button>
+  <button data-f="exp(1/z)">e^(1/z)（本质奇点）</button>
+  <button data-f="log(z)">log z</button>
+  <button data-f="zeta(z)" data-cx="0" data-cy="17" data-r="18">ζ(z) 黎曼猜想</button>
+  <button data-f="gamma(z)" data-cx="0" data-cy="0" data-r="4.5">Γ(z)（1904 石膏模型）</button>
+  <span class="hint">拖动旋转 / 滚轮缩放 / <b>双击曲面</b>放置探针环</span><br>
+  <span class="hint">
+    颜色 = arg f（相位）。三种地貌——<b class="ana">解析区</b>：光滑起伏，且（最小模原理）凹陷必然触底，绝无悬空的坑底；
+    <b class="zero">零点</b>：插向下方的漏斗，环绕一周颜色转 m 圈 = m 重零点；
+    <b class="pole">极点</b>：冲向上方的烟囱，颜色反向转 m 圈 = m 阶极点。log 模式下地板高度 = |f| = 1。
+  </span>
+</div>
+<div id="loading">正在加载 three.js …（此页需要联网）</div>
+
+<div id="contour">
+  <div>|f| 等高线俯视图（<b>单击选点</b>放探针）</div>
+  <canvas id="ctCv" width="280" height="280"></canvas>
+</div>
+
+<div id="probe">
+  <div>绕点一圈：上 |f|，下 arg f（辐角/argument）　半径 ρ:
+    <input type="range" id="rho" min="2" max="60" value="12" style="width:90px;vertical-align:middle">
+    <span id="rhoShow"></span>
+    <button id="probeClose" style="float:right;padding:0 6px">×</button>
+  </div>
+  <canvas id="probeCv" width="380" height="236"></canvas>
+  <div id="probeInfo"></div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+
+<script>
+// ================= 复数运算 & 表达式编译器（无依赖, 供测试提取） =================
+'use strict';
+const CX = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1]],
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1]],
+  mul: (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]],
+  div: (a, b) => { const d = b[0] * b[0] + b[1] * b[1];
+    return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; },
+  exp: a => { const e = Math.exp(a[0]); return [e * Math.cos(a[1]), e * Math.sin(a[1])]; },
+  log: a => [Math.log(Math.hypot(a[0], a[1])), Math.atan2(a[1], a[0])],
+  sqrt: a => { const m = Math.sqrt(Math.hypot(a[0], a[1])), t = Math.atan2(a[1], a[0]) / 2;
+    return [m * Math.cos(t), m * Math.sin(t)]; },
+  sin: a => [Math.sin(a[0]) * Math.cosh(a[1]), Math.cos(a[0]) * Math.sinh(a[1])],
+  cos: a => [Math.cos(a[0]) * Math.cosh(a[1]), -Math.sin(a[0]) * Math.sinh(a[1])],
+  sinh: a => [Math.sinh(a[0]) * Math.cos(a[1]), Math.cosh(a[0]) * Math.sin(a[1])],
+  cosh: a => [Math.cosh(a[0]) * Math.cos(a[1]), Math.sinh(a[0]) * Math.sin(a[1])],
+  tan: a => CX.div(CX.sin(a), CX.cos(a)),
+  pow: (a, b) => {          // a^b = exp(b·log a)
+    if (a[0] === 0 && a[1] === 0) return (b[0] > 0) ? [0, 0] : [Infinity, 0];
+    return CX.exp(CX.mul(b, CX.log(a)));
+  },
+  ipow: (a, n) => {          // 整数幂, 精确快速
+    if (n === 0) return [1, 0];
+    let neg = n < 0; n = Math.abs(n);
+    let r = [1, 0], base = a;
+    while (n) { if (n & 1) r = CX.mul(r, base); base = CX.mul(base, base); n >>= 1; }
+    return neg ? CX.div([1, 0], r) : r;
+  },
+  gamma: z => {              // Lanczos 近似 (g=7), Re<0.5 用反射公式
+    if (z[0] < 0.5) {
+      const s = CX.sin([Math.PI * z[0], Math.PI * z[1]]);
+      return CX.div([Math.PI, 0], CX.mul(s, CX.gamma([1 - z[0], -z[1]])));
+    }
+    const P = [0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+      771.32342877765313, -176.61502916214059, 12.507343278686905,
+      -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    const w = [z[0] - 1, z[1]];
+    let x = [P[0], 0];
+    for (let i = 1; i < 9; i++) x = CX.add(x, CX.div([P[i], 0], [w[0] + i, w[1]]));
+    const t = [w[0] + 7.5, w[1]];
+    const r = CX.mul(CX.pow(t, [w[0] + 0.5, w[1]]), CX.exp([-t[0], -t[1]]));
+    return CX.mul([Math.sqrt(2 * Math.PI), 0], CX.mul(r, x));
+  },
+  zeta: s => {               // Euler–Maclaurin; Re<0.5 用函数方程
+    if (Math.abs(s[0]) < 1e-8 && Math.abs(s[1]) < 1e-8) {
+      // s=0 处函数方程是 0·∞, 用 Laurent 展开 ζ(s) = -1/2 - ln(2π)/2·s + O(s²)
+      const c = 0.9189385332046727;
+      return [-0.5 - c * s[0], -c * s[1]];
+    }
+    if (s[0] < 0.5) {
+      const s1 = [1 - s[0], -s[1]];
+      return CX.mul(
+        CX.mul(CX.pow([2, 0], s), CX.pow([Math.PI, 0], [s[0] - 1, s[1]])),
+        CX.mul(CX.mul(CX.sin([s[0] * Math.PI / 2, s[1] * Math.PI / 2]), CX.gamma(s1)),
+               CX.zeta(s1)));
+    }
+    const N = Math.max(12, Math.ceil(9 + 0.9 * Math.abs(s[1])));
+    let sum = [0, 0];
+    for (let n = 1; n < N; n++) {
+      const ln = Math.log(n);
+      sum = CX.add(sum, CX.exp([-s[0] * ln, -s[1] * ln]));
+    }
+    const lnN = Math.log(N);
+    const Nms = CX.exp([-s[0] * lnN, -s[1] * lnN]);          // N^{-s}
+    sum = CX.add(sum, CX.div([Nms[0] * N, Nms[1] * N], [s[0] - 1, s[1]]));  // N^{1-s}/(s-1)
+    sum = CX.add(sum, [Nms[0] / 2, Nms[1] / 2]);             // N^{-s}/2
+    const B = [1 / 6, -1 / 30, 1 / 42, -1 / 30, 5 / 66, -691 / 2730, 7 / 6];
+    let poch = s, fact = 2, Npow = [Nms[0] / N, Nms[1] / N]; // N^{-s-1}
+    for (let k = 1; k <= 7; k++) {
+      sum = CX.add(sum, CX.mul([B[k - 1] / fact, 0], CX.mul(poch, Npow)));
+      poch = CX.mul(poch, CX.mul([s[0] + 2 * k - 1, s[1]], [s[0] + 2 * k, s[1]]));
+      fact *= (2 * k + 1) * (2 * k + 2);
+      Npow = [Npow[0] / (N * N), Npow[1] / (N * N)];
+    }
+    return sum;
+  },
+};
+
+// f(z) 表达式 -> 函数 (zr, zi) => [re, im]
+// 语法: + - * / ^, 括号, 数字, z, i, pi, e, 函数 sin cos tan exp log sqrt sinh cosh
+function compileExpr(src) {
+  // 容错预处理: 数学排版字符 → ASCII; 剥掉 "f(z) ≈ " 前缀和截断省略号 "+ …"
+  src = src.replace(/^\s*f\(z\)\s*[≈=]\s*/, '')
+           .replace(/[−–]/g, '-').replace(/[·×]/g, '*')
+           .replace(/\s*\+\s*(…|\.\.\.)/g, '').replace(/…/g, '');
+  const toks = [];
+  const re = /\s*(\d+\.?\d*|[a-zA-Z_]+|\*\*|[-+*/^(),])/y;
+  let pos = 0;
+  while (pos < src.length) {
+    re.lastIndex = pos;
+    const m = re.exec(src);
+    if (!m) throw new Error('无法识别: "' + src.slice(pos, pos + 8) + '"');
+    toks.push(m[1] === '**' ? '^' : m[1]);
+    pos = re.lastIndex;
+  }
+  let p = 0;
+  const peek = () => toks[p], eat = t => {
+    if (toks[p] !== t) throw new Error(`期望 ${t}, 遇到 ${toks[p] ?? '结尾'}`);
+    p++;
+  };
+  const FN = { sin: 1, cos: 1, tan: 1, exp: 1, log: 1, sqrt: 1, sinh: 1, cosh: 1, gamma: 1, zeta: 1 };
+  const CONST = { i: [0, 1], pi: [Math.PI, 0], e: [Math.E, 0] };
+  // 节点: {f: (zr,zi)=>[re,im], hasZ: bool, cval: 常量值或null}
+  function mk(f, hasZ, kids) {
+    if (!hasZ) { const v = f(0, 0); return { f: () => v, hasZ: false, cval: v }; }
+    return { f, hasZ: true, cval: null };
+  }
+  function atom() {
+    const t = peek();
+    if (t === '(') { eat('('); const e = expr(); eat(')'); return e; }
+    if (t === '-') { eat('-'); const a = atom2(); return mk((zr, zi) => { const v = a.f(zr, zi); return [-v[0], -v[1]]; }, a.hasZ); }
+    if (t === '+') { eat('+'); return atom2(); }
+    if (/^\d/.test(t)) { eat(t); const v = [parseFloat(t), 0]; return mk(() => v, false); }
+    if (t === 'z') { eat('z'); return { f: (zr, zi) => [zr, zi], hasZ: true, cval: null }; }
+    if (t in CONST) { eat(t); const v = CONST[t]; return mk(() => v, false); }
+    if (t in FN) {
+      eat(t); eat('(');
+      const a = expr(); eat(')');
+      const fn = CX[t];
+      return mk((zr, zi) => fn(a.f(zr, zi)), a.hasZ);
+    }
+    throw new Error('意外的 ' + (t ?? '结尾'));
+  }
+  function atom2() { return power(); }   // 一元负号作用于整个幂
+  function power() {
+    const b = atom();
+    if (peek() === '^') {
+      eat('^');
+      const e = power();               // 右结合
+      if (!e.hasZ) {
+        const ev = e.f(0, 0);
+        if (ev[1] === 0 && Number.isInteger(ev[0]) && Math.abs(ev[0]) <= 99) {
+          const n = ev[0];
+          return mk((zr, zi) => CX.ipow(b.f(zr, zi), n), b.hasZ);
+        }
+      }
+      return mk((zr, zi) => CX.pow(b.f(zr, zi), e.f(zr, zi)), b.hasZ || e.hasZ);
+    }
+    return b;
+  }
+  function term() {
+    let a = power();
+    while (true) {
+      const t = peek();
+      let op;
+      if (t === '*' || t === '/') { op = t; eat(t); }
+      else if (t !== undefined && t !== ')' && t !== ',' && !'+-^'.includes(t)) op = '*'; // 隐式乘法: 2z, 0.079i, 3sin(z), 2(z+1)
+      else break;
+      const b = power();
+      const fn = op === '/' ? CX.div : CX.mul;
+      const aa = a, bb = b;
+      a = mk((zr, zi) => fn(aa.f(zr, zi), bb.f(zr, zi)), aa.hasZ || bb.hasZ);
+    }
+    return a;
+  }
+  function expr() {
+    let a = term();
+    while (peek() === '+' || peek() === '-') {
+      const op = peek(); eat(op);
+      const b = term();
+      const fn = op === '+' ? CX.add : CX.sub;
+      const aa = a, bb = b;
+      a = mk((zr, zi) => fn(aa.f(zr, zi), bb.f(zr, zi)), aa.hasZ || bb.hasZ);
+    }
+    return a;
+  }
+  const root = expr();
+  if (p !== toks.length) throw new Error('多余的 ' + toks[p]);
+  return (zr, zi) => root.f(zr, zi);
+}
+// ================= 编译器结束 =================
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+document.getElementById('loading').remove();
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+const world = new THREE.Group();        // 图形整体缩放/升降的载体
+scene.add(world);
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.01, 500);
+camera.position.set(4.2, 4.6, 5.6);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+world.add(new THREE.AmbientLight(0xffffff, 0.55));
+const dl = new THREE.DirectionalLight(0xffffff, 1.4);
+dl.position.set(3, 6, 4);
+world.add(dl);
+const dl2 = new THREE.DirectionalLight(0x8899ff, 0.4);
+dl2.position.set(-4, 2, -3);
+world.add(dl2);
+
+const N = 260;                     // 网格分辨率
+const CAP = 4.2;                   // 高度截断
+let mesh = null, gridHelper = null;
+let curF = null, curR = 2.5, curLog = true;      // 当前函数/视野/模式(探针用)
+let curCx = 0, curCy = 0;                        // 视野中心(复平面坐标)
+let probePt = null, probeRing = null, probeDot = null;
+const yScaleOf = logMode => logMode ? 0.55 : 0.9;
+const hScale = () => (+document.getElementById('hscale').value) / 100;   // 高度缩放, 独立于视野
+function heightOf(m, logMode) {
+  const ys = yScaleOf(logMode) * hScale();
+  if (logMode) {
+    let h = Math.log(m);
+    if (!isFinite(h)) h = h > 0 ? CAP : -CAP;
+    return Math.max(-CAP, Math.min(CAP, h)) * ys;
+  }
+  const cap = CAP / yScaleOf(logMode);          // 截断阈值不随缩放变, 缩放只改显示高度
+  if (!isFinite(m)) m = cap;
+  return Math.min(m, cap) * ys;
+}
+
+function rebuild() {
+  const err = document.getElementById('err');
+  err.textContent = '';
+  document.getElementById('status').textContent = '';
+  let f;
+  try { f = compileExpr(document.getElementById('fin').value); }
+  catch (e) { err.textContent = '⚠ ' + e.message + '（曲面未更新）'; return; }
+  const R = Math.max(0.2, parseFloat(document.getElementById('range').value) || 2.5);
+  const cx = parseFloat(document.getElementById('cx').value) || 0;
+  const cy = parseFloat(document.getElementById('cy').value) || 0;
+  const logMode = document.getElementById('hmode').value === 'log';
+
+  const geo = new THREE.PlaneGeometry(2 * R, 2 * R, N, N);
+  geo.rotateX(-Math.PI / 2);       // 放平: x-z 为复平面 (x=Re, z=-Im), y = 高度
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  const col = new THREE.Color();
+  curF = f; curR = R; curLog = logMode; curCx = cx; curCy = cy;
+
+  for (let k = 0; k < pos.count; k++) {
+    const zr = pos.getX(k) + cx, zi = -pos.getZ(k) + cy;
+    const v = f(zr, zi);
+    pos.setY(k, heightOf(Math.hypot(v[0], v[1]), logMode));
+    // 颜色 = 相位 (NaN 处灰色)
+    if (isNaN(v[0]) || isNaN(v[1])) col.setRGB(0.4, 0.4, 0.4);
+    else col.setHSL(((Math.atan2(v[1], v[0]) / (2 * Math.PI)) + 1) % 1, 0.85, 0.55);
+    colors[k * 3] = col.r; colors[k * 3 + 1] = col.g; colors[k * 3 + 2] = col.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+
+  if (mesh) { world.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
+  mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    vertexColors: true, side: THREE.DoubleSide, roughness: 0.75, metalness: 0.05,
+  }));
+  world.add(mesh);
+
+  if (gridHelper) world.remove(gridHelper);
+  gridHelper = new THREE.GridHelper(2 * R, 10, 0x555577, 0x2a2c3c);   // log 模式下 y=0 即 |f|=1
+  world.add(gridHelper);
+  renderContour();
+  updateProbe();
+  document.getElementById('status').textContent =
+    '当前绘制: ' + document.getElementById('fin').value + ' ✓';
+}
+
+// ---------------- 探针: 绕任意点一圈的 |f| 闭合曲线 ----------------
+function updateProbe() {
+  const box = document.getElementById('probe');
+  if (!probePt || !curF) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const rho = curR * (+document.getElementById('rho').value) / 100;
+  document.getElementById('rhoShow').textContent = 'ρ=' + rho.toFixed(3);
+  const { zr, zi } = probePt;
+  const M = 256, hs = [], logs = [];
+  const pts3 = [];
+  for (let k = 0; k <= M; k++) {
+    const th = 2 * Math.PI * k / M;
+    const v = curF(zr + rho * Math.cos(th), zi + rho * Math.sin(th));
+    const m = Math.hypot(v[0], v[1]);
+    hs.push(m);
+    if (k < M) logs.push(Math.max(-40, Math.min(40, Math.log(m))));
+    pts3.push(new THREE.Vector3(zr + rho * Math.cos(th) - curCx, heightOf(m, curLog) + 0.015,
+                                -(zi + rho * Math.sin(th) - curCy)));
+  }
+  // 3D: 白色采样环 + 中心点
+  if (probeRing) { world.remove(probeRing); probeRing.geometry.dispose(); }
+  probeRing = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts3),
+    new THREE.LineBasicMaterial({ color: 0x222222 }));
+  world.add(probeRing);
+  const vc = curF(zr, zi), mc = Math.hypot(vc[0], vc[1]);
+  if (probeDot) world.remove(probeDot);
+  probeDot = new THREE.Mesh(new THREE.SphereGeometry(curR * 0.012, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0x222222 }));
+  probeDot.position.set(zr - curCx, heightOf(mc, curLog) + 0.02, -(zi - curCy));
+  world.add(probeDot);
+  // 2D: 两条展开曲线. 上: |f|(θ); 下: arg f(θ)
+  const cv = document.getElementById('probeCv'), g = cv.getContext('2d');
+  const W = cv.width, pad = 8;
+  const T1 = 14, B1 = 116, T2 = 138, B2 = 228;      // 两个条带的上下界
+  const args = [];
+  for (let k = 0; k <= M; k++) {
+    const th = 2 * Math.PI * k / M;
+    const v = curF(zr + rho * Math.cos(th), zi + rho * Math.sin(th));
+    args.push(Math.atan2(v[1], v[0]));
+  }
+  const ys = curLog ? hs.map(m => Math.max(-CAP, Math.min(CAP, Math.log(m)))) : hs.map(m => Math.min(m, 12));
+  const yc = curLog ? Math.max(-CAP, Math.min(CAP, Math.log(mc))) : Math.min(mc, 12);
+  const lo = Math.min(...ys, yc), hi = Math.max(...ys, yc), spread = (hi - lo) || 1;
+  const Y1 = v => B1 - (v - lo) / spread * (B1 - T1);
+  const Y2 = a => B2 - (a + Math.PI) / (2 * Math.PI) * (B2 - T2);
+  const X = k => pad + k / M * (W - 2 * pad);
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.font = '11px Menlo'; g.fillStyle = '#8a92a8';
+  g.fillText(curLog ? 'log|f|' : '|f|', pad, T1 - 3);
+  g.fillText('arg f  (−π → +π)', pad, T2 - 3);
+  g.strokeStyle = '#3a3f55';
+  g.strokeRect(pad - 0.5, T1 - 0.5, W - 2 * pad + 1, B1 - T1 + 1);
+  g.strokeRect(pad - 0.5, T2 - 0.5, W - 2 * pad + 1, B2 - T2 + 1);
+  // 上条带: 中心值虚线 + |f| 曲线
+  g.setLineDash([4, 4]); g.strokeStyle = '#888';
+  g.beginPath(); g.moveTo(pad, Y1(yc)); g.lineTo(W - pad, Y1(yc)); g.stroke();
+  g.setLineDash([]);
+  for (let k = 0; k < M; k++) {
+    g.strokeStyle = `hsl(${k * 360 / M}, 70%, 55%)`;
+    g.beginPath(); g.moveTo(X(k), Y1(ys[k])); g.lineTo(X(k + 1), Y1(ys[k + 1])); g.stroke();
+  }
+  // 下条带: arg 曲线(±π 处断开不连线) + 0 虚线
+  g.setLineDash([4, 4]); g.strokeStyle = '#666';
+  g.beginPath(); g.moveTo(pad, Y2(0)); g.lineTo(W - pad, Y2(0)); g.stroke();
+  g.setLineDash([]);
+  let wind = 0;
+  for (let k = 0; k < M; k++) {
+    let d = args[k + 1] - args[k];
+    if (d > Math.PI) d -= 2 * Math.PI;
+    if (d < -Math.PI) d += 2 * Math.PI;
+    wind += d;
+    if (Math.abs(args[k + 1] - args[k]) < Math.PI) {   // 跨 ±π 的段不画竖线
+      g.strokeStyle = `hsl(${k * 360 / M}, 70%, 55%)`;
+      g.beginPath(); g.moveTo(X(k), Y2(args[k])); g.lineTo(X(k + 1), Y2(args[k + 1])); g.stroke();
+    }
+  }
+  const Wn = Math.round(wind / (2 * Math.PI));
+  // 调和检验: 圆周平均 log|f| vs 中心 log|f| (Gauss 均值性质 / Jensen)
+  const meanLog = logs.reduce((a, b) => a + b, 0) / logs.length;
+  const clog = Math.log(mc);
+  const d = meanLog - clog;
+  let verdict, cls;
+  if (!isFinite(d)) { verdict = '圆心在零点/极点上'; cls = 'vd-zero'; }
+  else if (Math.abs(d) < 0.02) { verdict = '≈0→圈内无零无极'; cls = 'vd-ana'; }
+  else if (d > 0) { verdict = '>0→圈内有零点'; cls = 'vd-zero'; }
+  else { verdict = '<0→圈内有极点'; cls = 'vd-pole'; }
+  document.getElementById('probeInfo').innerHTML =
+    `z₀ = ${zr.toFixed(3)} ${zi >= 0 ? '+' : '−'} ${Math.abs(zi).toFixed(3)}i,  |f(z₀)| = ${mc.toPrecision(4)}(虚线)<br>` +
+    `均值检验: 圆周平均−中心 = ${isFinite(d) ? d.toFixed(4) : 'NaN'} <span class="${cls}">${verdict}</span><br>` +
+    `辐角原理: Δarg/2π = <b>${Wn}</b> = 圈内零点数 − 极点数(计重数)`;
+  blitContour();
+}
+
+// ---------------- |f| 等高线俯视图 ----------------
+const ctCv = document.getElementById('ctCv'), ctG = ctCv.getContext('2d');
+let ctImg = null;
+function renderContour() {
+  if (!curF) return;
+  const S = ctCv.width;
+  const img = ctG.createImageData(S, S);
+  const col = new THREE.Color();
+  for (let py = 0; py < S; py++) {
+    for (let px = 0; px < S; px++) {
+      const zr = (2 * px / (S - 1) - 1) * curR + curCx, zi = (1 - 2 * py / (S - 1)) * curR + curCy;
+      const v = curF(zr, zi);
+      let h = Math.log(Math.hypot(v[0], v[1]));
+      if (!isFinite(h)) h = h > 0 ? CAP : -CAP;
+      h = Math.max(-CAP, Math.min(CAP, h));
+      const t = (h + CAP) / (2 * CAP);                 // 0(零点)→1(极点)
+      let light = 0.20 + 0.45 * t;
+      const frac = ((h / 0.5) % 1 + 1) % 1;            // 等高线: log|f| 每 0.5 一条
+      if (frac < 0.12) light *= 0.5;
+      col.setHSL((225 - 205 * t) / 360, 0.6, light);
+      const i = (py * S + px) * 4;
+      img.data[i] = col.r * 255; img.data[i + 1] = col.g * 255; img.data[i + 2] = col.b * 255; img.data[i + 3] = 255;
+    }
+  }
+  ctImg = img;
+  blitContour();
+}
+function blitContour() {
+  if (!ctImg) return;
+  ctG.putImageData(ctImg, 0, 0);
+  if (!probePt) return;
+  const S = ctCv.width;
+  const px = ((probePt.zr - curCx) / curR + 1) / 2 * (S - 1), py = (1 - (probePt.zi - curCy) / curR) / 2 * (S - 1);
+  const rho = curR * (+document.getElementById('rho').value) / 100;
+  ctG.strokeStyle = '#fff'; ctG.lineWidth = 1.5;
+  ctG.beginPath(); ctG.arc(px, py, rho / (2 * curR) * (S - 1), 0, 2 * Math.PI); ctG.stroke();
+  ctG.fillStyle = '#fff';
+  ctG.beginPath(); ctG.arc(px, py, 3, 0, 2 * Math.PI); ctG.fill();
+}
+ctCv.addEventListener('click', e => {
+  const r = ctCv.getBoundingClientRect();
+  const px = (e.clientX - r.left) * ctCv.width / r.width;
+  const py = (e.clientY - r.top) * ctCv.height / r.height;
+  const S = ctCv.width;
+  probePt = { zr: (2 * px / (S - 1) - 1) * curR + curCx, zi: (1 - 2 * py / (S - 1)) * curR + curCy };
+  updateProbe();
+});
+const ray = new THREE.Raycaster();
+renderer.domElement.addEventListener('dblclick', e => {
+  if (!mesh) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2(
+    ((e.clientX - r.left) / r.width) * 2 - 1,
+    -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  const hit = ray.intersectObject(mesh)[0];
+  if (!hit) return;
+  const gs = world.scale.x;
+  probePt = { zr: hit.point.x / gs + curCx, zi: -hit.point.z / gs + curCy };
+  updateProbe();
+});
+document.getElementById('rho').addEventListener('input', updateProbe);
+document.getElementById('probeClose').addEventListener('click', () => {
+  probePt = null;
+  if (probeRing) { world.remove(probeRing); probeRing = null; }
+  if (probeDot) { world.remove(probeDot); probeDot = null; }
+  updateProbe();
+});
+
+document.getElementById('go').addEventListener('click', rebuild);
+document.getElementById('fin').addEventListener('keydown', e => { if (e.key === 'Enter') rebuild(); });
+document.getElementById('hmode').addEventListener('change', rebuild);
+document.getElementById('hscale').addEventListener('input', () => {
+  document.getElementById('hscaleShow').textContent = hScale().toFixed(1) + '×';
+});
+document.getElementById('hscale').addEventListener('change', rebuild);   // 松手时重建
+document.getElementById('range').addEventListener('change', rebuild);
+document.getElementById('range').addEventListener('input', e => {
+  document.getElementById('rangeShow').textContent = e.target.value;
+});
+document.getElementById('gsize').addEventListener('input', e => {
+  const v = (+e.target.value) / 100;
+  world.scale.setScalar(v);
+  document.getElementById('gsizeShow').textContent = Math.round(v * 100) + '%';
+});
+document.getElementById('glift').addEventListener('input', e => {
+  const y = (+e.target.value) / 100;
+  world.position.y = y;
+  document.getElementById('gliftShow').textContent = y.toFixed(1);
+});
+world.position.y = -1.2;                       // 默认整体放低, 给顶部工具栏让位
+document.getElementById('cx').addEventListener('change', rebuild);
+document.getElementById('cy').addEventListener('change', rebuild);
+document.getElementById('ui').addEventListener('click', e => {
+  const d = e.target.dataset;
+  if (!d || !d.f) return;
+  for (const b of document.querySelectorAll('#ui button[data-f]')) b.classList.remove('active');
+  e.target.classList.add('active');
+  document.getElementById('fin').value = d.f;
+  document.getElementById('cx').value = d.cx || 0;      // 预设自带视野, 未指定则回到原点
+  document.getElementById('cy').value = d.cy || 0;
+  document.getElementById('range').value = d.r || 2.5;
+  document.getElementById('rangeShow').textContent = d.r || 2.5;
+  probePt = null;
+  rebuild();
+});
+
+// WebGL 上下文丢失自愈(标签页开太多时 Chrome 会吊销上下文, 画面冻结)
+renderer.domElement.addEventListener('webglcontextlost', e => {
+  e.preventDefault();
+  document.getElementById('err').textContent = '⚠ WebGL 上下文丢失(3D 标签页太多?), 等待恢复…';
+});
+renderer.domElement.addEventListener('webglcontextrestored', () => {
+  document.getElementById('err').textContent = '';
+  rebuild();
+});
+
+rebuild();
+(function loop() {
+  requestAnimationFrame(loop);
+  controls.update();
+  try { renderer.render(scene, camera); } catch (e) { /* 保住渲染循环 */ }
+})();
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>

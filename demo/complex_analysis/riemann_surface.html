@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>黎曼曲面：√z 双层螺旋 / log z 无限旋梯</title>
+<style>
+  body { margin: 0; background: #fff; color: #222; overflow: hidden;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  button { padding: 2px 9px; font-size: 12px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  select { font-size: 12px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12px; margin: 3px 0; }
+  .hint { color: #666; font-size: 11.5px; line-height: 1.5; }
+  #panel { position: absolute; top: 10px; left: 10px; z-index: 10; width: 540px; max-width: 94vw;
+    background: rgba(255,255,255,0.94); border: 1px solid #ccc; border-radius: 8px;
+    padding: 6px 10px 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
+  .mono { font-family: Menlo, Consolas, monospace; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <div class="bar">
+    曲面:
+    <select id="kind">
+      <option value="sqrt" selected>√z（双层螺旋, 绕 2 圈回原层）</option>
+      <option value="cbrt">∛z（三层, 绕 3 圈回原层）</option>
+      <option value="log">log z（无限旋梯）</option>
+    </select>
+    <span id="turnsBox">旋梯圈数: <input type="range" id="turns" min="2" max="6" value="3" style="width:60px;vertical-align:middle">
+    <span id="turnsShow" class="hint">3</span></span>
+    <button id="walk" style="font-weight:bold">▶ 绕原点走一圈</button>
+    <span id="walkInfo" class="mono" style="font-size:11.5px"></span>
+  </div>
+  <div class="bar">
+    图形大小: <input type="range" id="gsize" min="25" max="200" value="100" style="width:70px;vertical-align:middle"><span id="gsizeShow" class="hint">100%</span>
+    上下位置: <input type="range" id="glift" min="-300" max="300" value="-40" style="width:70px;vertical-align:middle"><span id="gliftShow" class="hint">-0.4</span>
+    透明度: <input type="range" id="opa" min="30" max="100" value="88" style="width:60px;vertical-align:middle">
+    染色: <select id="cmode">
+      <option value="turn" selected>按圈数（每圈一个色带）</option>
+      <option value="rew">按 Re(w)——被扔掉的第四维</option>
+    </select>
+  </div>
+  <div class="hint">
+    高度 = Im(w)（√z、∛z）或 Im(log z) = 辐角（log z）。多值函数在平面上"一个 z 多个 w"，
+    把每个值放到自己那一层，曲面就单值了——这就是黎曼曲面。
+    点「绕原点走一圈」：底面小球绕原点转，曲面上的红球沿曲面爬——**转一圈回到脚下,却不在原来那层**；
+    √z 转两圈才回家，log z 永远回不了家（每圈爬高 2π）。拖动旋转 / 滚轮缩放 / 右键平移。
+  </div>
+  <div style="background:#fff7d6;border:1px solid #e0c060;border-radius:5px;padding:5px 8px;margin-top:5px;font-size:12px;line-height:1.5">
+    ⚠ <b>√z、∛z 图中的"自相交"是投影伤痕,不是曲面性质</b>：真身住在 ℂ²（四维,坐标 z 与 w），处处无自交；
+    画图时扔掉了 Re(w) 这一维，两叶恰好在<b>正实轴上方</b>被压到一起（那里 Im w 同为 0，而被扔掉的 Re w = ±√r 并不相同）。
+    对照：<b>log z 旋梯没有任何自交</b>——它的高度（辐角）天生就把所有层分开，是三维中真实存在的无自交曲面。
+    切换到「按 Re(w) 染色」：自交缝两侧<b>颜色突变</b>（一边红一边蓝）——用色彩当第四个坐标，亲眼看两叶在四维里分开。
+  </div>
+</div>
+
+<div id="loading" style="position:absolute;top:45%;width:100%;text-align:center">正在加载 three.js …（需联网）</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+
+<script>
+// ================= 高度函数（无 DOM, 供测试提取） =================
+'use strict';
+// θ 为累计辐角(可超 2π); 返回该叶上的高度
+function sheetHeight(kind, r, th) {
+  if (kind === 'sqrt') return Math.sqrt(r) * Math.sin(th / 2);
+  if (kind === 'cbrt') return Math.cbrt(r) * Math.sin(th / 3);
+  return th * 0.22;                       // log: Im(log z) = θ (缩放显示)
+}
+function periodTurns(kind, logTurns) {    // 绕几圈回到原层
+  return kind === 'sqrt' ? 2 : kind === 'cbrt' ? 3 : logTurns;
+}
+// 被投影扔掉的第四维: Re(w)
+function sheetRe(kind, r, th) {
+  if (kind === 'sqrt') return Math.sqrt(r) * Math.cos(th / 2);
+  if (kind === 'cbrt') return Math.cbrt(r) * Math.cos(th / 3);
+  return Math.log(r);                     // log: Re(log z) = ln r
+}
+// ================= 核心结束 =================
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+document.getElementById('loading').remove();
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+const world = new THREE.Group();
+scene.add(world);
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.01, 100);
+camera.position.set(2.6, 2.2, 3.4);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.screenSpacePanning = true;
+world.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dl = new THREE.DirectionalLight(0xffffff, 1.3); dl.position.set(3, 6, 4); world.add(dl);
+const dl2 = new THREE.DirectionalLight(0x8899ff, 0.35); dl2.position.set(-4, 2, -3); world.add(dl2);
+
+// 底面参考: 网格 + 单位圆 + 原点(枝点)标记
+world.add(new THREE.GridHelper(3.2, 12, 0x777777, 0xd8d8dd));
+{
+  const pts = [];
+  for (let i = 0; i <= 128; i++) {
+    const t = 2 * Math.PI * i / 128;
+    pts.push(new THREE.Vector3(Math.cos(t), 0.003, -Math.sin(t)));
+  }
+  world.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: 0x999999 })));
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xc0392b }));
+  dot.position.set(0, 0.02, 0);
+  world.add(dot);
+}
+
+const R0 = 0.06, R1 = 1.5;
+let mesh = null;
+
+function kindNow() { return document.getElementById('kind').value; }
+function turnsNow() { return +document.getElementById('turns').value; }
+
+function rebuild() {
+  const kind = kindNow();
+  const turns = periodTurns(kind, turnsNow());
+  document.getElementById('turnsBox').style.display = kind === 'log' ? '' : 'none';
+  const symmetric = kind === 'log';                 // log 往上下各转 turns/2 圈
+  const th0 = symmetric ? -Math.PI * turns : 0;
+  const th1 = symmetric ? Math.PI * turns : 2 * Math.PI * turns;
+  const nT = Math.max(180, 72 * turns), nR = 36;
+  const pos = [], col = [], idx = [];
+  const c = new THREE.Color();
+  const cmode = document.getElementById('cmode').value;
+  // Re(w) 模式的归一化范围
+  let reMin = 1e9, reMax = -1e9;
+  if (cmode === 'rew') {
+    for (let i = 0; i <= nT; i += 4) {
+      const th = th0 + (th1 - th0) * i / nT;
+      for (const r of [R0, R1]) {
+        const v = sheetRe(kind, r, th);
+        reMin = Math.min(reMin, v); reMax = Math.max(reMax, v);
+      }
+    }
+  }
+  for (let i = 0; i <= nT; i++) {
+    const th = th0 + (th1 - th0) * i / nT;
+    for (let j = 0; j <= nR; j++) {
+      const r = R0 + (R1 - R0) * j / nR;
+      pos.push(r * Math.cos(th), sheetHeight(kind, r, th), -r * Math.sin(th));
+      if (cmode === 'rew') {
+        const t = (sheetRe(kind, r, th) - reMin) / (reMax - reMin || 1);
+        const t2 = 0.5 + 0.5 * Math.sign(t - 0.5) * Math.pow(Math.abs(2 * t - 1), 0.45);  // 中心拉伸, 加大对比
+        c.setHSL(0.66 * (1 - t2), 0.9, 0.5);          // 蓝(小) → 红(大): 第四维的色标
+      } else {
+        c.setHSL(((th / (2 * Math.PI)) % 1 + 1) % 1 * 0.85, 0.7, 0.55); // 每圈一个色带
+      }
+      col.push(c.r, c.g, c.b);
+    }
+  }
+  for (let i = 0; i < nT; i++)
+    for (let j = 0; j < nR; j++) {
+      const a = i * (nR + 1) + j, b = a + nR + 1;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  if (mesh) { world.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
+  mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+    vertexColors: true, side: THREE.DoubleSide, roughness: 0.7, metalness: 0.05,
+    transparent: true, opacity: (+document.getElementById('opa').value) / 100,
+  }));
+  world.add(mesh);
+  resetWalk();
+}
+
+// ---------- 绕原点行走动画 ----------
+let walking = false, walkTh = 0, baseDot = null, liftDot = null, trail = null, trailPts = [];
+const WALK_R = 1.0;
+function resetWalk() {
+  walking = false; walkTh = 0; trailPts = [];
+  document.getElementById('walk').textContent = '▶ 绕原点走一圈';
+  document.getElementById('walkInfo').textContent = '';
+  for (const o of [baseDot, liftDot, trail]) if (o) world.remove(o);
+  baseDot = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0x555555 }));
+  liftDot = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xe02020 }));
+  world.add(baseDot); world.add(liftDot);
+  trail = null;
+  placeWalk();
+}
+function placeWalk() {
+  const kind = kindNow();
+  baseDot.position.set(WALK_R * Math.cos(walkTh), 0.01, -WALK_R * Math.sin(walkTh));
+  liftDot.position.set(WALK_R * Math.cos(walkTh), sheetHeight(kind, WALK_R, walkTh), -WALK_R * Math.sin(walkTh));
+  trailPts.push(liftDot.position.clone());
+  if (trail) { world.remove(trail); trail.geometry.dispose(); }
+  trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints(trailPts),
+    new THREE.LineBasicMaterial({ color: 0xe02020 }));
+  world.add(trail);
+  const laps = walkTh / (2 * Math.PI);
+  const kind2 = kindNow();
+  const period = periodTurns(kind2, turnsNow());
+  document.getElementById('walkInfo').textContent =
+    `底面已绕 ${laps.toFixed(2)} 圈, 高度 ${sheetHeight(kind2, WALK_R, walkTh).toFixed(3)}` +
+    (kind2 !== 'log' && Math.abs(laps % period) < 0.02 && laps > 0.5 ? ' ← 回家了!' : '');
+}
+document.getElementById('walk').addEventListener('click', e => {
+  walking = !walking;
+  e.target.textContent = walking ? '⏸ 暂停' : '▶ 继续';
+});
+
+// ---------- 通用控制 ----------
+document.getElementById('kind').addEventListener('change', rebuild);
+document.getElementById('turns').addEventListener('change', rebuild);
+document.getElementById('turns').addEventListener('input', e => {
+  document.getElementById('turnsShow').textContent = e.target.value;
+});
+document.getElementById('cmode').addEventListener('change', rebuild);
+document.getElementById('opa').addEventListener('input', e => {
+  if (mesh) mesh.material.opacity = (+e.target.value) / 100;
+});
+document.getElementById('gsize').addEventListener('input', e => {
+  const v = (+e.target.value) / 100;
+  world.scale.setScalar(v);
+  document.getElementById('gsizeShow').textContent = Math.round(v * 100) + '%';
+});
+document.getElementById('glift').addEventListener('input', e => {
+  const y = (+e.target.value) / 100;
+  world.position.y = y;
+  document.getElementById('gliftShow').textContent = y.toFixed(1);
+});
+world.position.y = -0.4;
+
+rebuild();
+(function loop() {
+  requestAnimationFrame(loop);
+  if (walking) {
+    walkTh += 0.025;
+    const kind = kindNow();
+    const maxTh = kind === 'log' ? Math.PI * turnsNow() : 2 * Math.PI * periodTurns(kind, 0) + 0.01;
+    if (walkTh > (kind === 'log' ? maxTh : maxTh)) {
+      if (kind === 'log') { walking = false; document.getElementById('walk').textContent = '▶ 重新走(先清轨迹)'; }
+      else walkTh -= 2 * Math.PI * periodTurns(kind, 0);   // 回家后循环
+    }
+    placeWalk();
+  }
+  controls.update();
+  try { renderer.render(scene, camera); } catch (e) {}
+})();
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+document.getElementById('kind').addEventListener('change', resetWalk);
+</script>
+</body>
+</html>

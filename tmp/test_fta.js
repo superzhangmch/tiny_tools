@@ -1,5 +1,5 @@
 const fs = require('fs');
-const html = fs.readFileSync(__dirname + '/../demo/fta_demo.html', 'utf8');
+const html = fs.readFileSync(__dirname + '/../demo/complex_analysis/fundamental_theorem_of_algebra.html', 'utf8');
 const core = html.match(/\/\/ -+ 复数与多项式 -+[\s\S]*?(?=\/\/ -+ 全局状态)/)[0];
 const api = new Function(core + 'return {evalPoly, parseCoefs, cauchyR, durandKerner};')();
 const { evalPoly, parseCoefs, durandKerner } = api;
