@@ -6,8 +6,9 @@
 <title>整系数多项式分解 · Berlekamp–Zassenhaus (mod p → Hensel p^N → 穷举重组)</title>
 <style>
   :root{
-    --bg:#0f1216; --panel:#171b21; --panel2:#1d222a; --line:#2a3140;
-    --fg:#e6e9ef; --dim:#9aa4b2; --acc:#6ea8fe; --ok:#5ad19a; --warn:#f0c26b; --bad:#f08a8a;
+    --bg:#ffffff; --panel:#f7f8fa; --panel2:#ffffff; --line:#c9cfd8;
+    --fg:#15181c; --dim:#5c6672; --acc:#1a5fd0; --ok:#0e7a45; --warn:#8a5a00; --bad:#c0271f;
+    --code:#f2f4f7;
     --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
   }
   *{box-sizing:border-box}
@@ -29,8 +30,8 @@
   .row{display:flex;gap:8px}.row>*{flex:1}
   button{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--fg);
     border-radius:6px;padding:8px 10px;font-size:13px;font-weight:550}
-  button:hover{border-color:var(--acc);color:#fff}
-  button.pri{background:var(--acc);border-color:var(--acc);color:#0b1020}
+  button:hover{border-color:var(--acc);color:var(--acc)}
+  button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
   button.pri:hover{filter:brightness(1.1)}
   .btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:14px}
@@ -43,54 +44,54 @@
   .fac{padding:6px 0;border-top:1px dashed var(--line)}
   .fac:first-of-type{border-top:0}
   .eqline{font-family:var(--mono);font-size:16px;line-height:2;word-break:break-all;
-    padding:8px 10px;background:#101419;border:1px solid var(--line);border-radius:8px}
+    padding:8px 10px;background:var(--code);border:1px solid var(--line);border-radius:8px}
   .eqline sup{font-size:.72em}
   .eqplain{font-family:var(--mono);font-size:12px;color:var(--dim);word-break:break-all;
     margin:6px 0 12px;user-select:all}
   .badge{display:inline-block;font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:99px;
     border:1px solid var(--line);color:var(--dim);margin-left:6px}
   .ok{color:var(--ok)} .bad{color:var(--bad)} .warn{color:var(--warn)} .dim{color:var(--dim)}
-  pre.log{font-family:var(--mono);font-size:12px;background:#101419;border:1px solid var(--line);
-    border-radius:8px;padding:10px 12px;max-height:340px;overflow:auto;white-space:pre-wrap;margin:0;color:#c6cedb}
+  pre.log{font-family:var(--mono);font-size:12px;background:var(--code);border:1px solid var(--line);
+    border-radius:8px;padding:10px 12px;max-height:340px;overflow:auto;white-space:pre-wrap;margin:0;color:#2b3138}
   details summary{cursor:pointer;color:var(--dim);font-size:12.5px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   @media(max-width:900px){.wrap{grid-template-columns:1fr}.side{border-right:0;border-bottom:1px solid var(--line)}.grid2{grid-template-columns:1fr}}
-  code{font-family:var(--mono);background:#101419;padding:1px 4px;border-radius:4px}
-  table.t{border-collapse:collapse;width:100%;font-size:12.5px}
+  code{font-family:var(--mono);background:var(--code);padding:1px 4px;border-radius:4px}
+  table.t,table.lin,table.stg,table.mtab,table.mcalc2{border-collapse:collapse}
+  table.t td,table.t th,table.lin td,table.lin th,
+  table.stg td,table.stg th,table.mtab td,table.mcalc2 td{border:1px solid var(--line)}
+  table.t{width:100%;font-size:12.5px}
   table.t th{text-align:left;color:var(--dim);font-weight:550;font-size:11.5px;
     text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--line);padding:4px 8px}
-  table.t td{padding:5px 8px;border-bottom:1px solid #222834;vertical-align:top;font-family:var(--mono)}
-  table.t tr:last-child td{border-bottom:0}
+  table.t td{padding:5px 8px;vertical-align:top;font-family:var(--mono)}
   .gtag{display:inline-block;min-width:20px;text-align:center;font-family:var(--mono);font-size:11px;
-    padding:0 5px;border-radius:4px;color:#0b1020;font-weight:700}
+    padding:0 5px;border-radius:4px;color:#fff;font-weight:700}
   .idx{color:var(--dim);font-family:var(--mono)}
   .chain{font-family:var(--mono);font-size:11.5px;line-height:1.75;white-space:pre;overflow-x:auto}
   .chain b{color:var(--ok);font-weight:600}
-  .chain .new{color:var(--warn)}
+  .new{color:var(--warn);font-weight:600}
   .grp{border-left:3px solid;padding:6px 0 6px 10px;margin:8px 0}
   .arrow{color:var(--dim)}
   .ctl{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
   .ctl .inl{display:flex;gap:5px;align-items:center;margin:0;font-size:12.5px;color:var(--dim)}
   .ctl select{width:auto;padding:4px 6px;font-size:12px}
   .ctl input[type=checkbox]{width:auto;accent-color:var(--acc)}
-  table.lin{border-collapse:collapse}
-  table.lin td,table.lin th{border:1px solid #263041}
   table.lin td.pcell{white-space:normal;word-break:break-all;min-width:96px}
   table.lin td.dcell{white-space:pre;font-size:11.5px}
   table.lin td.fcell{font-weight:600}
   table.lin td.gcell{text-align:center;vertical-align:middle}
   .scrollx{overflow-x:auto}
   .mblk{border:1px solid var(--line);border-left:4px solid;border-radius:8px;
-    padding:10px 12px;margin:0 0 12px;background:#141922}
-  .mblk.fail{border-left-color:var(--bad);background:#1a1417}
+    padding:10px 12px;margin:0 0 12px;background:var(--panel)}
+  .mblk.fail{border-left-color:var(--bad);background:#fdf3f2}
   .mhead{font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
   .mnote{font-size:12.5px;margin:6px 0 4px}
   table.mtab{width:auto}
-  table.mtab td{border:0;padding:2px 10px 2px 0;white-space:nowrap}
+  table.mtab td{padding:3px 10px;white-space:nowrap}
   table.mcalc2{width:auto;border-collapse:collapse;font-size:13px;margin-top:2px}
-  table.mcalc2 td{padding:2px 10px 2px 0;vertical-align:baseline;white-space:nowrap}
+  table.mcalc2 td{padding:4px 10px;vertical-align:baseline;white-space:nowrap}
   table.stg{width:auto;border-collapse:collapse;font-size:13px;margin-top:2px}
-  table.stg td{padding:3px 14px 3px 0;vertical-align:baseline;border:0}
+  table.stg td{padding:4px 10px;vertical-align:baseline}
   table.stg td.st{color:var(--dim);font-size:12px;white-space:nowrap;text-align:right}
   table.stg td.val{font-family:var(--mono);white-space:normal;word-break:break-all}
   table.stg td.note{color:var(--dim);font-size:11.5px;white-space:normal;font-family:var(--mono)}
@@ -1009,14 +1010,17 @@ function renderMerge(info){
         `（乘积 ≡ lc<sup>-1</sup>·f）。下面每一块是一个最终因子，列出它由上一层哪几个乘起来。`+
         `<div style="margin-top:4px">首一化只做了<b>一次</b>、而且是对 <b>f 整体</b>做的：`+
         `取 F = lc(f)<sup>-1</sup>·f (mod p<sup>N</sup>)，F 首一 ⇒ 它的每个因子 u<sub>i</sub>、`+
-        `û<sub>i</sub> <b>本来就都是首一的</b>（提升前后都首一，提升不改变这一点）。`+
-        `真正不首一的是最终因子 <b>g 自己</b>：若 lc(g) ≠ 1，那么与 g 对应的就是 g/lc(g)，`+
-        `分数（以及 mod p<sup>N</sup> 下那个巨大整数）就是从这里来的。</div>`+
-        `<div style="margin-top:4px">式子里的乘数是 <b>lc(rem)</b> —— 剥掉先前已找到的因子后、`+
+        `û<sub>i</sub> <b>本来就都是首一的</b>（提升前后都首一，提升不改变这一点）。</div>`+
+        `<div style="margin-top:4px">每块里的乘数是 <b>lc(rem)</b> —— 剥掉先前已找到的因子后、`+
         `<b>当时剩余待分解多项式</b>的首项系数（不是原多项式的 lc = ${bz.__lcRad}）。`+
-        `之所以用它：真因子 g 必有 lc(g) | lc(rem)，而 ∏û = g / lc(g)，`+
-        `所以 lc(rem)·∏û = (lc(rem)/lc(g))·g 一定是整系数且被 Mignotte 界控住，`+
-        `多出的倍数最后当 content 除掉。</div>`)+
+        `算法<b>只知道 lc(rem)</b>：真因子 g 必有 lc(g) | lc(rem)，所以 lc(rem)·∏û 一定是整系数`+
+        `（= (lc(rem)/lc(g))·g），且被 Mignotte 界控住 —— 但 lc(g) 究竟是 lc(rem) 的<b>哪个约数</b>，`+
+        `事先并不知道。</div>`+
+        `<div style="margin-top:4px">所以每块的计算顺序是：`+
+        `<b>取子集 → 乘 lc(rem) → 除掉 content → 这才得到 g</b>，`+
+        `而 lc(g) = lc(rem)/content 是<b>除完之后才浮现</b>的。`+
+        `块末那行「∏û = g/lc(g)」是<b>事后解释</b>（说明 û 的巨大系数其实是个分母为 lc(g) 的分数），`+
+        `不是推导的依据 —— 否则就成了用答案解释过程。</div>`)+
     `</div>`;
 
   /* lc(rem) 的递降过程（按发现顺序），解释每块里的乘数为何各不相同 */
@@ -1101,47 +1105,50 @@ function renderMerge(info){
       const row=(st,val,note)=>{ h+=`<tr><td class="st">${st}</td><td class="val">${val}</td>`+
         `<td class="note">${note||``}</td></tr>`; };
 
-      /* ⑤.1 取的子集：④ 里挑出的这 n 个之积 */
+      /* 计算顺序：取子集 → ×lc(rem) → ÷content 得到 g → 试除；最后才回头解释 û 是什么 */
       const dot2=` <span class="arrow">·</span> `;
-      row(`⑤.1 从 ④ 取子集`,
+      row(`1. 从 ④ 取子集`,
           (n===1 ? `${lbl} = ${polyHTML(puS)}`
                  : c.ids.map(i=>`<span class="poly">${polyParen(A.sym(us[i]))}</span>`).join(dot2)+
                    ` <span class="arrow">=</span> ${polyHTML(puS)}`),
-          `<b>首一</b>；`+
-          `对 ${p} 取模就是 ③ 里的 `+
-          c.ids.map(i=>`u<sub>${i}</sub> = <span class="poly">${polyParen(modp[i].map(BigInt))}</span>`)
-               .join(`，`));
+          `<b>首一</b>；对 ${p} 取模就是 ③ 里的 `+
+          c.ids.map(i=>`u<sub>${i}</sub> = <span class="poly">${polyParen(modp[i].map(BigInt))}</span>`).join(`，`));
 
       if(Z.eq(c.factor,puS)){
-        row(`⑤.2 它就是因子 g`, `g = ${polyHTML(c.factor)}`,
-            `g 恰好首一（lc(g) = 1）且本原`+
-            (c.lcUsed===1n?``:`；× lc(rem) = ${c.lcUsed} 与 ÷ content = ${c.lcUsed} 抵消`));
+        row(`2. 它就是因子 g`, `g = ${polyHTML(c.factor)}`,
+            `lc(g) = 1（本身首一且本原）`+
+            (c.lcUsed===1n?``:`；× lc(rem) = ${c.lcUsed} 与 ÷ content = ${c.lcUsed} 恰好抵消`));
+        row(`3. 试除`, `<span class="ok">${polyHTML(c.factor)} 在 Z[x] 中整除 f ✓</span>`, `确认是真因子 g`);
       } else {
+        let k=2;
+        if(c.lcUsed!==1n)
+          row(`${k++}. × lc(rem) = ${c.lcUsed}`,
+              `<span class="arrow">≡</span> ${polyHTML(c.raw)}`,
+              `(mod ${p}<sup>${N}</sup>，对称代表元 |系数| ≤ ${M/2n})；`+
+              `<b>系数突然变小</b>就是"这个子集可能是真因子"的信号`);
+        else
+          row(`${k++}. 取对称代表元`, `= ${polyHTML(c.raw)}`, `|系数| ≤ ${M/2n}`);
+        if(cont!==1n)
+          row(`${k++}. ÷ content = ${cont}`, `= ${polyHTML(c.factor)} <span class="dim">= g</span>`,
+              `content = 各系数的 gcd；除完才<b>第一次看到</b> g，也才知道 lc(g) = ${lcg}`);
+        row(`${k++}. 试除`, `<span class="ok">${polyHTML(c.factor)} 在 Z[x] 中整除 f ✓</span>`, `确认是真因子 g`);
+        /* 事后解释：û 作为有理系数多项式是什么 —— 分母是此刻才知道的 lc(g) */
         if(lcg!==1n){
-          /* ③ 解读：û 在 Q 上等于 g / lc(g) —— 分母的来处 */
-          let j=0; for(let k=0;k<puS.length;k++) if(babs(puS[k]||0n)>babs(puS[j]||0n)) j=k;
-          const v=puS[j]||0n, a=c.factor[j]||0n;
-          let note=`因子 g = ${polyHTML(c.factor)} <b>本身不首一</b>（lc(g) = ${lcg}），`+
-                   `把它首一化才出现分母 ${lcg}`;
+          let jj=0; for(let t=0;t<puS.length;t++) if(babs(puS[t]||0n)>babs(puS[jj]||0n)) jj=t;
+          const v=puS[jj]||0n, a=c.factor[jj]||0n;
+          let note=`分母 ${lcg} = lc(g) = lc(rem) / content = ${c.lcUsed} / ${cont}`+
+                   `<br><b>事先并不知道是 ${lcg}</b>：只知道它是 lc(rem) = ${c.lcUsed} 的某个约数，`+
+                   `具体是哪个，要等上面 content 除完才浮现`;
           if(v!==0n && (lcg*v-a)%M===0n){
             const q=(lcg*v-a)/M, gg=bgcd(babs(a),lcg)||1n;
-            note+=`；对上 ⑤.1：x<sup>${j}</sup> 项 ${lcg} × (${v}) = (${a}) `+
+            note+=`<br>验算 x<sup>${jj}</sup> 项：${lcg} × (${v}) = (${a}) `+
               `${q<0n?`−`:`+`} ${babs(q)===1n?``:`${babs(q)} × `}${p}<sup>${N}</sup>`+
               ` ⇒ ${v} ≡ ${a/gg}${lcg/gg===1n?``:`/${lcg/gg}`}`;
           }
-          row(`⑤.2 它在 Q 上其实是`, `${lbl} = ${ratPolyHTML(c.factor,lcg)} = g / lc(g)`, note);
-        } else {
-          row(`⑤.2 已是整系数`, `${lbl} = ${polyHTML(puS)}`, `lc(g) = 1，无分母`);
+          row(`事后解释：${n===1?`û`:`∏û`} 是什么<br><span class="dim">（不参与推导）</span>`,
+              `${lbl} = ${ratPolyHTML(c.factor,lcg)} = g / lc(g)`, note);
         }
-        if(c.lcUsed!==1n)
-          row(`⑤.3 × lc(rem) = ${c.lcUsed}`, `= ${polyHTML(c.raw)}`,
-              lcg!==1n?`清掉分母：${c.lcUsed} × (a/${lcg}) 成整数`:`只是放大 ${c.lcUsed} 倍`);
-        else if(!Z.eq(c.raw,puS)) row(`⑤.3 取对称代表元`, `= ${polyHTML(c.raw)}`, `|系数| ≤ ${M/2n}`);
-        if(cont!==1n)
-          row(`⑤.4 ÷ content = ${cont}`, `= ${polyHTML(c.factor)}`,
-              `${cont} = lc(rem)/lc(g) = ${c.lcUsed}/${lcg}`);
       }
-      row(`⑤.5 试除`, `<span class="ok">${polyHTML(c.factor)} 在 Z[x] 中整除 f ✓</span>`, `确认是真因子 g`);
       h+=`</table></div>`;
     }
     h+=`</div>`;
@@ -1258,9 +1265,9 @@ $("lineRep").onchange=()=>{ if(LAST) renderLineage(LAST); };
 $("chkAllPrec").onchange=()=>{ if(LAST) renderLineage(LAST); };
 
 /* ---- 分组配色：让 uᵢ / ûᵢ / Z[x] 因子的归属一眼可见 ---- */
-const GCOL=['#6ea8fe','#5ad19a','#f0c26b','#f08a8a','#c58af9','#7fd7e8',
-            '#e88ab8','#a7d97a','#d9a06b','#8fa0f0','#63c9a8','#cfd06b',
-            '#f0a06b','#9ad1f0','#d18ac5','#b0d18a'];
+const GCOL=['#1a5fd0','#0e7a45','#a05a00','#c0271f','#7b3fa0','#0e6f86',
+            '#a83b78','#4a7a10','#8a5a2b','#3b46a8','#0f7a6e','#7a6a0f',
+            '#a34a0b','#1d6b9e','#8a3fa0','#4f7328'];
 const gcol=i=>GCOL[i%GCOL.length];
 /* 多项式最大系数的十进制位数，用来判断"系数是否突然变小" */
 function bigLen(a){ let m=0n; for(const c of (a||[])){ const b=babs(c); if(b>m) m=b; }
