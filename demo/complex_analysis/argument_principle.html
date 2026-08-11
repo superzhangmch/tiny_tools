@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>辐角原理：画一条回路，看像曲线绕原点几圈</title>
+<style>
+  body { margin: 0; background: #fff; color: #222; overflow: hidden;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  #cv { display: block; cursor: crosshair; }
+  button { padding: 2px 9px; font-size: 12px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  .bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12px; margin: 3px 0; }
+  .hint { color: #666; font-size: 11.5px; line-height: 1.5; }
+  #panel { position: absolute; top: 10px; left: 10px; z-index: 10; width: 600px; max-width: 94vw;
+    background: rgba(255,255,255,0.94); border: 1px solid #ccc; border-radius: 8px;
+    padding: 6px 10px 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
+  #fin { font-family: Menlo, Consolas, monospace; font-size: 13px; padding: 2px 6px; width: 150px; }
+  #err { color: #c0392b; font-family: Menlo, monospace; font-size: 12px; }
+  #live { font-family: Menlo, Consolas, monospace; font-size: 15px; font-weight: bold; }
+  #result { font-family: Menlo, Consolas, monospace; font-size: 12px; line-height: 1.55; }
+  #result table { border-collapse: collapse; }
+  #result td, #result th { padding: 1px 8px; border-bottom: 1px solid #eee; font-weight: normal; text-align: left; }
+  .ok { color: #1a7f37; font-weight: bold; } .warn { color: #b7791f; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <div class="bar">
+    f(z) = <input type="text" id="fin" value="(z^2-1)/z">
+    <button id="go" style="font-weight:bold">应用</button>
+    预设:
+    <button data-f="z">z</button>
+    <button data-f="z^2">z²</button>
+    <button data-f="(z^2-1)/z">(z²−1)/z</button>
+    <button data-f="(z-1)^3/(z+1)^2">(z−1)³/(z+1)²</button>
+    <button data-f="tan(z)">tan z</button>
+    <button data-f="exp(z)">eᶻ（无零无极）</button>
+    <button id="clearPath">清除</button>
+    <span id="err"></span>
+  </div>
+  <div class="bar">
+    <span id="live">Δarg = 0.000 rad　＝ 0.000 圈</span>
+  </div>
+  <div class="hint">
+    <b>在左半屏（z 平面）手绘曲线</b>，右半屏<b>逐笔</b>画出像曲线 w = f(z)，并实时累计像的辐角变化——
+    圈数为<b>连续实测值</b>（画多少算多少，不取整）。× = 极点，○ = 零点（程序自测）。
+    像曲线每绕原点一圈 = Δarg 走满 2π。<b>辐角原理</b>：闭合回路的圈数 = Σ(零点阶×绕数) − Σ(极点阶×绕数)。
+    试试：绕一个零点画圈(右边绕原点 1 圈)；绕三重零点(3 圈)；把零点和极点一起圈进去(抵消)；eᶻ 怎么画都绕不出一圈。
+  </div>
+  <div id="result"></div>
+</div>
+<canvas id="cv"></canvas>
+
+<script>
+// ================= 复数运算 & 表达式编译器（无依赖, 供测试提取） =================
+'use strict';
+const CX = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1]],
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1]],
+  mul: (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]],
+  div: (a, b) => { const d = b[0] * b[0] + b[1] * b[1];
+    return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; },
+  exp: a => { const e = Math.exp(a[0]); return [e * Math.cos(a[1]), e * Math.sin(a[1])]; },
+  log: a => [Math.log(Math.hypot(a[0], a[1])), Math.atan2(a[1], a[0])],
+  sqrt: a => { const m = Math.sqrt(Math.hypot(a[0], a[1])), t = Math.atan2(a[1], a[0]) / 2;
+    return [m * Math.cos(t), m * Math.sin(t)]; },
+  sin: a => [Math.sin(a[0]) * Math.cosh(a[1]), Math.cos(a[0]) * Math.sinh(a[1])],
+  cos: a => [Math.cos(a[0]) * Math.cosh(a[1]), -Math.sin(a[0]) * Math.sinh(a[1])],
+  sinh: a => [Math.sinh(a[0]) * Math.cos(a[1]), Math.cosh(a[0]) * Math.sin(a[1])],
+  cosh: a => [Math.cosh(a[0]) * Math.cos(a[1]), Math.sinh(a[0]) * Math.sin(a[1])],
+  tan: a => CX.div(CX.sin(a), CX.cos(a)),
+  pow: (a, b) => {          // a^b = exp(b·log a)
+    if (a[0] === 0 && a[1] === 0) return (b[0] > 0) ? [0, 0] : [Infinity, 0];
+    return CX.exp(CX.mul(b, CX.log(a)));
+  },
+  ipow: (a, n) => {          // 整数幂, 精确快速
+    if (n === 0) return [1, 0];
+    let neg = n < 0; n = Math.abs(n);
+    let r = [1, 0], base = a;
+    while (n) { if (n & 1) r = CX.mul(r, base); base = CX.mul(base, base); n >>= 1; }
+    return neg ? CX.div([1, 0], r) : r;
+  },
+  gamma: z => {              // Lanczos 近似 (g=7), Re<0.5 用反射公式
+    if (z[0] < 0.5) {
+      const s = CX.sin([Math.PI * z[0], Math.PI * z[1]]);
+      return CX.div([Math.PI, 0], CX.mul(s, CX.gamma([1 - z[0], -z[1]])));
+    }
+    const P = [0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+      771.32342877765313, -176.61502916214059, 12.507343278686905,
+      -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    const w = [z[0] - 1, z[1]];
+    let x = [P[0], 0];
+    for (let i = 1; i < 9; i++) x = CX.add(x, CX.div([P[i], 0], [w[0] + i, w[1]]));
+    const t = [w[0] + 7.5, w[1]];
+    const r = CX.mul(CX.pow(t, [w[0] + 0.5, w[1]]), CX.exp([-t[0], -t[1]]));
+    return CX.mul([Math.sqrt(2 * Math.PI), 0], CX.mul(r, x));
+  },
+  zeta: s => {               // Euler–Maclaurin; Re<0.5 用函数方程
+    if (Math.abs(s[0]) < 1e-8 && Math.abs(s[1]) < 1e-8) {
+      // s=0 处函数方程是 0·∞, 用 Laurent 展开 ζ(s) = -1/2 - ln(2π)/2·s + O(s²)
+      const c = 0.9189385332046727;
+      return [-0.5 - c * s[0], -c * s[1]];
+    }
+    if (s[0] < 0.5) {
+      const s1 = [1 - s[0], -s[1]];
+      return CX.mul(
+        CX.mul(CX.pow([2, 0], s), CX.pow([Math.PI, 0], [s[0] - 1, s[1]])),
+        CX.mul(CX.mul(CX.sin([s[0] * Math.PI / 2, s[1] * Math.PI / 2]), CX.gamma(s1)),
+               CX.zeta(s1)));
+    }
+    const N = Math.max(12, Math.ceil(9 + 0.9 * Math.abs(s[1])));
+    let sum = [0, 0];
+    for (let n = 1; n < N; n++) {
+      const ln = Math.log(n);
+      sum = CX.add(sum, CX.exp([-s[0] * ln, -s[1] * ln]));
+    }
+    const lnN = Math.log(N);
+    const Nms = CX.exp([-s[0] * lnN, -s[1] * lnN]);          // N^{-s}
+    sum = CX.add(sum, CX.div([Nms[0] * N, Nms[1] * N], [s[0] - 1, s[1]]));  // N^{1-s}/(s-1)
+    sum = CX.add(sum, [Nms[0] / 2, Nms[1] / 2]);             // N^{-s}/2
+    const B = [1 / 6, -1 / 30, 1 / 42, -1 / 30, 5 / 66, -691 / 2730, 7 / 6];
+    let poch = s, fact = 2, Npow = [Nms[0] / N, Nms[1] / N]; // N^{-s-1}
+    for (let k = 1; k <= 7; k++) {
+      sum = CX.add(sum, CX.mul([B[k - 1] / fact, 0], CX.mul(poch, Npow)));
+      poch = CX.mul(poch, CX.mul([s[0] + 2 * k - 1, s[1]], [s[0] + 2 * k, s[1]]));
+      fact *= (2 * k + 1) * (2 * k + 2);
+      Npow = [Npow[0] / (N * N), Npow[1] / (N * N)];
+    }
+    return sum;
+  },
+};
+
+// f(z) 表达式 -> 函数 (zr, zi) => [re, im]
+// 语法: + - * / ^, 括号, 数字, z, i, pi, e, 函数 sin cos tan exp log sqrt sinh cosh
+function compileExpr(src) {
+  // 容错预处理: 数学排版字符 → ASCII; 剥掉 "f(z) ≈ " 前缀和截断省略号 "+ …"
+  src = src.replace(/^\s*f\(z\)\s*[≈=]\s*/, '')
+           .replace(/[−–]/g, '-').replace(/[·×]/g, '*')
+           .replace(/\s*\+\s*(…|\.\.\.)/g, '').replace(/…/g, '');
+  const toks = [];
+  const re = /\s*(\d+\.?\d*|[a-zA-Z_]+|\*\*|[-+*/^(),])/y;
+  let pos = 0;
+  while (pos < src.length) {
+    re.lastIndex = pos;
+    const m = re.exec(src);
+    if (!m) throw new Error('无法识别: "' + src.slice(pos, pos + 8) + '"');
+    toks.push(m[1] === '**' ? '^' : m[1]);
+    pos = re.lastIndex;
+  }
+  let p = 0;
+  const peek = () => toks[p], eat = t => {
+    if (toks[p] !== t) throw new Error(`期望 ${t}, 遇到 ${toks[p] ?? '结尾'}`);
+    p++;
+  };
+  const FN = { sin: 1, cos: 1, tan: 1, exp: 1, log: 1, sqrt: 1, sinh: 1, cosh: 1, gamma: 1, zeta: 1 };
+  const CONST = { i: [0, 1], pi: [Math.PI, 0], e: [Math.E, 0] };
+  // 节点: {f: (zr,zi)=>[re,im], hasZ: bool, cval: 常量值或null}
+  function mk(f, hasZ, kids) {
+    if (!hasZ) { const v = f(0, 0); return { f: () => v, hasZ: false, cval: v }; }
+    return { f, hasZ: true, cval: null };
+  }
+  function atom() {
+    const t = peek();
+    if (t === '(') { eat('('); const e = expr(); eat(')'); return e; }
+    if (t === '-') { eat('-'); const a = atom2(); return mk((zr, zi) => { const v = a.f(zr, zi); return [-v[0], -v[1]]; }, a.hasZ); }
+    if (t === '+') { eat('+'); return atom2(); }
+    if (/^\d/.test(t)) { eat(t); const v = [parseFloat(t), 0]; return mk(() => v, false); }
+    if (t === 'z') { eat('z'); return { f: (zr, zi) => [zr, zi], hasZ: true, cval: null }; }
+    if (t in CONST) { eat(t); const v = CONST[t]; return mk(() => v, false); }
+    if (t in FN) {
+      eat(t); eat('(');
+      const a = expr(); eat(')');
+      const fn = CX[t];
+      return mk((zr, zi) => fn(a.f(zr, zi)), a.hasZ);
+    }
+    throw new Error('意外的 ' + (t ?? '结尾'));
+  }
+  function atom2() { return power(); }   // 一元负号作用于整个幂
+  function power() {
+    const b = atom();
+    if (peek() === '^') {
+      eat('^');
+      const e = power();               // 右结合
+      if (!e.hasZ) {
+        const ev = e.f(0, 0);
+        if (ev[1] === 0 && Number.isInteger(ev[0]) && Math.abs(ev[0]) <= 99) {
+          const n = ev[0];
+          return mk((zr, zi) => CX.ipow(b.f(zr, zi), n), b.hasZ);
+        }
+      }
+      return mk((zr, zi) => CX.pow(b.f(zr, zi), e.f(zr, zi)), b.hasZ || e.hasZ);
+    }
+    return b;
+  }
+  function term() {
+    let a = power();
+    while (true) {
+      const t = peek();
+      let op;
+      if (t === '*' || t === '/') { op = t; eat(t); }
+      else if (t !== undefined && t !== ')' && t !== ',' && !'+-^'.includes(t)) op = '*'; // 隐式乘法: 2z, 0.079i, 3sin(z), 2(z+1)
+      else break;
+      const b = power();
+      const fn = op === '/' ? CX.div : CX.mul;
+      const aa = a, bb = b;
+      a = mk((zr, zi) => fn(aa.f(zr, zi), bb.f(zr, zi)), aa.hasZ || bb.hasZ);
+    }
+    return a;
+  }
+  function expr() {
+    let a = term();
+    while (peek() === '+' || peek() === '-') {
+      const op = peek(); eat(op);
+      const b = term();
+      const fn = op === '+' ? CX.add : CX.sub;
+      const aa = a, bb = b;
+      a = mk((zr, zi) => fn(aa.f(zr, zi), bb.f(zr, zi)), aa.hasZ || bb.hasZ);
+    }
+    return a;
+  }
+  const root = expr();
+  if (p !== toks.length) throw new Error('多余的 ' + toks[p]);
+  return (zr, zi) => root.f(zr, zi);
+}
+// ================= 编译器结束 =================
+
+// ================= 核心（无 DOM, 供测试提取） =================
+const cdivA = (a, b) => { const d = b[0]*b[0]+b[1]*b[1]; return [(a[0]*b[0]+a[1]*b[1])/d, (a[1]*b[0]-a[0]*b[1])/d]; };
+// 安全倒数: f=∞ 处 1/f = 0 (而非 NaN), f=0 处 1/f = ∞ —— 零点探测用
+function recipF(F) {
+  return (x, y) => {
+    const v = F(x, y);
+    const d = v[0]*v[0] + v[1]*v[1];
+    if (!isFinite(d)) return [0, 0];
+    if (d === 0) return [Infinity, 0];
+    return [v[0]/d, -v[1]/d];
+  };
+}
+// 沿路径累计像的辐角变化(连续, 不取整)
+function argAccum(F, path) {
+  let tot = 0, prev = null;
+  for (const [x, y] of path) {
+    const v = F(x, y);
+    if (!isFinite(v[0]) || !isFinite(v[1])) { prev = null; continue; }
+    const a = Math.atan2(v[1], v[0]);
+    if (prev !== null) {
+      let d = a - prev;
+      if (d > Math.PI) d -= 2 * Math.PI;
+      if (d < -Math.PI) d += 2 * Math.PI;
+      tot += d;
+    }
+    prev = a;
+  }
+  return tot;
+}
+// 路径绕某点的实测绕数(连续)
+function windingRaw(pts, cx, cy) {
+  let tot = 0, prev = null;
+  for (const p of pts) {
+    const a = Math.atan2(p[1] - cy, p[0] - cx);
+    if (prev !== null) {
+      let d = a - prev;
+      if (d > Math.PI) d -= 2 * Math.PI;
+      if (d < -Math.PI) d += 2 * Math.PI;
+      tot += d;
+    }
+    prev = a;
+  }
+  return tot / (2 * Math.PI);
+}
+// 奇点探测(网格局部极大 + 对 1/f 的复 Newton 精化)
+function findPolesOf(f, R, grid = 150) {
+  const cand = [];
+  const h = 2 * R / grid, mag = [];
+  for (let iy = 0; iy <= grid; iy++) {
+    const row = [];
+    for (let ix = 0; ix <= grid; ix++) {
+      const v = f(-R + ix * h, -R + iy * h);
+      const m = Math.hypot(v[0], v[1]);
+      row.push(isFinite(m) ? m : 1e18);
+    }
+    mag.push(row);
+  }
+  for (let iy = 1; iy < grid; iy++)
+    for (let ix = 1; ix < grid; ix++) {
+      const m = mag[iy][ix];
+      if (m < 5) continue;
+      if (m >= mag[iy][ix-1] && m >= mag[iy][ix+1] && m >= mag[iy-1][ix] && m >= mag[iy+1][ix])
+        cand.push([-R + ix * h, -R + iy * h]);
+    }
+  const out = [];
+  for (let [x, y] of cand) {
+    const g = (a, b) => { const v = f(a, b); const d = v[0]*v[0]+v[1]*v[1];
+      if (!isFinite(d)) return [0, 0];
+      return [v[0]/d, -v[1]/d]; };
+    let ok = false;
+    for (let it = 0; it < 60; it++) {
+      const eps = 1e-6, g0 = g(x, y), gx = g(x + eps, y);
+      const dr = [(gx[0]-g0[0])/eps, (gx[1]-g0[1])/eps];
+      const d2 = dr[0]*dr[0] + dr[1]*dr[1];
+      if (d2 < 1e-30) break;
+      const sx = (g0[0]*dr[0] + g0[1]*dr[1]) / d2;
+      const sy = (g0[1]*dr[0] - g0[0]*dr[1]) / d2;
+      x -= sx; y -= sy;
+      if (Math.hypot(sx, sy) < 1e-10) { ok = true; break; }
+    }
+    if (!ok) continue;
+    if (Math.hypot(...g(x, y)) > 1e-4) continue;
+    if (Math.abs(x) > R || Math.abs(y) > R) continue;
+    if (out.some(p => Math.hypot(p[0]-x, p[1]-y) < 0.03)) continue;
+    out.push([x, y]);
+  }
+  return out;
+}
+// 实测某点的阶: 绕小圆一圈的 Δarg/2π (零点为 +m, 极点为 -m)
+function multAt(F, cx, cy, r = 0.02) {
+  const pts = [];
+  for (let k = 0; k <= 256; k++) {
+    const t = 2 * Math.PI * k / 256;
+    pts.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]);
+  }
+  return argAccum(F, pts) / (2 * Math.PI);
+}
+// ================= 核心结束 =================
+
+// ================= UI =================
+const cv = document.getElementById('cv'), g = cv.getContext('2d');
+let F = null, path = [], imgPts = [], cumArg = 0, prevA = null;
+let zeros = [], poles = [];
+let ZV = 2.5, WV = 4;   // WV 动态自适应像曲线
+
+function resize() { cv.width = innerWidth; cv.height = innerHeight; renderBG(); redrawAll(); }
+const half = () => cv.width / 2;
+function zw2px(x, y, right) {
+  const w = half(), h = cv.height;
+  const V = right ? WV : ZV;
+  const sc = Math.min(w, h) / 2 / V * 0.9;
+  return [(right ? w : 0) + w / 2 + x * sc, h / 2 - y * sc];
+}
+function px2z(px, py) {
+  const w = half(), h = cv.height;
+  const sc = Math.min(w, h) / 2 / ZV * 0.9;
+  return [(px - w / 2) / sc, -(py - h / 2) / sc];
+}
+function hsl2rgb(h, s, l) {
+  const f = n => {
+    const k = (n + h * 12) % 12;
+    const a = s * Math.min(l, 1 - l);
+    return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+  };
+  return [f(0), f(8), f(4)];
+}
+let bg = null;
+function renderBG() {
+  if (!F) return;
+  const S = 300;
+  const off = new OffscreenCanvas(S, S);
+  const og = off.getContext('2d');
+  const img = og.createImageData(S, S);
+  for (let py = 0; py < S; py++)
+    for (let px = 0; px < S; px++) {
+      const x = (px / (S - 1) * 2 - 1) * ZV;
+      const y = -(py / (S - 1) * 2 - 1) * ZV * (cv.height / half());
+      const v = F(x, y);
+      const m = Math.hypot(v[0], v[1]);
+      const hue = ((Math.atan2(v[1], v[0]) / (2 * Math.PI)) + 1) % 1;
+      let light = 0.9 - 0.3 / (1 + m);
+      light += 0.08 * Math.min(1, Math.log(1 + m) / 6);
+      const c = hsl2rgb(hue, 0.35, Math.min(0.97, light));
+      const i = (py * S + px) * 4;
+      img.data[i] = c[0]; img.data[i+1] = c[1]; img.data[i+2] = c[2]; img.data[i+3] = 255;
+    }
+  og.putImageData(img, 0, 0);
+  bg = off;
+}
+function axesPane(right) {
+  const [ox, oy] = zw2px(0, 0, right);
+  g.strokeStyle = right ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.25)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(right ? half() : 0, oy); g.lineTo(right ? cv.width : half(), oy);
+  g.moveTo(ox, 0); g.lineTo(ox, cv.height);
+  g.stroke();
+  if (right) {          // 原点十字加粗——被绕的靶心
+    g.strokeStyle = '#c0392b'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(ox - 8, oy); g.lineTo(ox + 8, oy);
+    g.moveTo(ox, oy - 8); g.lineTo(ox, oy + 8); g.stroke();
+  }
+}
+function fitWV() {
+  const mags = [];
+  for (const v of imgPts) if (v) mags.push(Math.hypot(v[0], v[1]));
+  if (mags.length < 4) { WV = 4; return; }
+  mags.sort((a, b) => a - b);
+  const q = mags[Math.floor(mags.length * 0.98)];
+  WV = Math.max(q * 1.25, mags[mags.length - 1] * 0.05, 1e-6);
+}
+function redrawAll() {
+  fitWV();
+  g.clearRect(0, 0, cv.width, cv.height);
+  if (bg) g.drawImage(bg, 0, 0, half(), cv.height);
+  g.strokeStyle = '#999';
+  g.beginPath(); g.moveTo(half(), 0); g.lineTo(half(), cv.height); g.stroke();
+  axesPane(false); axesPane(true);
+  g.fillStyle = '#555'; g.font = '13px Menlo';
+  g.fillText('z 平面(在这里画)', 12, cv.height - 12);
+  g.fillText('w = f(z) 像曲线　(视野半宽 ' + WV.toPrecision(3) + ', 自动缩放)', half() + 12, cv.height - 12);
+  // 零点○ 极点×
+  for (const [x, y] of zeros) {
+    const [px, py] = zw2px(x, y, false);
+    g.strokeStyle = '#1a7f37'; g.lineWidth = 2;
+    g.beginPath(); g.arc(px, py, 6, 0, 2 * Math.PI); g.stroke();
+  }
+  for (const [x, y] of poles) {
+    const [px, py] = zw2px(x, y, false);
+    g.strokeStyle = '#c0392b'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(px-5, py-5); g.lineTo(px+5, py+5);
+    g.moveTo(px-5, py+5); g.lineTo(px+5, py-5); g.stroke();
+  }
+  drawCurves();
+}
+function drawCurves() {
+  // 按进度同色渐变: 左路径与右像曲线一一对应
+  const n = path.length;
+  for (let i = 1; i < n; i++) {
+    const hue = (i / Math.max(n, 1)) * 300;
+    g.strokeStyle = `hsl(${hue}, 75%, 45%)`;
+    g.lineWidth = 2.2;
+    const [ax, ay] = zw2px(path[i-1][0], path[i-1][1], false);
+    const [bx, by] = zw2px(path[i][0], path[i][1], false);
+    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+    const u = imgPts[i-1], v = imgPts[i];
+    if (u && v) {
+      const [cx2, cy2] = zw2px(u[0], u[1], true);
+      const [dx, dy] = zw2px(v[0], v[1], true);
+      g.beginPath(); g.moveTo(cx2, cy2); g.lineTo(dx, dy); g.stroke();
+    }
+  }
+}
+function liveShow() {
+  document.getElementById('live').textContent =
+    `Δarg = ${cumArg.toFixed(3)} rad　＝ ${(cumArg / (2 * Math.PI)).toFixed(3)} 圈`;
+}
+function addPoint(p) {
+  const v = F(p[0], p[1]);
+  const bad = !isFinite(v[0]) || !isFinite(v[1]) || Math.hypot(v[0], v[1]) > 1e9;
+  path.push(p);
+  imgPts.push(bad ? null : v);
+  if (!bad) {
+    const a = Math.atan2(v[1], v[0]);
+    if (prevA !== null) {
+      let d = a - prevA;
+      if (d > Math.PI) d -= 2 * Math.PI;
+      if (d < -Math.PI) d += 2 * Math.PI;
+      cumArg += d;
+    }
+    prevA = a;
+  } else prevA = null;
+  liveShow();
+}
+
+const fmt2 = x => (x >= 0 ? '+' : '') + x.toFixed(2);
+function settle() {
+  const res = document.getElementById('result');
+  if (path.length < 8) { res.innerHTML = ''; return; }
+  const a0 = path[0], a1 = path[path.length - 1];
+  const gap = Math.hypot(a1[0] - a0[0], a1[1] - a0[1]);
+  let rows = '', acc = 0;
+  for (const [x, y] of zeros) {
+    const m = multAt(F, x, y), w = windingRaw(path, x, y);
+    acc += m * w;
+    rows += `<tr><td>○ 零点 ${x.toFixed(2)}${y >= 0 ? '+' : '−'}${Math.abs(y).toFixed(2)}i</td><td>${fmt2(m)}</td><td>${w.toFixed(3)}</td></tr>`;
+  }
+  for (const [x, y] of poles) {
+    const m = multAt(F, x, y), w = windingRaw(path, x, y);
+    acc += m * w;
+    rows += `<tr><td>× 极点 ${x.toFixed(2)}${y >= 0 ? '+' : '−'}${Math.abs(y).toFixed(2)}i</td><td>${fmt2(m)}</td><td>${w.toFixed(3)}</td></tr>`;
+  }
+  const lhs = cumArg / (2 * Math.PI);
+  const ok = Math.abs(lhs - acc) < 0.05;
+  res.innerHTML =
+    (rows ? `<table><tr><th>零/极点(实测阶)</th><th>阶</th><th>你的回路绕数</th></tr>${rows}</table>` : '<div class="hint">视野内无零点/极点</div>') +
+    `<div>Σ(阶 × 绕数) = <b>${acc.toFixed(3)}</b>　vs　像绕原点 = <b>${lhs.toFixed(3)}</b> 圈` +
+    ` <span class="${ok ? 'ok' : 'warn'}">${ok ? '✔ 辐角原理' : (gap > 0.05 ? '(未闭合, 两侧只近似相等)' : '⚠ 偏差偏大(路径贴奇点?)')}</span></div>` +
+    (gap > 0.05 ? `<div class="hint">路径缺口 ${gap.toFixed(3)}——闭合后两侧精确相等</div>` : '');
+}
+
+let drawing = false;
+cv.addEventListener('pointerdown', e => {
+  if (e.clientX > half()) return;
+  drawing = true;
+  path = []; imgPts = []; cumArg = 0; prevA = null;
+  document.getElementById('result').innerHTML = '';
+  addPoint(px2z(e.clientX, e.clientY));
+  redrawAll();
+});
+cv.addEventListener('pointermove', e => {
+  if (!drawing || e.clientX > half()) return;
+  addPoint(px2z(e.clientX, e.clientY));
+  redrawAll();
+});
+addEventListener('pointerup', () => {
+  if (!drawing) return;
+  drawing = false;
+  settle();
+});
+document.getElementById('clearPath').addEventListener('click', () => {
+  path = []; imgPts = []; cumArg = 0; prevA = null;
+  document.getElementById('result').innerHTML = '';
+  liveShow(); redrawAll();
+});
+function apply() {
+  const err = document.getElementById('err');
+  err.textContent = '';
+  try { F = compileExpr(document.getElementById('fin').value); }
+  catch (e) { err.textContent = e.message; return; }
+  poles = findPolesOf(F, ZV);
+  zeros = findPolesOf(recipF(F), ZV);
+  path = []; imgPts = []; cumArg = 0; prevA = null;
+  document.getElementById('result').innerHTML = '';
+  liveShow();
+  renderBG(); redrawAll();
+}
+document.getElementById('go').addEventListener('click', apply);
+document.getElementById('fin').addEventListener('keydown', e => { if (e.key === 'Enter') apply(); });
+document.getElementById('panel').addEventListener('click', e => {
+  const f = e.target.dataset && e.target.dataset.f;
+  if (!f) return;
+  document.getElementById('fin').value = f;
+  apply();
+});
+addEventListener('resize', resize);
+resize();
+apply();
+</script>
+</body>
+</html>
