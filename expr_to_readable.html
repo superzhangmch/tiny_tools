@@ -23,6 +23,14 @@
 	#renderedMath {
 	    white-space: pre-wrap;
 	}
+	#delims {
+	    display: inline-block;
+	    background-color: #e8e8e8;
+	    padding: 4px 10px;
+	    border-radius: 4px;
+	    margin-left: 8px;
+	}
+	#delims label { margin-right: 6px; }
     </style>
     <script>
 	// startup.typeset=false: 不自动扫描全页（否则定界符控件里的 "$$…$$" 标签文字会被当公式渲染），
@@ -38,7 +46,7 @@
     <button id="copyButton">copy transformed expr</button>
     <label><input type="checkbox" id="stripText" checked> 剥离 \text{…}</label>
     <span id="delims">
-	| 定界符:
+	定界符:
 	<label><input type="checkbox" data-open="$$" data-close="$$" checked> $$…$$</label>
 	<label><input type="checkbox" data-open="$" data-close="$" checked> $…$</label>
 	<label><input type="checkbox" data-open="\(" data-close="\)" checked> \(…\)</label>
