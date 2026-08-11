@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>解析延拓：种子小圆 + Padé 越墙（|f| 双曲面对账）</title>
+<style>
+  body { margin: 0; background: #fff; color: #222; overflow: hidden;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  button { padding: 2px 9px; font-size: 12px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  .bar { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12px; margin: 3px 0; }
+  .hint { color: #666; font-size: 11.5px; line-height: 1.5; }
+  #panel { position: absolute; top: 10px; left: 10px; z-index: 10; width: 600px; max-width: 94vw;
+    background: rgba(255,255,255,0.94); border: 1px solid #ccc; border-radius: 8px;
+    padding: 6px 10px 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.18); }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  #result { font-family: Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; }
+  .ok { color: #1a7f37; font-weight: bold; } .warn { color: #b7791f; font-weight: bold; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <div class="bar">
+    f(z) = <input type="text" id="fin" value="1/(1-z)"
+      style="font-family:Menlo,monospace;font-size:13px;padding:2px 6px;width:150px">
+    <button id="go" style="font-weight:bold">应用</button>
+    <span id="err" style="color:#c0392b;font-family:Menlo,monospace;font-size:12px"></span>
+    预设:
+    <button data-f="exp(z)">eᶻ</button>
+    <button data-f="1/(1-z)">1/(1−z)</button>
+    <button data-f="log(1+z)">log(1+z)</button>
+    <button data-f="sqrt(1+z)">√(1+z)</button>
+    <button data-f="1/(1+z^2)">1/(1+z²)</button>
+    <span class="mono" id="fShow"></span>
+  </div>
+  <div class="bar">
+    <label><input type="checkbox" id="showTrue" checked>真值面</label>
+    <label><input type="checkbox" id="showTaylor" checked>泰勒面</label>
+    <label><input type="checkbox" id="showPade" checked>Padé面</label>
+    真值面透明度: <input type="range" id="topa" min="0" max="100" value="65" style="width:70px;vertical-align:middle">
+    图形大小: <input type="range" id="gsize" min="25" max="200" value="100" style="width:70px;vertical-align:middle"><span id="gsizeShow" class="hint">100%</span>
+    上下位置: <input type="range" id="glift" min="-300" max="300" value="-80" style="width:70px;vertical-align:middle"><span id="gliftShow" class="hint">-0.8</span>
+    <span id="stat" class="mono"></span>
+  </div>
+  <div class="hint">
+    <b>三张曲面</b>：深蓝 = 真函数 |f|；<b>橙 = 截断泰勒多项式 |T|</b>（数值 Cauchy 积分从种子圆算出的 2m+1 项）；
+    彩色 = <b>Padé 分式 |P/Q|</b>（与 T 前 2m 阶系数相同, 颜色 = 与真值偏差, <span style="color:#1a9d4b">绿吻合</span>→<span style="color:#c0392b">红失准</span>）。
+    <b>收敛盘内三皮合一；盘外泰勒面撞墙飞天（发散被截顶）, Padé 面继续贴真值</b>——这就是延拓的全部含义。
+    红色竖针 = Padé 自己找到的极点。<b>双击曲面</b>可在该点精确对账。
+    试试 log(1+z)：割线(z&lt;−1 的负实轴)上方一条红缝——枝切被极点链模拟，但多值性无法再现（见黎曼曲面页）。
+  </div>
+  <div id="result"></div>
+</div>
+<div id="miniBox" style="position:absolute;left:10px;bottom:10px;z-index:10;background:rgba(255,255,255,0.94);
+  border:1px solid #ccc;border-radius:8px;padding:6px 8px;box-shadow:0 2px 12px rgba(0,0,0,0.18)">
+  <div class="hint" style="margin-bottom:3px">种子选择：<b>按下定圆心，拖出半径</b>（单击只移圆心）</div>
+  <canvas id="mini" width="220" height="220" style="display:block;cursor:crosshair;border:1px solid #aaa"></canvas>
+  <div class="hint mono" id="miniInfo"></div>
+</div>
+<div id="seedBox" style="position:absolute;right:10px;bottom:10px;z-index:10;background:rgba(255,255,255,0.94);
+  border:1px solid #ccc;border-radius:8px;padding:6px 8px;box-shadow:0 2px 12px rgba(0,0,0,0.18);width:400px">
+  <div class="hint"><b>截断泰勒多项式</b>（数值 Cauchy 积分算出, Padé 恰好消费这 2m+1 项；w = z − 种子圆心）:</div>
+  <div id="taylorShow" class="mono" style="font-size:11px;line-height:1.5;max-height:84px;overflow-y:auto;
+    background:#fafafa;border:1px solid #ddd;padding:3px 6px;white-space:normal;word-break:break-all"></div>
+  <div class="hint" style="margin-top:3px"><b>Padé 分式</b>（与上式前 2m 阶系数精确相等, 但定义在全平面）:</div>
+  <div id="padeShow" class="mono" style="font-size:11px;line-height:1.5;max-height:110px;overflow-y:auto;
+    background:#fafafa;border:1px solid #ddd;padding:3px 6px;white-space:normal;word-break:break-all"></div>
+</div>
+<div id="loading" style="position:absolute;top:45%;width:100%;text-align:center">正在加载 three.js …（需联网）</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+
+<script>
+// ================= 复数运算 & 表达式编译器（无依赖, 供测试提取） =================
+'use strict';
+const CX = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1]],
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1]],
+  mul: (a, b) => [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]],
+  div: (a, b) => { const d = b[0] * b[0] + b[1] * b[1];
+    return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; },
+  exp: a => { const e = Math.exp(a[0]); return [e * Math.cos(a[1]), e * Math.sin(a[1])]; },
+  log: a => [Math.log(Math.hypot(a[0], a[1])), Math.atan2(a[1], a[0])],
+  sqrt: a => { const m = Math.sqrt(Math.hypot(a[0], a[1])), t = Math.atan2(a[1], a[0]) / 2;
+    return [m * Math.cos(t), m * Math.sin(t)]; },
+  sin: a => [Math.sin(a[0]) * Math.cosh(a[1]), Math.cos(a[0]) * Math.sinh(a[1])],
+  cos: a => [Math.cos(a[0]) * Math.cosh(a[1]), -Math.sin(a[0]) * Math.sinh(a[1])],
+  sinh: a => [Math.sinh(a[0]) * Math.cos(a[1]), Math.cosh(a[0]) * Math.sin(a[1])],
+  cosh: a => [Math.cosh(a[0]) * Math.cos(a[1]), Math.sinh(a[0]) * Math.sin(a[1])],
+  tan: a => CX.div(CX.sin(a), CX.cos(a)),
+  pow: (a, b) => {          // a^b = exp(b·log a)
+    if (a[0] === 0 && a[1] === 0) return (b[0] > 0) ? [0, 0] : [Infinity, 0];
+    return CX.exp(CX.mul(b, CX.log(a)));
+  },
+  ipow: (a, n) => {          // 整数幂, 精确快速
+    if (n === 0) return [1, 0];
+    let neg = n < 0; n = Math.abs(n);
+    let r = [1, 0], base = a;
+    while (n) { if (n & 1) r = CX.mul(r, base); base = CX.mul(base, base); n >>= 1; }
+    return neg ? CX.div([1, 0], r) : r;
+  },
+  gamma: z => {              // Lanczos 近似 (g=7), Re<0.5 用反射公式
+    if (z[0] < 0.5) {
+      const s = CX.sin([Math.PI * z[0], Math.PI * z[1]]);
+      return CX.div([Math.PI, 0], CX.mul(s, CX.gamma([1 - z[0], -z[1]])));
+    }
+    const P = [0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+      771.32342877765313, -176.61502916214059, 12.507343278686905,
+      -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+    const w = [z[0] - 1, z[1]];
+    let x = [P[0], 0];
+    for (let i = 1; i < 9; i++) x = CX.add(x, CX.div([P[i], 0], [w[0] + i, w[1]]));
+    const t = [w[0] + 7.5, w[1]];
+    const r = CX.mul(CX.pow(t, [w[0] + 0.5, w[1]]), CX.exp([-t[0], -t[1]]));
+    return CX.mul([Math.sqrt(2 * Math.PI), 0], CX.mul(r, x));
+  },
+  zeta: s => {               // Euler–Maclaurin; Re<0.5 用函数方程
+    if (Math.abs(s[0]) < 1e-8 && Math.abs(s[1]) < 1e-8) {
+      // s=0 处函数方程是 0·∞, 用 Laurent 展开 ζ(s) = -1/2 - ln(2π)/2·s + O(s²)
+      const c = 0.9189385332046727;
+      return [-0.5 - c * s[0], -c * s[1]];
+    }
+    if (s[0] < 0.5) {
+      const s1 = [1 - s[0], -s[1]];
+      return CX.mul(
+        CX.mul(CX.pow([2, 0], s), CX.pow([Math.PI, 0], [s[0] - 1, s[1]])),
+        CX.mul(CX.mul(CX.sin([s[0] * Math.PI / 2, s[1] * Math.PI / 2]), CX.gamma(s1)),
+               CX.zeta(s1)));
+    }
+    const N = Math.max(12, Math.ceil(9 + 0.9 * Math.abs(s[1])));
+    let sum = [0, 0];
+    for (let n = 1; n < N; n++) {
+      const ln = Math.log(n);
+      sum = CX.add(sum, CX.exp([-s[0] * ln, -s[1] * ln]));
+    }
+    const lnN = Math.log(N);
+    const Nms = CX.exp([-s[0] * lnN, -s[1] * lnN]);          // N^{-s}
+    sum = CX.add(sum, CX.div([Nms[0] * N, Nms[1] * N], [s[0] - 1, s[1]]));  // N^{1-s}/(s-1)
+    sum = CX.add(sum, [Nms[0] / 2, Nms[1] / 2]);             // N^{-s}/2
+    const B = [1 / 6, -1 / 30, 1 / 42, -1 / 30, 5 / 66, -691 / 2730, 7 / 6];
+    let poch = s, fact = 2, Npow = [Nms[0] / N, Nms[1] / N]; // N^{-s-1}
+    for (let k = 1; k <= 7; k++) {
+      sum = CX.add(sum, CX.mul([B[k - 1] / fact, 0], CX.mul(poch, Npow)));
+      poch = CX.mul(poch, CX.mul([s[0] + 2 * k - 1, s[1]], [s[0] + 2 * k, s[1]]));
+      fact *= (2 * k + 1) * (2 * k + 2);
+      Npow = [Npow[0] / (N * N), Npow[1] / (N * N)];
+    }
+    return sum;
+  },
+};
+
+// f(z) 表达式 -> 函数 (zr, zi) => [re, im]
+// 语法: + - * / ^, 括号, 数字, z, i, pi, e, 函数 sin cos tan exp log sqrt sinh cosh
+function compileExpr(src) {
+  // 容错预处理: 数学排版字符 → ASCII; 剥掉 "f(z) ≈ " 前缀和截断省略号 "+ …"
+  src = src.replace(/^\s*f\(z\)\s*[≈=]\s*/, '')
+           .replace(/[−–]/g, '-').replace(/[·×]/g, '*')
+           .replace(/\s*\+\s*(…|\.\.\.)/g, '').replace(/…/g, '');
+  const toks = [];
+  const re = /\s*(\d+\.?\d*|[a-zA-Z_]+|\*\*|[-+*/^(),])/y;
+  let pos = 0;
+  while (pos < src.length) {
+    re.lastIndex = pos;
+    const m = re.exec(src);
+    if (!m) throw new Error('无法识别: "' + src.slice(pos, pos + 8) + '"');
+    toks.push(m[1] === '**' ? '^' : m[1]);
+    pos = re.lastIndex;
+  }
+  let p = 0;
+  const peek = () => toks[p], eat = t => {
+    if (toks[p] !== t) throw new Error(`期望 ${t}, 遇到 ${toks[p] ?? '结尾'}`);
+    p++;
+  };
+  const FN = { sin: 1, cos: 1, tan: 1, exp: 1, log: 1, sqrt: 1, sinh: 1, cosh: 1, gamma: 1, zeta: 1 };
+  const CONST = { i: [0, 1], pi: [Math.PI, 0], e: [Math.E, 0] };
+  // 节点: {f: (zr,zi)=>[re,im], hasZ: bool, cval: 常量值或null}
+  function mk(f, hasZ, kids) {
+    if (!hasZ) { const v = f(0, 0); return { f: () => v, hasZ: false, cval: v }; }
+    return { f, hasZ: true, cval: null };
+  }
+  function atom() {
+    const t = peek();
+    if (t === '(') { eat('('); const e = expr(); eat(')'); return e; }
+    if (t === '-') { eat('-'); const a = atom2(); return mk((zr, zi) => { const v = a.f(zr, zi); return [-v[0], -v[1]]; }, a.hasZ); }
+    if (t === '+') { eat('+'); return atom2(); }
+    if (/^\d/.test(t)) { eat(t); const v = [parseFloat(t), 0]; return mk(() => v, false); }
+    if (t === 'z') { eat('z'); return { f: (zr, zi) => [zr, zi], hasZ: true, cval: null }; }
+    if (t in CONST) { eat(t); const v = CONST[t]; return mk(() => v, false); }
+    if (t in FN) {
+      eat(t); eat('(');
+      const a = expr(); eat(')');
+      const fn = CX[t];
+      return mk((zr, zi) => fn(a.f(zr, zi)), a.hasZ);
+    }
+    throw new Error('意外的 ' + (t ?? '结尾'));
+  }
+  function atom2() { return power(); }   // 一元负号作用于整个幂
+  function power() {
+    const b = atom();
+    if (peek() === '^') {
+      eat('^');
+      const e = power();               // 右结合
+      if (!e.hasZ) {
+        const ev = e.f(0, 0);
+        if (ev[1] === 0 && Number.isInteger(ev[0]) && Math.abs(ev[0]) <= 99) {
+          const n = ev[0];
+          return mk((zr, zi) => CX.ipow(b.f(zr, zi), n), b.hasZ);
+        }
+      }
+      return mk((zr, zi) => CX.pow(b.f(zr, zi), e.f(zr, zi)), b.hasZ || e.hasZ);
+    }
+    return b;
+  }
+  function term() {
+    let a = power();
+    while (true) {
+      const t = peek();
+      let op;
+      if (t === '*' || t === '/') { op = t; eat(t); }
+      else if (t !== undefined && t !== ')' && t !== ',' && !'+-^'.includes(t)) op = '*'; // 隐式乘法: 2z, 0.079i, 3sin(z), 2(z+1)
+      else break;
+      const b = power();
+      const fn = op === '/' ? CX.div : CX.mul;
+      const aa = a, bb = b;
+      a = mk((zr, zi) => fn(aa.f(zr, zi), bb.f(zr, zi)), aa.hasZ || bb.hasZ);
+    }
+    return a;
+  }
+  function expr() {
+    let a = term();
+    while (peek() === '+' || peek() === '-') {
+      const op = peek(); eat(op);
+      const b = term();
+      const fn = op === '+' ? CX.add : CX.sub;
+      const aa = a, bb = b;
+      a = mk((zr, zi) => fn(aa.f(zr, zi), bb.f(zr, zi)), aa.hasZ || bb.hasZ);
+    }
+    return a;
+  }
+  const root = expr();
+  if (p !== toks.length) throw new Error('多余的 ' + toks[p]);
+  return (zr, zi) => root.f(zr, zi);
+}
+// ================= 编译器结束 =================
+
+// ================= 解析延拓核心（无 DOM, 供测试提取） =================
+const NCOEF = 36;                       // 保留泰勒系数个数
+const SEED_R = 0.25;                    // 种子圆半径
+
+// 只用圆周上的函数值提取泰勒系数: c_n = (1/M r^n) Σ f(z0+re^{iθ}) e^{-inθ}
+function taylorFromCircle(f, z0, r, N = NCOEF, M = 256) {
+  const c = [];
+  const vals = [];
+  for (let k = 0; k < M; k++) {
+    const th = 2 * Math.PI * k / M;
+    vals.push(f(z0[0] + r * Math.cos(th), z0[1] + r * Math.sin(th)));
+  }
+  const bins = [];
+  for (let n = 0; n <= N; n++) {
+    let re = 0, im = 0;
+    for (let k = 0; k < M; k++) {
+      const th = -n * 2 * Math.PI * k / M;
+      const ct = Math.cos(th), st = Math.sin(th);
+      re += vals[k][0] * ct - vals[k][1] * st;
+      im += vals[k][0] * st + vals[k][1] * ct;
+    }
+    bins.push([re / M, im / M]);         // = c_n·rⁿ, 即该阶在圆周上的真实贡献
+  }
+  // 信噪截断: 圆周贡献低于噪声地板的阶数不可信(c_n = bin/rⁿ 会把噪声放大 r⁻ⁿ 倍), 置零
+  let maxBin = 0;
+  for (const b of bins) maxBin = Math.max(maxBin, Math.hypot(b[0], b[1]));
+  const floor = 1e-12 * maxBin;
+  for (let n = 0; n <= N; n++) {
+    const rn = Math.pow(r, n);
+    c.push(Math.hypot(bins[n][0], bins[n][1]) < floor ? [0, 0] : [bins[n][0] / rn, bins[n][1] / rn]);
+  }
+  return c;
+}
+function evalSeries(c, dz) {            // Σ c_n dz^n
+  let re = 0, im = 0, pr = 1, pi_ = 0;
+  for (let n = 0; n < c.length; n++) {
+    re += c[n][0] * pr - c[n][1] * pi_;
+    im += c[n][0] * pi_ + c[n][1] * pr;
+    const t = pr * dz[0] - pi_ * dz[1];
+    pi_ = pr * dz[1] + pi_ * dz[0];
+    pr = t;
+  }
+  return [re, im];
+}
+// 级数重展开: 中心平移 δ, b_m = Σ_{n≥m} C(n,m) a_n δ^{n-m}
+function reexpand(a, dz) {
+  const N = a.length - 1;
+  const C = [];                          // 二项式表
+  for (let n = 0; n <= N; n++) {
+    C.push([]);
+    for (let m = 0; m <= n; m++)
+      C[n].push(m === 0 || m === n ? 1 : C[n - 1][m - 1] + C[n - 1][m]);
+  }
+  const b = [];
+  for (let m = 0; m <= N; m++) {
+    let re = 0, im = 0, pr = 1, pi_ = 0;   // δ^{n-m}
+    for (let n = m; n <= N; n++) {
+      const k = C[n][m];
+      re += k * (a[n][0] * pr - a[n][1] * pi_);
+      im += k * (a[n][0] * pi_ + a[n][1] * pr);
+      const t = pr * dz[0] - pi_ * dz[1];
+      pi_ = pr * dz[1] + pi_ * dz[0];
+      pr = t;
+    }
+    b.push([re, im]);
+  }
+  return b;
+}
+// 收敛半径估计: 根检验(取尾部系数)
+function radiusEst(c) {
+  // 用中阶系数(n=3..16, 信噪比高)对 ln|c_n| ~ -n·lnR 做最小二乘;
+  // 高阶贴地噪声系数(除以 ρⁿ 后可能巨大)一律不入选, 避免毒化估计
+  const xs = [], ys = [];
+  for (let n = 3; n <= Math.min(16, c.length - 1); n++) {
+    const m = Math.hypot(c[n][0], c[n][1]);
+    if (m > 1e-13) { xs.push(n); ys.push(Math.log(m)); }
+  }
+  if (xs.length < 3) return 4;           // 高阶全零(常数/低次多项式) → 大半径
+  const N = xs.length;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (let i = 0; i < N; i++) { sx += xs[i]; sy += ys[i]; sxx += xs[i] * xs[i]; sxy += xs[i] * ys[i]; }
+  const slope = (N * sxy - sx * sy) / (N * sxx - sx * sx);
+  return Math.min(4, Math.exp(-slope));
+}
+// Padé 逼近: 从种子系数 c_0..c_{2m} 求 [m/m] 有理式 P/Q ≈ f
+// 有理式定义在全平面 —— 这是有限局部数据下能"越过收敛圆"的正规武器
+// (圆盘链重展开对固定阶多项式是恒等变换, 永远出不了收敛圆, 更追不到多值性)
+function csub(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
+function cadd2(a, b) { return [a[0] + b[0], a[1] + b[1]]; }
+function cmulp(a, b) { return [a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0]]; }
+function cdivp(a, b) { const d = b[0] * b[0] + b[1] * b[1];
+  return [(a[0] * b[0] + a[1] * b[1]) / d, (a[1] * b[0] - a[0] * b[1]) / d]; }
+// 复线性方程组 (高斯消元, 部分选主元)
+function solveC(A, rhs) {
+  const n = rhs.length;
+  const M = A.map((row, i) => [...row.map(x => x.slice()), rhs[i].slice()]);
+  for (let k = 0; k < n; k++) {
+    let piv = k, best = 0;
+    for (let r = k; r < n; r++) {
+      const m = M[r][k][0] ** 2 + M[r][k][1] ** 2;
+      if (m > best) { best = m; piv = r; }
+    }
+    if (best < 1e-28) return null;
+    [M[k], M[piv]] = [M[piv], M[k]];
+    for (let r = k + 1; r < n; r++) {
+      const f = cdivp(M[r][k], M[k][k]);
+      for (let c2 = k; c2 <= n; c2++) M[r][c2] = csub(M[r][c2], cmulp(f, M[k][c2]));
+    }
+  }
+  const x = Array.from({ length: n }, () => [0, 0]);
+  for (let k = n - 1; k >= 0; k--) {
+    let acc = M[k][n];
+    for (let c2 = k + 1; c2 < n; c2++) acc = csub(acc, cmulp(M[k][c2], x[c2]));
+    x[k] = cdivp(acc, M[k][k]);
+  }
+  return x;
+}
+// 由系数 c 求 [m/m] Padé: Q = 1 + q_1 z + ... + q_m z^m, P 次数 m
+// 用岭正则最小二乘(A^H A + λI)——几何级数等退化情形的 Toeplitz 系统是奇异的
+function padeFromCoeffs(c, m) {
+  const A = [], rhs = [];
+  for (let k = 1; k <= m; k++) {
+    const row = [];
+    for (let j = 1; j <= m; j++) {
+      const idx = m + k - j;
+      row.push(idx >= 0 && idx < c.length ? c[idx].slice() : [0, 0]);
+    }
+    A.push(row);
+    rhs.push([-c[m + k][0], -c[m + k][1]]);
+  }
+  // 法方程: (A^H A + λI) q = A^H rhs
+  const conj = a => [a[0], -a[1]];
+  const AH_A = [], AH_b = [];
+  let tr = 0;
+  for (let i = 0; i < m; i++) {
+    const row = [];
+    for (let j = 0; j < m; j++) {
+      let acc = [0, 0];
+      for (let k = 0; k < m; k++) acc = cadd2(acc, cmulp(conj(A[k][i]), A[k][j]));
+      row.push(acc);
+    }
+    AH_A.push(row);
+    tr += Math.hypot(...row[i]);
+    let acc = [0, 0];
+    for (let k = 0; k < m; k++) acc = cadd2(acc, cmulp(conj(A[k][i]), rhs[k]));
+    AH_b.push(acc);
+  }
+  const lam = 1e-13 * Math.max(tr / m, 1e-30);
+  for (let i = 0; i < m; i++) AH_A[i][i] = [AH_A[i][i][0] + lam, AH_A[i][i][1]];
+  const q = solveC(AH_A, AH_b);
+  if (!q) return null;
+  const Q = [[1, 0], ...q];
+  const P = [];
+  for (let k = 0; k <= m; k++) {
+    let acc = c[k].slice();
+    for (let j = 1; j <= Math.min(k, m); j++)
+      acc = [acc[0] + Q[j][0] * c[k - j][0] - Q[j][1] * c[k - j][1],
+             acc[1] + Q[j][0] * c[k - j][1] + Q[j][1] * c[k - j][0]];
+    P.push(acc);
+  }
+  return { P, Q };
+}
+function evalPoly(p, z) {
+  let acc = [0, 0];
+  for (let n = p.length - 1; n >= 0; n--) acc = [acc[0] * z[0] - acc[1] * z[1] + p[n][0], acc[0] * z[1] + acc[1] * z[0] + p[n][1]];
+  return acc;
+}
+function padeEval(pq, z) { return cdivp(evalPoly(pq.P, z), evalPoly(pq.Q, z)); }
+// 自动选阶: 从大到小试, 选个对种子圆内验证点误差最小的
+function buildPade(c) {
+  let best = null, bestErr = Infinity;
+  for (const m of [12, 10, 8, 6, 4]) {
+    if (2 * m + 1 > c.length) continue;
+    const pq = padeFromCoeffs(c, m);
+    if (!pq) continue;
+    // 在种子圆内验证(和泰勒级数本身比)
+    let err = 0;
+    for (let k = 0; k < 8; k++) {
+      const th = 2 * Math.PI * k / 8, r = SEED_R * 0.7;
+      const z = [r * Math.cos(th), r * Math.sin(th)];
+      const a = padeEval(pq, z), b = evalSeries(c, z);
+      err = Math.max(err, Math.hypot(a[0] - b[0], a[1] - b[1]));
+    }
+    if (err < bestErr) { bestErr = err; best = { ...pq, m, err }; }
+  }
+  return best;
+}
+// ================= 核心结束 =================
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+document.getElementById('loading').remove();
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+const world = new THREE.Group();
+scene.add(world);
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.01, 100);
+camera.position.set(3.2, 2.6, 4.2);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.screenSpacePanning = true;
+world.add(new THREE.AmbientLight(0xffffff, 0.6));
+const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(3, 6, 4); world.add(dl);
+const dl2 = new THREE.DirectionalLight(0x8899ff, 0.35); dl2.position.set(-4, 2, -3); world.add(dl2);
+
+world.add(new THREE.GridHelper(5.2, 13, 0x777777, 0xdadade));
+function textSprite(text, color, x, y, z) {
+  const cv2 = document.createElement('canvas'); cv2.width = 96; cv2.height = 48;
+  const gg = cv2.getContext('2d');
+  gg.font = 'bold 30px Menlo'; gg.fillStyle = color; gg.fillText(text, 8, 34);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv2), transparent: true }));
+  sp.scale.set(0.36, 0.18, 1); sp.position.set(x, y, z);
+  world.add(sp);
+}
+textSprite('Re', '#c0392b', 2.85, 0.05, 0);
+textSprite('Im', '#1665d8', 0, 0.05, -2.85);
+textSprite('1', '#556', 1.06, 0.05, 0.12);
+
+const VIEW = 2.5, CAP = 3.0, YS = 0.8, N = 190;
+let F = null, seedCoeffs = null, pade = null;
+let Z0v = [0, 0], SEEDRv = SEED_R;      // 可选的种子圆心/半径
+let meshTrue = null, meshPade = null, meshTaylor = null, poleGroup = null, seedRing = null;
+
+const H = m => Math.min(isFinite(m) ? m : CAP, CAP) * YS;
+
+function buildSurfaces() {
+  // ---- 真值面(灰蓝半透明) ----
+  for (const old of [meshTrue, meshPade, meshTaylor, poleGroup, seedRing]) if (old) world.remove(old);
+  const mk = () => {
+    const geo = new THREE.PlaneGeometry(2 * VIEW, 2 * VIEW, N, N);
+    geo.rotateX(-Math.PI / 2);
+    return geo;
+  };
+  const gT = mk(), gP = mk(), gY = mk();
+  const pT = gT.attributes.position, pP = gP.attributes.position, pY = gY.attributes.position;
+  const tayCoeffs = seedCoeffs.slice(0, 2 * pade.m + 1);   // Padé 消费的那截泰勒
+  const colors = new Float32Array(pP.count * 3);
+  const col = new THREE.Color();
+  let match = 0, tot = 0;
+  for (let k = 0; k < pT.count; k++) {
+    const zr = pT.getX(k), zi = -pT.getZ(k);
+    const tv = F(zr, zi);
+    const pv = padeEval(pade, [zr - Z0v[0], zi - Z0v[1]]);
+    const tm = Math.hypot(tv[0], tv[1]), pm = Math.hypot(pv[0], pv[1]);
+    pT.setY(k, H(tm));
+    pP.setY(k, H(pm));
+    const yv = evalSeries(tayCoeffs, [zr - Z0v[0], zi - Z0v[1]]);
+    pY.setY(k, H(Math.hypot(yv[0], yv[1])));
+    const rel = Math.hypot(pv[0] - tv[0], pv[1] - tv[1]) / Math.max(tm, 1e-6);
+    tot++; if (rel < 1e-3) match++;
+    const t = Math.max(0, Math.min(1, (Math.log10(Math.max(rel, 1e-8)) + 3) / 3));   // <1e-3 纯绿, 1 全红
+    col.setHSL(0.33 * (1 - t), 0.8, 0.48);
+    colors[k * 3] = col.r; colors[k * 3 + 1] = col.g; colors[k * 3 + 2] = col.b;
+  }
+  gT.computeVertexNormals(); gP.computeVertexNormals(); gY.computeVertexNormals();
+  gP.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  meshTrue = new THREE.Mesh(gT, new THREE.MeshStandardMaterial({
+    color: 0x1f3a6e, transparent: true, opacity: (+document.getElementById('topa').value) / 100,
+    side: THREE.DoubleSide, roughness: 0.55, depthWrite: false }));
+  meshPade = new THREE.Mesh(gP, new THREE.MeshStandardMaterial({
+    vertexColors: true, side: THREE.DoubleSide, roughness: 0.7, metalness: 0.05 }));
+  meshTaylor = new THREE.Mesh(gY, new THREE.MeshStandardMaterial({
+    color: 0xe08a2e, transparent: true, opacity: 0.55,
+    side: THREE.DoubleSide, roughness: 0.7, depthWrite: false }));
+  meshTrue.visible = document.getElementById('showTrue').checked;
+  meshPade.visible = document.getElementById('showPade').checked;
+  meshTaylor.visible = document.getElementById('showTaylor').checked;
+  world.add(meshPade); world.add(meshTrue); world.add(meshTaylor);
+  document.getElementById('stat').textContent =
+    `　吻合区(误差<1e-3): ${(100 * match / tot).toFixed(1)}%　Padé[${pade.m}/${pade.m}]`;
+  // ---- 种子圆(白环) ----
+  {
+    const pts = [];
+    for (let i = 0; i <= 96; i++) {
+      const t = 2 * Math.PI * i / 96;
+      const x = Z0v[0] + SEEDRv * Math.cos(t), y = Z0v[1] + SEEDRv * Math.sin(t);
+      const v = F(x, y);
+      pts.push(new THREE.Vector3(x, H(Math.hypot(v[0], v[1])) + 0.01, -y));
+    }
+    seedRing = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({ color: 0x111111 }));
+    world.add(seedRing);
+  }
+  // ---- Padé 极点竖针 ----
+  poleGroup = new THREE.Group();
+  const zerosP = polyRootsC(pade.P);
+  for (const zp0 of polyRootsC(pade.Q)) {
+    if (zerosP.some(z0 => Math.hypot(z0[0] - zp0[0], z0[1] - zp0[1]) < 1e-4)) continue;  // 幽灵对
+    const zp = [zp0[0] + Z0v[0], zp0[1] + Z0v[1]];          // 平移回全局坐标
+    if (Math.hypot(...zp) > VIEW * 1.6) continue;
+    const geoL = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(zp[0], 0, -zp[1]), new THREE.Vector3(zp[0], CAP * YS + 0.15, -zp[1])]);
+    poleGroup.add(new THREE.Line(geoL, new THREE.LineBasicMaterial({ color: 0xe02020 })));
+  }
+  world.add(poleGroup);
+}
+// Durand–Kerner(复系数)
+function polyRootsC(coefs) {
+  let n = coefs.length - 1;
+  while (n > 0 && Math.hypot(...coefs[n]) < 1e-12) n--;
+  if (n < 1) return [];
+  const a = coefs.slice(0, n + 1), lead = a[n];
+  const zs = [];
+  for (let k = 0; k < n; k++) {
+    const ang = 2 * Math.PI * k / n + 0.4;
+    zs.push([1.2 * Math.cos(ang), 1.2 * Math.sin(ang)]);
+  }
+  const cmulL = (x, y) => [x[0]*y[0]-x[1]*y[1], x[0]*y[1]+x[1]*y[0]];
+  const cdivL = (x, y) => { const d = y[0]*y[0]+y[1]*y[1]; return [(x[0]*y[0]+x[1]*y[1])/d, (x[1]*y[0]-x[0]*y[1])/d]; };
+  for (let it = 0; it < 200; it++) {
+    let move = 0;
+    for (let k = 0; k < n; k++) {
+      let p = a[n].slice();
+      for (let m = n - 1; m >= 0; m--) p = [p[0]*zs[k][0]-p[1]*zs[k][1]+a[m][0], p[0]*zs[k][1]+p[1]*zs[k][0]+a[m][1]];
+      let d = lead.slice();
+      for (let j = 0; j < n; j++) { if (j !== k) d = cmulL(d, [zs[k][0]-zs[j][0], zs[k][1]-zs[j][1]]); }
+      const q = cdivL(p, d);
+      zs[k] = [zs[k][0]-q[0], zs[k][1]-q[1]];
+      move = Math.max(move, Math.hypot(q[0], q[1]));
+    }
+    if (move < 1e-12) break;
+  }
+  return zs;
+}
+
+const fmtC = ([re, im], d = 6) => {
+  const r = Math.abs(re) < 5e-7 ? '0' : re.toFixed(d);
+  const i = Math.abs(im) < 5e-7 ? '' : (im > 0 ? ' + ' + im.toFixed(d) + 'i' : ' − ' + Math.abs(im).toFixed(d) + 'i');
+  return r + i;
+};
+// 双击对账
+const ray = new THREE.Raycaster();
+renderer.domElement.addEventListener('dblclick', e => {
+  if (!meshPade) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  ray.setFromCamera(new THREE.Vector2(
+    ((e.clientX - r.left) / r.width) * 2 - 1,
+    -((e.clientY - r.top) / r.height) * 2 + 1), camera);
+  const hit = ray.intersectObjects([meshPade, meshTrue])[0];
+  if (!hit) return;
+  const s = world.scale.x;
+  const z = [hit.point.x / s, -hit.point.z / s];
+  const pv = padeEval(pade, [z[0] - Z0v[0], z[1] - Z0v[1]]), tv = F(z[0], z[1]);
+  const rel = Math.hypot(pv[0]-tv[0], pv[1]-tv[1]) / Math.max(Math.hypot(...tv), 1e-9);
+  document.getElementById('result').innerHTML =
+    `<div><b>z = ${fmtC(z, 3)}</b>（距种子 ${Math.hypot(z[0] - Z0v[0], z[1] - Z0v[1]).toFixed(2)}）</div>` +
+    `<div>延拓值(只用种子数据) = ${fmtC(pv)}</div>` +
+    `<div>真函数值(偷看答案)　 = ${fmtC(tv)}</div>` +
+    `<div class="${rel < 1e-3 ? 'ok' : 'warn'}">相对偏差 ${rel < 1e-15 ? '<1e-15' : rel.toExponential(1)}</div>`;
+});
+
+document.getElementById('topa').addEventListener('input', e => {
+  if (meshTrue) meshTrue.material.opacity = (+e.target.value) / 100;
+});
+document.getElementById('showTrue').addEventListener('change', e => {
+  if (meshTrue) meshTrue.visible = e.target.checked;
+});
+document.getElementById('showPade').addEventListener('change', e => {
+  if (meshPade) meshPade.visible = e.target.checked;
+});
+document.getElementById('showTaylor').addEventListener('change', e => {
+  if (meshTaylor) meshTaylor.visible = e.target.checked;
+});
+document.getElementById('gsize').addEventListener('input', e => {
+  const v = (+e.target.value) / 100;
+  world.scale.setScalar(v);
+  document.getElementById('gsizeShow').textContent = Math.round(v * 100) + '%';
+});
+document.getElementById('glift').addEventListener('input', e => {
+  const y = (+e.target.value) / 100;
+  world.position.y = y;
+  document.getElementById('gliftShow').textContent = y.toFixed(1);
+});
+world.position.y = -0.8;
+
+function showFormulas() {
+  const fmt = ([re, im]) => {
+    const rr = Math.abs(re) < 5e-5 ? null : re.toFixed(4);
+    const ii = Math.abs(im) < 5e-5 ? null : Math.abs(im).toFixed(4) + 'i';
+    if (rr === null && ii === null) return null;
+    if (ii === null) return rr;
+    const iSigned = (im < 0 ? '−' : '+') + ii;
+    return rr === null ? (im < 0 ? '−' : '') + ii : '(' + rr + iSigned + ')';
+  };
+  const poly = cs => {
+    const parts = [];
+    cs.forEach((c, n) => {
+      const t = fmt(c);
+      if (t === null) return;
+      parts.push((parts.length ? ' + ' : '') + t + (n === 0 ? '' : n === 1 ? '·w' : '·w^' + n));
+    });
+    return parts.join('') || '0';
+  };
+  document.getElementById('taylorShow').innerHTML =
+    `<div><b>T(w)</b> = ${poly(seedCoeffs.slice(0, 2 * pade.m + 1))}</div>`;
+  document.getElementById('padeShow').innerHTML =
+    `<div><b>P(w)</b> = ${poly(pade.P)}</div><div><b>Q(w)</b> = ${poly(pade.Q)}</div>` +
+    `<div class="hint">f̃(z) = P(z−z₀)/Q(z−z₀),　z₀ = ${Z0v[0].toFixed(2)}${Z0v[1] >= 0 ? '+' : '−'}${Math.abs(Z0v[1]).toFixed(2)}i,　阶 [${pade.m}/${pade.m}]</div>`;
+}
+
+function apply() {
+  const err = document.getElementById('err');
+  err.textContent = '';
+  try { F = compileExpr(document.getElementById('fin').value); }
+  catch (e) { err.textContent = e.message; return; }
+  seedCoeffs = taylorFromCircle(F, Z0v, SEEDRv);
+  pade = buildPade(seedCoeffs);
+  if (!pade) { err.textContent = 'Padé 构造失败(种子数据可能全为常数?)'; return; }
+  document.getElementById('fShow').textContent = '';
+  document.getElementById('result').innerHTML = '';
+  buildSurfaces();
+  renderMini();
+  showFormulas();
+}
+document.getElementById('go').addEventListener('click', apply);
+document.getElementById('fin').addEventListener('keydown', e => { if (e.key === 'Enter') apply(); });
+document.getElementById('panel').addEventListener('click', e => {
+  const f = e.target.dataset && e.target.dataset.f;
+  if (!f) return;
+  document.getElementById('fin').value = f;
+  apply();
+});
+
+// ---------- 种子选择小地图 ----------
+const mini = document.getElementById('mini'), mg = mini.getContext('2d');
+const MS = 220;
+const m2w = (px, py) => [(px / (MS - 1) * 2 - 1) * VIEW, -(py / (MS - 1) * 2 - 1) * VIEW];
+const w2m = (x, y) => [(x / VIEW + 1) / 2 * (MS - 1), (1 - y / VIEW) / 2 * (MS - 1)];
+let miniBG = null;
+function renderMini() {
+  const img = mg.createImageData(MS, MS);
+  for (let py = 0; py < MS; py++)
+    for (let px = 0; px < MS; px++) {
+      const [x, y] = m2w(px, py);
+      const v = F(x, y);
+      const m = Math.hypot(v[0], v[1]);
+      const hue = ((Math.atan2(v[1], v[0]) / (2 * Math.PI)) + 1) % 1;
+      let light = 0.88 - 0.34 / (1 + m);
+      light += 0.1 * Math.min(1, Math.log(1 + m) / 6);
+      const c = hslMini(hue, 0.45, Math.min(0.97, light));
+      const i = (py * MS + px) * 4;
+      img.data[i] = c[0]; img.data[i + 1] = c[1]; img.data[i + 2] = c[2]; img.data[i + 3] = 255;
+    }
+  miniBG = img;
+  drawMini();
+}
+function hslMini(h, s, l) {
+  const f = n => {
+    const k = (n + h * 12) % 12;
+    const a = s * Math.min(l, 1 - l);
+    return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+  };
+  return [f(0), f(8), f(4)];
+}
+function drawMini(previewC, previewR) {
+  if (miniBG) mg.putImageData(miniBG, 0, 0);
+  mg.strokeStyle = 'rgba(0,0,0,0.35)';
+  const [ox, oy] = w2m(0, 0);
+  mg.beginPath(); mg.moveTo(0, oy); mg.lineTo(MS, oy); mg.moveTo(ox, 0); mg.lineTo(ox, MS); mg.stroke();
+  const c = previewC || Z0v, r = previewR !== undefined ? previewR : SEEDRv;
+  const [cx, cy] = w2m(c[0], c[1]);
+  mg.strokeStyle = '#111'; mg.lineWidth = 2;
+  mg.beginPath(); mg.arc(cx, cy, r / VIEW * (MS / 2), 0, 2 * Math.PI); mg.stroke();
+  mg.fillStyle = '#111';
+  mg.beginPath(); mg.arc(cx, cy, 2.5, 0, 2 * Math.PI); mg.fill();
+  document.getElementById('miniInfo').textContent =
+    `圆心 ${c[0].toFixed(2)}${c[1] >= 0 ? '+' : '−'}${Math.abs(c[1]).toFixed(2)}i  半径 ${r.toFixed(2)}`;
+}
+let miniDrag = null;
+mini.addEventListener('pointerdown', e => {
+  const rc = mini.getBoundingClientRect();
+  miniDrag = m2w((e.clientX - rc.left) / rc.width * MS, (e.clientY - rc.top) / rc.height * MS);
+  drawMini(miniDrag, SEEDRv);
+});
+mini.addEventListener('pointermove', e => {
+  if (!miniDrag) return;
+  const rc = mini.getBoundingClientRect();
+  const p = m2w((e.clientX - rc.left) / rc.width * MS, (e.clientY - rc.top) / rc.height * MS);
+  const r = Math.hypot(p[0] - miniDrag[0], p[1] - miniDrag[1]);
+  drawMini(miniDrag, r > 0.06 ? Math.min(r, 1.2) : SEEDRv);
+});
+addEventListener('pointerup', e => {
+  if (!miniDrag) return;
+  const rc = mini.getBoundingClientRect();
+  const p = m2w((e.clientX - rc.left) / rc.width * MS, (e.clientY - rc.top) / rc.height * MS);
+  const r = Math.hypot(p[0] - miniDrag[0], p[1] - miniDrag[1]);
+  Z0v = miniDrag;
+  if (r > 0.06) SEEDRv = Math.max(0.08, Math.min(r, 1.2));
+  miniDrag = null;
+  apply();
+});
+apply();
+
+(function loop() {
+  requestAnimationFrame(loop);
+  controls.update();
+  try { renderer.render(scene, camera); } catch (e) {}
+})();
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
