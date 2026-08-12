@@ -274,6 +274,9 @@
 					return match.replace(group1, replacement);
 					});
 		}
+		// ∂ ∇ Δ δ ¬ √ 是前缀算符，紧跟操作数，中间不该有空格——latex 源里 \partial x 的
+		// 空格只是命令名结束符不是真空格。关系符(≡ ≤ ∈)不在此列，两边空格是对的
+		latex = latex.replace(/([∂∇Δδ¬√∛∜])[ \t]+(?=[A-Za-z0-9Α-ω(])/g, '$1');
 		// \hat{x} → x̂ 等；组合符只能盖单字符，参数更长时保留原样（over/underline 例外，逐字符加线可连成串）
 		latex = latex.replace(/\\(widehat|widetilde|overrightarrow|overleftarrow|overline|underline|mathring|hat|check|tilde|acute|grave|ddot|dot|breve|bar|vec)\b\s*(?:\{([^{}]*)\}|([A-Za-z0-9Ͱ-Ͽ]))/g,
 			function (match, cmd, braced, single) {
