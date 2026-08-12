@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>二维傅里叶：用 K 个基向量重建图像</title>
+<style>
+  body { margin: 0; padding: 12px 16px; background: #fff; color: #222;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  h1 { font-size: 18px; margin: 4px 0 8px; }
+  button { padding: 3px 10px; font-size: 13px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; margin: 5px 0; }
+  .hint { color: #666; font-size: 12px; line-height: 1.5; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+  canvas.pane { border: 1px solid #999; image-rendering: pixelated; width: 300px; height: 300px; }
+  .cap { font-size: 12px; color: #555; text-align: center; margin-top: 2px; }
+  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .hint { display: none !important; }
+</style>
+</head>
+<body>
+<h1>二维傅里叶：图像 = 波的叠加，保留 K 个基向量看还原</h1>
+<div class="bar">
+  <input type="file" id="file" accept="image/*" style="font-size:12px">
+  预设:
+  <button data-p="shapes">几何图形</button>
+  <button data-p="text">文字</button>
+  <button data-p="grad">渐变+圆</button>
+  模式:
+  <select id="mode">
+    <option value="topk" selected>按能量选前 K 个基（最优压缩）</option>
+    <option value="lowpass">低频圆盘（半径内全保留）</option>
+    <option value="band">频带环：只保留 [低, 高] 之间</option>
+  </select>
+</div>
+<div class="bar" id="kbar">
+  K: <input type="range" id="ks" min="0" max="1000" value="350" style="width:340px">
+  <span class="mono" id="kinfo"></span>
+</div>
+<div class="bar" id="bandbar">
+  频带环(拖动即生效) 低频截止 r₁: <input type="range" id="blo" min="0" max="1000" value="80" style="width:230px">
+  高频截止 r₂: <input type="range" id="bhi" min="0" max="1000" value="1000" style="width:230px">
+  <span class="mono" id="kinfo2"></span>
+</div>
+<div class="hint">
+  每个"基向量"是一张全幅的二维平面波（不同方向与频率的条纹）；原图 = 65536 张条纹的加权和。
+  频谱图中<b>亮度 = 各基向量的权重</b>（低频在中心），<b>被保留的基标为橙色</b>。
+  拉动 K：能量大的基先入选——几十个基就能出轮廓，几百个基可辨认，几千个基接近无损。这就是 JPEG 的第一性原理。<b>频带环模式</b>下只保留频率半径 r ∈ [r₁, r₂] 的基：把 r₁ 拉起来就是<b>纯高频</b>——剩下的全是边缘和纹理，大块明暗（低频负责的）消失。
+</div>
+<div class="bar" style="margin-top:12px">
+  <b>基向量查看器</b>　起始排名(按能量序):
+  <input type="range" id="bstart" min="0" max="1000" value="0" style="width:280px">
+  <span class="mono" id="binfo"></span>
+  　个数 n: <input type="range" id="bcnt" min="1" max="32" value="12" style="width:130px">
+  <span class="mono" id="bninfo"></span>
+</div>
+<div class="hint">
+  每格 = 一个基向量的条纹 cos(2π(f<sub>x</sub>x+f<sub>y</sub>y)/256 + φ)，含它在本图中的实际相位 φ；标注 排名 #、频率 (f<sub>x</sub>, f<sub>y</sub>)、权重 |F|。
+  共轭对 (f, −f) 图案相同——复 FFT 里它俩合起来才是一条实条纹，所以常看到两两重复。最后的<b>绿框格 = 这 n 个基的加权和</b>（为显示已归一化）：从排名 0 开始拉大 n，就是看重建一步步长出来。
+</div>
+<div id="bgrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"></div>
+<div class="row">
+  <div><canvas id="cvA" class="pane" width="256" height="256"></canvas><div class="cap">原图 (256×256 灰度)</div></div>
+  <div><canvas id="cvS" class="pane" width="256" height="256"></canvas><div class="cap">频谱 log|F|（橙 = 保留的基）</div></div>
+  <div><canvas id="cvR" class="pane" width="256" height="256"></canvas><div class="cap">重建 = K 个基向量之和</div></div>
+</div>
+
+<script>
+'use strict';
+// ================= FFT 核心（无 DOM, 供测试提取） =================
+function fft(re, im, invert) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = 2 * Math.PI / len * (invert ? 1 : -1);
+    const wr = Math.cos(ang), wi = Math.sin(ang);
+    const hl = len >> 1;
+    for (let i = 0; i < n; i += len) {
+      let cwr = 1, cwi = 0;
+      for (let j = 0; j < hl; j++) {
+        const ur = re[i + j], ui = im[i + j];
+        const xr = re[i + j + hl], xi = im[i + j + hl];
+        const vr = xr * cwr - xi * cwi, vi = xr * cwi + xi * cwr;
+        re[i + j] = ur + vr; im[i + j] = ui + vi;
+        re[i + j + hl] = ur - vr; im[i + j + hl] = ui - vi;
+        const t = cwr * wr - cwi * wi; cwi = cwr * wi + cwi * wr; cwr = t;
+      }
+    }
+  }
+  if (invert) for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
+}
+function fft2d(re, im, N, invert) {
+  const tr = new Float64Array(N), ti = new Float64Array(N);
+  for (let y = 0; y < N; y++) {          // 行
+    const rr = re.subarray(y * N, y * N + N), ii = im.subarray(y * N, y * N + N);
+    fft(rr, ii, invert);
+  }
+  for (let x = 0; x < N; x++) {          // 列
+    for (let y = 0; y < N; y++) { tr[y] = re[y * N + x]; ti[y] = im[y * N + x]; }
+    fft(tr, ti, invert);
+    for (let y = 0; y < N; y++) { re[y * N + x] = tr[y]; im[y * N + x] = ti[y]; }
+  }
+}
+// ================= 核心结束 =================
+
+// ================= UI =================
+const N = 256, TOT = N * N;
+const cvA = document.getElementById('cvA'), gA = cvA.getContext('2d');
+const cvS = document.getElementById('cvS'), gS = cvS.getContext('2d');
+const cvR = document.getElementById('cvR'), gR = cvR.getContext('2d');
+let pix = new Float64Array(TOT);         // 原灰度
+let Fre = null, Fim = null, order = null, magLog = null;
+
+function loadFromCanvas() {
+  const d = gA.getImageData(0, 0, N, N).data;
+  for (let i = 0; i < TOT; i++)
+    pix[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+  // 灰度回写(显示统一为灰度)
+  const img = gA.createImageData(N, N);
+  for (let i = 0; i < TOT; i++) {
+    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = pix[i];
+    img.data[i * 4 + 3] = 255;
+  }
+  gA.putImageData(img, 0, 0);
+  // FFT
+  Fre = Float64Array.from(pix);
+  Fim = new Float64Array(TOT);
+  fft2d(Fre, Fim, N, false);
+  // 幅度排序(能量从大到小的基向量序)
+  const mags = new Float64Array(TOT);
+  let mmax = 0;
+  for (let i = 0; i < TOT; i++) {
+    mags[i] = Math.hypot(Fre[i], Fim[i]);
+    if (mags[i] > mmax) mmax = mags[i];
+  }
+  order = Array.from({ length: TOT }, (_, i) => i).sort((a, b) => mags[b] - mags[a]);
+  if (typeof renderBases === 'function') queueMicrotask(renderBases);
+  magLog = new Float64Array(TOT);
+  for (let i = 0; i < TOT; i++) magLog[i] = Math.log(1 + mags[i]) / Math.log(1 + mmax);
+  rebuild();
+}
+
+const shift = i => {                     // fftshift 显示坐标
+  const x = i % N, y = (i / N) | 0;
+  return ((y + N / 2) % N) * N + (x + N / 2) % N;
+};
+const MAXR = (N / 2) * Math.SQRT2;
+function keptMask() {
+  const mode = document.getElementById('mode').value;
+  const s = +document.getElementById('ks').value / 1000;
+  const kept = new Uint8Array(TOT);
+  let K;
+  if (mode === 'band') {
+    const r1 = +document.getElementById('blo').value / 1000 * MAXR;
+    const r2 = +document.getElementById('bhi').value / 1000 * MAXR;
+    K = 0;
+    for (let i = 0; i < TOT; i++) {
+      const x = i % N, y = (i / N) | 0;
+      const fx = x <= N / 2 ? x : x - N, fy = y <= N / 2 ? y : y - N;
+      const r = Math.hypot(fx, fy);
+      if (r >= r1 && r <= r2) { kept[i] = 1; K++; }
+    }
+    return { kept, K, band: [r1, r2] };
+  }
+  if (mode === 'topk') {
+    K = Math.max(1, Math.round(Math.pow(TOT, s)));
+    for (let i = 0; i < K; i++) kept[order[i]] = 1;
+  } else {
+    const R = s * (N / 2) * Math.SQRT2;
+    K = 0;
+    for (let i = 0; i < TOT; i++) {
+      const x = i % N, y = (i / N) | 0;
+      const fx = x <= N / 2 ? x : x - N, fy = y <= N / 2 ? y : y - N;
+      if (Math.hypot(fx, fy) <= R) { kept[i] = 1; K++; }
+    }
+  }
+  return { kept, K };
+}
+function rebuild() {
+  if (!Fre) return;
+  const { kept, K, band } = keptMask();
+  // 重建
+  const rre = new Float64Array(TOT), rim = new Float64Array(TOT);
+  for (let i = 0; i < TOT; i++) if (kept[i]) { rre[i] = Fre[i]; rim[i] = Fim[i]; }
+  fft2d(rre, rim, N, true);
+  const img = gR.createImageData(N, N);
+  const bias = kept[0] ? 0 : 128;        // 直流被截: 值有正负, 加灰度偏置显示
+  let mse = 0;
+  for (let i = 0; i < TOT; i++) {
+    const v = Math.max(0, Math.min(255, rre[i] + bias));
+    mse += (rre[i] - pix[i]) ** 2;
+    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+    img.data[i * 4 + 3] = 255;
+  }
+  gR.putImageData(img, 0, 0);
+  mse /= TOT;
+  const psnr = mse < 1e-12 ? Infinity : 10 * Math.log10(255 * 255 / mse);
+  // 频谱 + 保留标色
+  const simg = gS.createImageData(N, N);
+  for (let i = 0; i < TOT; i++) {
+    const j = shift(i);
+    const v = Math.pow(magLog[i], 0.7) * 255;
+    const p = j * 4;
+    if (kept[i]) { simg.data[p] = Math.min(255, v + 90); simg.data[p + 1] = v * 0.6 + 40; simg.data[p + 2] = v * 0.15; }
+    else { simg.data[p] = simg.data[p + 1] = v * 0.55; simg.data[p + 2] = v * 0.75; }
+    simg.data[p + 3] = 255;
+  }
+  gS.putImageData(simg, 0, 0);
+  const info = `K = ${K.toLocaleString()} / 65,536 基向量 (${(100 * K / TOT).toFixed(2)}%)　PSNR = ${psnr === Infinity ? '∞' : psnr.toFixed(1) + ' dB'}`
+    + (band ? `　环 [${band[0].toFixed(1)}, ${band[1].toFixed(1)}]` : '')
+    + (bias ? '　(直流被截：显示加 128 偏置)' : '');
+  document.getElementById(band ? 'kinfo2' : 'kinfo').textContent = info;
+}
+
+// 预设图
+const PRESETS = {
+  shapes: g => {
+    g.fillStyle = '#fff'; g.fillRect(0, 0, N, N);
+    g.fillStyle = '#222';
+    g.beginPath(); g.arc(85, 90, 52, 0, 2 * Math.PI); g.fill();
+    g.fillStyle = '#888'; g.fillRect(140, 40, 80, 60);
+    g.strokeStyle = '#000'; g.lineWidth = 6;
+    g.beginPath(); g.moveTo(30, 210); g.lineTo(230, 150); g.stroke();
+    g.fillStyle = '#555';
+    g.beginPath(); g.moveTo(160, 230); g.lineTo(215, 130); g.lineTo(240, 230); g.closePath(); g.fill();
+  },
+  text: g => {
+    g.fillStyle = '#fff'; g.fillRect(0, 0, N, N);
+    g.fillStyle = '#111';
+    g.font = 'bold 88px "PingFang SC", sans-serif';
+    g.fillText('傅', 30, 110);
+    g.fillText('氏', 135, 110);
+    g.font = 'bold 60px Menlo';
+    g.fillText('FFT', 55, 205);
+  },
+  grad: g => {
+    const gr = g.createLinearGradient(0, 0, N, N);
+    gr.addColorStop(0, '#fff'); gr.addColorStop(1, '#333');
+    g.fillStyle = gr; g.fillRect(0, 0, N, N);
+    g.fillStyle = '#000';
+    g.beginPath(); g.arc(128, 128, 60, 0, 2 * Math.PI); g.fill();
+    g.fillStyle = '#fff';
+    g.beginPath(); g.arc(128, 128, 25, 0, 2 * Math.PI); g.fill();
+  },
+};
+document.body.addEventListener('click', e => {
+  const p = e.target.dataset && e.target.dataset.p;
+  if (!p) return;
+  PRESETS[p](gA);
+  loadFromCanvas();
+});
+document.getElementById('file').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    // 居中裁剪成方形再缩到 256
+    const side = Math.min(img.width, img.height);
+    gA.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, N, N);
+    URL.revokeObjectURL(url);
+    loadFromCanvas();
+  };
+  img.src = url;
+});
+// ---- 基向量查看器 ----
+const bstartEl = document.getElementById('bstart'), bcntEl = document.getElementById('bcnt');
+function bTile(px96, caption, green) {
+  const box = document.createElement('div');
+  const c = document.createElement('canvas');
+  c.width = c.height = N;
+  c.style.width = c.style.height = '96px';
+  c.style.border = green ? '2px solid #2a8a2a' : '1px solid #999';
+  box.appendChild(c);
+  const cap = document.createElement('div');
+  cap.className = 'cap';
+  cap.style.width = '100px';
+  cap.textContent = caption;
+  box.appendChild(cap);
+  document.getElementById('bgrid').appendChild(box);
+  return c.getContext('2d');
+}
+function renderBases() {
+  if (!Fre) return;
+  const start = Math.max(0, Math.min(TOT - 1, Math.round(Math.pow(TOT, +bstartEl.value / 1000)) - 1));
+  const n = +bcntEl.value;
+  document.getElementById('binfo').textContent = '#' + start;
+  document.getElementById('bninfo').textContent = n;
+  document.getElementById('bgrid').innerHTML = '';
+  for (let k = 0; k < n && start + k < TOT; k++) {
+    const idx = order[start + k];
+    const u = idx % N, v = (idx / N) | 0;
+    const fx = u <= N / 2 ? u : u - N, fy = v <= N / 2 ? v : v - N;
+    const mag = Math.hypot(Fre[idx], Fim[idx]);
+    const ph = Math.atan2(Fim[idx], Fre[idx]);
+    const ctx = bTile(null, `#${start + k} (${fx},${fy}) |F|=${mag >= 1e5 || (mag < 1e-2 && mag > 0) ? mag.toExponential(1) : mag.toFixed(1)}`);
+    const img = ctx.createImageData(N, N);
+    for (let y = 0; y < N; y++) {
+      const wy = 2 * Math.PI * v * y / N + ph;
+      for (let x = 0; x < N; x++) {
+        const g8 = (Math.cos(2 * Math.PI * u * x / N + wy) + 1) * 127.5;
+        const q = (y * N + x) * 4;
+        img.data[q] = img.data[q + 1] = img.data[q + 2] = g8;
+        img.data[q + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  // 加权和
+  const rre = new Float64Array(TOT), rim = new Float64Array(TOT);
+  for (let k = 0; k < n && start + k < TOT; k++) {
+    const idx = order[start + k];
+    rre[idx] = Fre[idx]; rim[idx] = Fim[idx];
+  }
+  fft2d(rre, rim, N, true);
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < TOT; i++) { if (rre[i] < lo) lo = rre[i]; if (rre[i] > hi) hi = rre[i]; }
+  const span = hi - lo || 1;
+  const ctx = bTile(null, `Σ 这 ${n} 个（归一化）`, true);
+  const img = ctx.createImageData(N, N);
+  for (let i = 0; i < TOT; i++) {
+    const g8 = (rre[i] - lo) / span * 255;
+    img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = g8;
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+bstartEl.addEventListener('input', renderBases);
+bcntEl.addEventListener('input', renderBases);
+
+document.getElementById('mode').addEventListener('change', rebuild);
+for (const id of ['blo', 'bhi'])
+  document.getElementById(id).addEventListener('input', () => {
+    document.getElementById('mode').value = 'band';   // 拖环滑杆 → 自动进频带模式
+    rebuild();
+  });
+document.getElementById('ks').addEventListener('input', () => {
+  if (document.getElementById('mode').value === 'band')
+    document.getElementById('mode').value = 'topk';   // 拖 K → 回能量模式
+  rebuild();
+});
+PRESETS.shapes(gA);
+loadFromCanvas();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>
