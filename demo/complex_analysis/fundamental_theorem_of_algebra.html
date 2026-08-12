@@ -17,6 +17,7 @@
   .mono { font-family: Menlo, Consolas, monospace; font-size: 12.5px; }
   #rootlist { margin-top: 6px; color: #333; }
   .legend span { display: inline-block; padding: 1px 8px; border-radius: 3px; margin-right: 6px; font-size: 12px; }
+  body.ctl-collapsed h1, body.ctl-collapsed .panel, body.ctl-collapsed .hint { display: none !important; }
 </style>
 </head>
 <body>
@@ -253,6 +254,17 @@ document.querySelector('.toolbar').addEventListener('click', e => {
   }
 });
 apply();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
 </script>
 </body>
 </html>
