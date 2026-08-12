@@ -710,9 +710,27 @@
 				}
 			}
 			if (arr_idx.length == 2 && cur_n == 'frac') {
-				[arr_ret[i], arr_ret[i1], arr_ret[i2]] = ["("+trim_bracket(arr_ret[i1]), "/", trim_bracket(arr_ret[i2])+")"]
+				// 外层括号只在相邻有歧义时才加：前贴 ^ _ / 或字母数字(2^frac、frac 连写)，
+				// 后贴字母/数字/括号/命令(a/bc、a/b(x)、a/b^2 都会误读)。有空格或贴着运算符则不加
+				function frac_prev_safe() {
+					for (var k = ii - 1; k >= 0; --k) {
+						if (node.children[k].type == 'SPACE') return true;
+						if (arr_ret[k] === "") continue;
+						return /[=+\-±×÷⋅*,;:(<\[{|∧∨→↔⇒⇔≤≥≠≈≡∈ \t]$/.test(arr_ret[k]);
+					}
+					return true;
+				}
+				function frac_next_safe() {
+					for (var k = i2 + 1; k < node.children.length; ++k) {
+						if (node.children[k].type == 'SPACE') return true;
+						return /^[=+\-±×÷⋅*,;:)\]}>|∧∨→↔⇒⇔≤≥≠≈≡ \t]/.test(node.children[k].value);
+					}
+					return true;
+				}
+				var frac_s = trim_bracket(arr_ret[i1]) + "/" + trim_bracket(arr_ret[i2]);
+				if (!frac_prev_safe() || !frac_next_safe()) frac_s = "(" + frac_s + ")";
+				[arr_ret[i], arr_ret[i1], arr_ret[i2]] = [frac_s, "", ""]
 				m_add_braces[i] = 1; m_add_braces[i1] = 1; m_add_braces[i2] = 1;
-				m_add_braces[i1];
 				set_null(ii, i1);
 				set_null(i1, i2);
 			}

@@ -45,13 +45,18 @@ const cases = [
     [R`e^{i\pi}`, R`e^(iπ)`],                     // 裸模式退化为线性
     [R`\|x\|_{L^2}`, R`‖x‖_(L²)`],
     // frac / sqrt
-    [R`\frac{a}{b}`, R`(a/b)`],
-    [R`\frac{x^2+1}{3}`, R`((x²+1)/3)`],
-    [R`\frac{a+b}{c+d}`, R`((a+b)/(c+d))`],
+    [R`\frac{a}{b}`, R`a/b`],
+    [R`\frac{x^2+1}{3}`, R`(x²+1)/3`],
+    [R`\frac{a+b}{c+d}`, R`(a+b)/(c+d)`],
     [R`\sqrt{x+1}`, R`√(x+1)`],
     [R`\sqrt[3]{x}`, R`∛x`],
     [R`\sqrt[5]{x+1}`, R`(x+1)^(1/5)`],
     [R`√{x+1}`, R`√(x+1)`],                       // 半转换残留输入
+    [R`\frac{a}{b}c`, R`(a/b)c`],                 // 后贴字母: 必须留括号
+    [R`\frac{a}{b}(x)`, R`(a/b)(x)`],
+    [R`2^\frac{1}{2}`, R`2^(1/2)`],              // 前贴 ^: 必须留括号
+    [R`x = \frac{a+b}{2}, y`, R`x = (a+b)/2, y`],
+    [R`\frac{1}{2} + \frac{1}{3}`, R`1/2 + 1/3`],
     // 大算符界限
     [R`\sum_{i=1}^n i^2`, R`∑ᵢ₌₁ⁿ i²`],
     [R`\prod_{j=1}^m`, R`∏ⱼ₌₁ᵐ`],
@@ -92,7 +97,7 @@ const cases = [
     [R`\ldots \cdots \dots`, R`… ⋯ …`],
     // 前缀算符紧贴操作数
     [R`\partial f / \partial x`, R`∂f / ∂x`],
-    [R`\frac{\partial f}{\partial x}`, R`(∂f/∂x)`],
+    [R`\frac{\partial f}{\partial x}`, R`∂f/∂x`],
     [R`\Delta x = x_2 - x_1`, R`Δx = x₂ - x₁`],
     [R`\nabla f \cdot \delta x`, R`∇f ⋅ δx`],
     [R`\delta > 0`, R`δ > 0`],                    // 后跟关系符不紧贴
@@ -137,7 +142,7 @@ const cases = [
     ['价格是 $100 and $200, 不是公式。', '价格是 $100 and $200, 不是公式。'],
     ['$\\alpha$ 不该转, $$\\beta$$ 该转', '$\\alpha$ 不该转, β 该转', { singleDollarOff: true }],
     ['推导:\n\\begin{equation}\n\\alpha_1^2 + \\frac{a}{b}\n\\end{equation}\n完毕',
-     '推导:\nα₁² + (a/b)\n完毕', { custom: ['\\begin{equation}', '\\end{equation}'] }],
+     '推导:\nα₁² + a/b\n完毕', { custom: ['\\begin{equation}', '\\end{equation}'] }],
 ];
 
 // ---- 跑 ----
