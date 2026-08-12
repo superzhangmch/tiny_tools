@@ -93,6 +93,17 @@ const cases = [
     // \text 剥离
     [R`\text{s.t. } x > 0`, R`s.t. x > 0`],
     [R`\text{s.t. } x > 0`, R`\text{s.t. } x > 0`, { stripText: false }],
+    // 裸词排除: in/xi/Re 等短词无反斜杠不转，带反斜杠照转
+    [R`x in R`, R`x in R`],
+    [R`x \in R`, R`x ∈ R`],
+    [R`a_{in}`, R`aᵢₙ`],
+    [R`x_in`, R`xᵢₙ`],
+    [R`Re(z) + Im(z)`, R`Re(z) + Im(z)`],
+    [R`\Re(z)`, R`ℜ(z)`],
+    [R`x xi y`, R`x xi y`],
+    [R`\xi_1`, R`ξ₁`],
+    [R`2 pi r`, R`2 π r`],                        // 习惯写法仍然裸转
+    [R`sum_1^n`, R`∑₁ⁿ`],
 
     // ---- 混合文本: 全转干净 → 去定界符 ----
     ['设 $\\alpha_1^2 + \\beta$ 为系数, 且 $x \\in \\mathbb{R}^n$ 成立。', '设 α₁² + β 为系数, 且 x ∈ ℝⁿ 成立。'],
