@@ -92,6 +92,9 @@
 	    var sub2 = '₀₁₂₃₄₅₆₇₈₉ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ₊₋₌₍₎ᵦᵧᵨᵩᵪ';
 	    var m_sub = {}; for (var i = 0; i < sub1.length; i++) { m_sub[sub1[i]] = sub2[i]; }
 
+	    // "(...)²" 这种括号组带上下标的整体是原子的，不需要再包括号
+	    var re_paren_pow = new RegExp('^\\([^()]*\\)[' + sup2 + sub2 + ']*$');
+
 	    // 组合变音符（跟在基字符后面）
 	    var m_accent = {hat:'̂', widehat:'̂', check:'̌', tilde:'̃', widetilde:'̃',
 		acute:'́', grave:'̀', ddot:'̈', dot:'̇', breve:'̆', bar:'̄',
@@ -219,6 +222,8 @@
 	function convertExpressionToLatex(input) {
 	    function do_replace(latex) {
 	      latex = latex.replace(/(?<!\\)[ \t]+/g, " ")
+		// 全角括号归一化（中文输入法串进来的）
+		.replace(/[（）｛｝［］]/g, c => ({'（':'(', '）':')', '｛':'{', '｝':'}', '［':'[', '］':']'}[c]))
 		.replace(/<->/g, '\\leftrightarrow ')
 		.replace(/<=>/g, '\\Leftrightarrow ')
 		.replace(/->/g, '\\rightarrow ')
@@ -680,7 +685,7 @@
 				var s1 = s.replace(/[ \t]/g, "");
 				if (/^-?[^\s+\-*/^=<>±×÷⋅∘,(){}\[\]|]+$/.test(s1) ||
 				    /^[a-zA-Z0-9]+\([^()]*\)$/.test(s1) ||
-				    /^\([^()]*\)$/.test(s1) || /^\|[^|]*\|$/.test(s1)) {
+				    re_paren_pow.test(s1) || /^\|[^|]*\|$/.test(s1)) {
 					return s;
 				}
 				return "(" + s + ")";
