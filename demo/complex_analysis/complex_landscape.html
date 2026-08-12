@@ -35,6 +35,7 @@
     font-size: 12px;
   }
   #contour canvas { display: block; cursor: crosshair; border: 1px solid #333; }
+  body.ctl-collapsed #ui, body.ctl-collapsed #contour, body.ctl-collapsed #probe { display: none !important; }
 </style>
 </head>
 <body>
@@ -579,6 +580,17 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
 </script>
 </body>
 </html>

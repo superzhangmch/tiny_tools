@@ -18,6 +18,7 @@
   .mono { font-family: Menlo, Consolas, monospace; }
   #result { font-family: Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; }
   .ok { color: #1a7f37; font-weight: bold; } .warn { color: #b7791f; font-weight: bold; }
+  body.ctl-collapsed #panel, body.ctl-collapsed #miniBox, body.ctl-collapsed #seedBox { display: none !important; }
 </style>
 </head>
 <body>
@@ -761,6 +762,17 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
 </script>
 </body>
 </html>
