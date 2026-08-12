@@ -222,8 +222,6 @@
 	function convertExpressionToLatex(input) {
 	    function do_replace(latex) {
 	      latex = latex.replace(/(?<!\\)[ \t]+/g, " ")
-		// 全角括号归一化（中文输入法串进来的）
-		.replace(/[（）｛｝［］]/g, c => ({'（':'(', '）':')', '｛':'{', '｝':'}', '［':'[', '］':']'}[c]))
 		.replace(/<->/g, '\\leftrightarrow ')
 		.replace(/<=>/g, '\\Leftrightarrow ')
 		.replace(/->/g, '\\rightarrow ')
