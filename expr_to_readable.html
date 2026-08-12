@@ -84,6 +84,8 @@
 		    }
 
 	    var m_sqrt = {2: '√', 3: '∛', 4: '∜'}
+	    var m_vulgar = {'1/2':'½','1/3':'⅓','2/3':'⅔','1/4':'¼','3/4':'¾','1/5':'⅕','2/5':'⅖','3/5':'⅗','4/5':'⅘',
+			    '1/6':'⅙','5/6':'⅚','1/7':'⅐','1/8':'⅛','3/8':'⅜','5/8':'⅝','7/8':'⅞','1/9':'⅑','1/10':'⅒'};
 	    var sup1 = '0123456789abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUW+-=()βγδεθιφχ';
 	    var sup2 = '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁᵂ⁺⁻⁼⁽⁾ᵝᵞᵟᵋᶿᶥᵠᵡ';
 	    var m_sup = {}; for (var i = 0; i < sup1.length; i++) { m_sup[sup1[i]] = sup2[i]; }
@@ -352,6 +354,7 @@
 		    arg = arg.trim()
 			.replace(/_([A-Za-z0-9])(?![A-Za-z0-9])/g, function (m2, c) { var s = trans(m_sub, c); return s ? s : m2; })
 			.replace(/\^([A-Za-z0-9])(?![A-Za-z0-9])/g, function (m2, c) { var s = trans(m_sup, c); return s ? s : m2; });
+		    if (op == '^' && m_vulgar[arg]) return '^' + m_vulgar[arg];
 		    return op + (/^([A-Za-z]|-?[0-9.]+|[^\x00-\x7F])$/.test(arg) ? arg : '(' + arg + ')');
 		});
 		return latex;
@@ -696,7 +699,8 @@
 						if (sqrt_idx) {
 							[arr_ret[i], arr_ret[i1], arr_ret[i2]] = ["", sqrt_idx, trim_bracket(arr_ret[i2])]
 						} else {
-							[arr_ret[i], arr_ret[i1], arr_ret[i2]] = [trim_bracket(arr_ret[i2]), "^", "(1/"+trim_bracket(arr_ret[i1])+")"]
+							var rdeg = trim_bracket(arr_ret[i1]);
+							[arr_ret[i], arr_ret[i1], arr_ret[i2]] = [trim_bracket(arr_ret[i2]), "^", m_vulgar["1/"+rdeg] || "(1/"+rdeg+")"]
 						}
 						m_add_braces[i] = 1; m_add_braces[i1] = 1; m_add_braces[i2] = 1;
 						set_null(ii, i1);
@@ -710,6 +714,10 @@
 				}
 			}
 			if (arr_idx.length == 2 && cur_n == 'frac') {
+				var vf = m_vulgar[trim_bracket(arr_ret[i1]) + "/" + trim_bracket(arr_ret[i2])];
+				if (vf) {
+					[arr_ret[i], arr_ret[i1], arr_ret[i2]] = [vf, "", ""]
+				} else
 				[arr_ret[i], arr_ret[i1], arr_ret[i2]] = ["("+trim_bracket(arr_ret[i1]), "/", trim_bracket(arr_ret[i2])+")"]
 				m_add_braces[i] = 1; m_add_braces[i1] = 1; m_add_braces[i2] = 1;
 				m_add_braces[i1];
