@@ -90,6 +90,13 @@ const cases = [
     [R`a\;b\quad c\!d`, R`a b cd`],
     // 省略号
     [R`\ldots \cdots \dots`, R`… ⋯ …`],
+    // 前缀算符紧贴操作数
+    [R`\partial f / \partial x`, R`∂f / ∂x`],
+    [R`\frac{\partial f}{\partial x}`, R`(∂f/∂x)`],
+    [R`\Delta x = x_2 - x_1`, R`Δx = x₂ - x₁`],
+    [R`\nabla f \cdot \delta x`, R`∇f ⋅ δx`],
+    [R`\delta > 0`, R`δ > 0`],                    // 后跟关系符不紧贴
+    [R`\Delta \le 0`, R`Δ ≤ 0`],
     // \text 剥离
     [R`\text{s.t. } x > 0`, R`s.t. x > 0`],
     [R`\text{s.t. } x > 0`, R`\text{s.t. } x > 0`, { stripText: false }],
