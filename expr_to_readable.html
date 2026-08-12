@@ -260,10 +260,16 @@
 			if (m_latex2char[s]) return m_latex2char[s] + (/[ \t]$/.test(match) ? ' ' : '');
 			return match;
 		}
+		// 这些短词是常见变量字母的拼接（in=i·n, xi=x·i, Re(z) 本来就可读…），
+		// 裸写（无反斜杠）时不转换，必须写 \in \xi 才转
+		var m_bare_exclude = {};
+		for (var w of ['in','to','le','ge','ne','xi','Re','Im','mid','top','bot','ast','vee','wp','wr'])
+			m_bare_exclude[w] = 1;
 		for (var reg_pat of arr_pat) {
 			//console.log('vv', reg_pat);
 			var reg = new RegExp(reg_pat, "g");
 			latex = latex.replace(reg, (match, group1) => {
+					if (!match.includes('\\') && m_bare_exclude[group1.replace(/[\{\} ]/g, "")]) return match;
 					const replacement = replaceFunction(group1);
 					return match.replace(group1, replacement);
 					});
