@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>病态函数陈列馆</title>
+<style>
+  body { margin: 0; padding: 12px 16px; background: #fff; color: #222;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  h1 { font-size: 18px; margin: 4px 0 8px; }
+  button { padding: 4px 12px; font-size: 13px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  button.on { background: #2b5fb8; color: #fff; border-color: #2b5fb8; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+  .hint { color: #555; font-size: 12.5px; line-height: 1.6; max-width: 1200px; margin-top: 6px; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  canvas { border: 1px solid #999; display: block; touch-action: none; cursor: crosshair; }
+  b.k { color: #b03030; }
+  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .hint { display: none !important; }
+</style>
+</head>
+<body>
+<h1>病态函数陈列馆：直觉的反例们</h1>
+<div class="bar">
+  <button class="on" data-t="wei">维尔斯特拉斯（处处连续、处处不可导）</button>
+  <button data-t="dir">狄利克雷（处处不连续）</button>
+  <button data-t="tho">托梅爆米花（只在无理点连续）</button>
+  <button data-t="can">康托魔鬼阶梯（导数几乎处处 0）</button>
+</div>
+
+<div id="bar-wei" class="bar">
+  a: <input type="range" id="wa" min="10" max="90" value="50" style="width:130px"><span class="mono" id="wa2"></span>
+  b: <input type="range" id="wb" min="2" max="21" value="13" style="width:130px"><span class="mono" id="wb2"></span>
+  <span class="mono" id="wcond"></span>
+  <button id="wreset">重置视野</button>
+  <span class="mono" id="winfo"></span>
+</div>
+<div id="bar-dir" class="bar" style="display:none">
+  m: <input type="range" id="dm" min="1" max="6" value="3" style="width:110px"><span class="mono" id="dm2"></span>
+  n: <input type="range" id="dn" min="0" max="1000" value="300" style="width:200px"><span class="mono" id="dn2"></span>
+</div>
+<div id="bar-tho" class="bar" style="display:none">
+  分母上限 Q: <input type="range" id="tq" min="5" max="300" value="80" style="width:200px"><span class="mono" id="tq2"></span>
+  ε = 1/<input type="range" id="te" min="2" max="60" value="8" style="width:150px"><span class="mono" id="te2"></span>
+  <button id="treset">重置视野</button>
+  <span class="mono" id="tinfo"></span>
+</div>
+<div id="bar-can" class="bar" style="display:none">
+  迭代层数 k: <input type="range" id="ck" min="0" max="12" value="3" style="width:170px"><span class="mono" id="ck2"></span>
+  <button id="creset">重置视野</button>
+  <span class="mono" id="cinfo"></span>
+</div>
+
+<div id="zoomtip" style="display:inline-block; background:#fff3bf; border:1px solid #e08a2e;
+  border-radius:4px; padding:4px 12px; margin:4px 0 6px; font-size:13.5px; font-weight:bold;">
+  🔍 在图上<span style="color:#b03030">拖框</span>或<span style="color:#b03030">滚轮</span>即可放大
+</div>
+<canvas id="cv"></canvas>
+
+<div class="hint" id="hint-wei">
+  <b>W(x) = Σ aⁿ cos(bⁿπx)</b>（连续函数的一致收敛级数 ⇒ 处处连续）；当 <b>ab &gt; 1 + 3π/2 ≈ 5.712</b> 时处处不可导（Weierstrass 1872；Hardy 1916 放宽到 ab ≥ 1）。
+  <b class="k">拖一个框 / 滚轮</b>放大：无论放大多少倍，曲线永远毛糙、永不变直——"切线"从不出现。
+  相位 bⁿπx 用 BigInt 精确取模计算，放大到窗宽 10⁻¹² 看到的仍是真函数，不是浮点噪声。项数按"截断尾部 &lt; 屏幕上 1/3000 像素高度"自动选取（读数在上方）。
+</div>
+<div class="hint" id="hint-dir" style="display:none">
+  <b>狄利克雷函数 1<sub>ℚ</sub>(x)</b>：有理数处 = 1，无理数处 = 0。它没法直接画——图上画的是逼近序列
+  <b>f(x) = [cos(m!·πx)]<sup>2n</sup></b>：先让 n→∞（尖峰缩成分母整除 m! 的有理点，红点标出），再让 m→∞（红点铺满全部有理数），逐点极限恰是狄利克雷函数。灰带是每个像素列内函数的真实取值范围（min–max，防走样）。
+  <b>处处不连续</b>：任何点的任意小邻域内同时有有理数（f=1）和无理数（f=0），振荡恒为 1。
+  <b>黎曼不可积</b>：任何分割的每个小区间上 sup=1、inf=0 ⇒ 上积分=1、下积分=0，永不相等。
+  <b>勒贝格可积</b>：ℚ 可数 ⇒ 测度 0 ⇒ ∫ = 0。蓝点是几个无理数样本（√2−1, π−3, e−2, φ−1）。
+</div>
+<div class="hint" id="hint-tho" style="display:none">
+  <b>托梅函数</b>：f(p/q) = 1/q（既约分数），f(无理数) = 0。与狄利克雷相反：<b>在每个无理点连续、每个有理点不连续</b>。
+  道理全在 ε 横线上：<b class="k">高于 ε 的点只有有限个</b>（分母 q ≤ 1/ε 的既约分数，计数显示在上方）——避开这有限个点，函数值全部压在 ε 之下，这就是无理点处的连续性；也因此它<b>黎曼可积且 ∫₀¹ = 0</b>。拖框/滚轮放大看：任何小窗口里也只有稀疏的高点。
+</div>
+<div class="hint" id="hint-can" style="display:none">
+  <b>康托函数（魔鬼阶梯）</b>：连续、单调不减、从 0 爬到 1，但<b>导数几乎处处 = 0</b>——在康托集补集的每个开区间（挖掉的中三分段）上恒为常数，这些平台的总长度 = 1。
+  全部"爬升"都发生在测度为 0 的康托集上：一个不靠"斜率"就完成上升的连续函数（它不是绝对连续的，∫c′ = 0 ≠ c(1)−c(0)）。
+  橙色虚线是第 k 层迭代的折线逼近（拖 k 看收敛）；拖框/滚轮放大——阶梯里嵌着缩小的阶梯，无穷自相似。
+</div>
+
+<script>
+'use strict';
+// ===== 核心（无 DOM）=====
+// cos(π·Bn·x), Bn 为 BigInt —— 相位用 BigInt 对 2 精确取模, 深度放大不丢精度
+function weierExactCos(Bn, x) {
+  const ax = Math.abs(x);
+  if (ax === 0) return 1;
+  const e = Math.floor(Math.log2(ax)) + 1;          // ax ∈ [2^(e-1), 2^e)
+  const M = BigInt(Math.round(ax / Math.pow(2, e) * 9007199254740992)); // ax = M / 2^(53-e), 精确
+  const sh = BigInt(54 - e);
+  const mod = (Bn * M) & ((1n << sh) - 1n);         // (Bn·M) mod 2^(54-e)
+  const t = Number(mod) / Math.pow(2, 53 - e);      // = Bn·|x| mod 2 ∈ [0,2)
+  return Math.cos(Math.PI * t);
+}
+function weierVal(x, a, Bpow, N, fastN) {
+  let s = 0, p = 1;
+  const b = Number(Bpow[1]);
+  let bn = 1;
+  for (let n = 0; n <= N; n++) {
+    if (n <= fastN) { s += p * Math.cos(Math.PI * bn * x); bn *= b; }
+    else s += p * weierExactCos(Bpow[n], x);
+    p *= a;
+  }
+  return s;
+}
+function weierPickN(a, yrange) {                     // 尾部 a^(N+1)/(1-a) < yrange/3000
+  const thr = Math.max(yrange, 1e-300) / 3000 * (1 - a);
+  return Math.max(8, Math.min(300, Math.ceil(Math.log(thr) / Math.log(a))));
+}
+function cantorVal(x) {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  let v = 0, p = 0.5;
+  for (let i = 0; i < 60; i++) {
+    x *= 3;
+    const d = Math.floor(x);
+    x -= d;
+    if (d === 1) { v += p; break; }
+    if (d === 2) v += p;
+    p /= 2;
+    if (p === 0) break;
+  }
+  return v;
+}
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+function thomaePoints(x0, x1, Q) {                   // 窗口内全部既约 p/q, q ≤ Q → [x, 1/q]
+  const pts = [];
+  for (let q = 1; q <= Q; q++)
+    for (let p = Math.ceil(x0 * q); p <= Math.floor(x1 * q); p++) {
+      if (gcd(Math.abs(p), q) !== 1) continue;
+      pts.push([p / q, 1 / q]);
+    }
+  return pts;
+}
+// 深放大保证非空: 窗口中心的连分数(半)渐近分数必落入任意小窗, 再用 mediant 在窗内补密
+function fracsByCF(x0, x1, capQ, maxPts) {
+  const found = new Map();
+  const push = (p, q) => {
+    if (!(q > 0) || q > capQ || !isFinite(p)) return;
+    const g = gcd(Math.abs(p), q) || 1;
+    p /= g; q /= g;
+    const x = p / q;
+    if (x > x0 && x < x1) found.set(p + '/' + q, [x, 1 / q, q]);
+  };
+  for (const t of [0.5, 0.21, 0.79]) {
+    const c = x0 + (x1 - x0) * t;
+    let pm = 1, qm = 0, p0 = Math.floor(c), q0 = 1, frac = c - Math.floor(c);
+    push(p0, 1);
+    for (let it = 0; it < 80 && frac > 1e-16 && q0 <= capQ; it++) {
+      const a = Math.floor(1 / frac);
+      frac = 1 / frac - a;
+      const sj = j => (pm + j * p0) / (qm + j * q0);   // 半渐近, j 单调趋近 c
+      // 落窗的 j 是尾段 [j*, a]: 二分找 j*
+      let lo = 1, hi = a, jstar = -1;
+      if (sj(a) > x0 && sj(a) < x1) {
+        while (lo < hi) {
+          const mid = Math.floor((lo + hi) / 2);
+          if (sj(mid) > x0 && sj(mid) < x1) hi = mid; else lo = mid + 1;
+        }
+        jstar = lo;
+        // 从 [j*, a] 里取 ≤ 21 个(两端 + 均匀)
+        const take = Math.min(21, a - jstar + 1);
+        for (let i = 0; i < take; i++) {
+          const j = jstar + Math.round((a - jstar) * i / Math.max(1, take - 1));
+          push(pm + j * p0, qm + j * q0);
+        }
+      }
+      const p1 = a * p0 + pm, q1 = a * q0 + qm;
+      pm = p0; qm = q0; p0 = p1; q0 = q1;
+    }
+  }
+  // mediant 填充(Stern–Brocot): 相邻窗内点之间插中位分数, 优先分母小的
+  let arr = [...found.values()].sort((u, v) => u[0] - v[0]);
+  while (arr.length >= 2 && arr.length < maxPts) {
+    let bi = -1, bq = Infinity;
+    for (let i = 0; i + 1 < arr.length; i++) {
+      const q = arr[i][2] + arr[i + 1][2];
+      if (q < bq && q <= capQ) { bq = q; bi = i; }
+    }
+    if (bi < 0) break;
+    const P = arr[bi][0] * arr[bi][2] + arr[bi + 1][0] * arr[bi + 1][2]; // p_l + p_r (由 x·q 还原)
+    const g = gcd(Math.abs(Math.round(P)), bq) || 1;
+    const q = bq / g, x = Math.round(P) / g / q;
+    if (x > x0 && x < x1 && !found.has(Math.round(P) / g + '/' + q)) {
+      found.set(Math.round(P) / g + '/' + q, [x, 1 / q, q]);
+      arr.splice(bi + 1, 0, [x, 1 / q, q]);
+    } else arr.splice(bi, 1);                        // 防死循环: 丢弃该对
+  }
+  return [...found.values()].map(v => [v[0], v[1]]);
+}
+function dirichletApprox(x, mfact, n) {              // [cos(m!·πx)]^(2n)
+  return Math.pow(Math.cos(mfact * Math.PI * x), 2 * n);
+}
+// ===== 核心结束 =====
+
+const cv = document.getElementById('cv');
+const W = Math.min(1400, window.innerWidth - 36), H = 520;
+cv.width = W; cv.height = H;
+const g = cv.getContext('2d');
+let TAB = 'wei';
+const VIEW = { wei: [-2, 2], tho: [-0.02, 1.02], can: [-0.02, 1.02] };
+const HOME = { wei: [-2, 2], tho: [-0.02, 1.02], can: [-0.02, 1.02] };
+let YR = [-2, 2];                                   // 当前 y 范围(画完记录, 供坐标轴)
+
+const X = x => (x - VIEW[TAB][0]) / (VIEW[TAB][1] - VIEW[TAB][0]) * W;
+const Y = y => H - (y - YR[0]) / (YR[1] - YR[0]) * H;
+const fmtx = (v, w) => v.toFixed(Math.max(1, Math.min(14, Math.ceil(-Math.log10(w)) + 2)));
+
+function axes() {
+  const [x0, x1] = TAB === 'dir' ? [0, 1] : VIEW[TAB];
+  const w = x1 - x0;
+  g.strokeStyle = '#e3e3e3'; g.fillStyle = '#888'; g.font = '11px Menlo';
+  const step = Math.pow(10, Math.floor(Math.log10(w / 4)));
+  const s2 = w / step > 25 ? step * 5 : (w / step > 12 ? step * 2 : step);
+  for (let t = Math.ceil(x0 / s2) * s2; t <= x1; t += s2) {
+    const px = (t - x0) / w * W;
+    g.beginPath(); g.moveTo(px, 0); g.lineTo(px, H); g.stroke();
+    g.fillText(fmtx(t, w), px + 3, H - 6);
+  }
+  const yw = YR[1] - YR[0];
+  const ystep = Math.pow(10, Math.floor(Math.log10(yw / 4)));
+  const ys2 = yw / ystep > 12 ? ystep * 2 : ystep;
+  for (let t = Math.ceil(YR[0] / ys2) * ys2; t <= YR[1]; t += ys2) {
+    g.beginPath(); g.moveTo(0, Y(t)); g.lineTo(W, Y(t)); g.stroke();
+    const lbl = t.toPrecision(3);
+    g.fillText(lbl.includes('e') ? lbl : lbl.replace(/\.?0+$/, ''), 4, Y(t) - 3);
+  }
+}
+
+// ---------- 维尔斯特拉斯 ----------
+function drawWei() {
+  const a = +document.getElementById('wa').value / 100;
+  const b = +document.getElementById('wb').value;
+  document.getElementById('wa2').textContent = 'a=' + a.toFixed(2);
+  document.getElementById('wb2').textContent = 'b=' + b;
+  const ab = a * b, need = 1 + 1.5 * Math.PI;
+  document.getElementById('wcond').textContent =
+    `ab = ${ab.toFixed(2)} ${ab > need ? '> 5.71 ✓ 经典判据' : (ab >= 1 ? '≥ 1 ✓ Hardy 判据' : '< 1 ✗ 可导!')}`;
+  const [x0, x1] = VIEW.wei;
+  const width = x1 - x0;
+  // 两轮: 先粗算 y 范围, 再据其定项数
+  let N = weierPickN(a, 2 / (1 - a));
+  const xmax = Math.max(Math.abs(x0), Math.abs(x1));
+  for (let round = 0; round < 2; round++) {
+    const Bpow = [1n];
+    for (let n = 1; n <= N; n++) Bpow.push(Bpow[n - 1] * BigInt(b));
+    let fastN = N;                                   // b^n·xmax < 2^40 则走快路径
+    for (let n = 0; n <= N; n++)
+      if (Number(Bpow[n]) * Math.max(xmax, 1e-300) > 1.1e12) { fastN = n - 1; break; }
+    const M = 2 * W, vals = new Float64Array(M + 1);
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i <= M; i++) {
+      const v = weierVal(x0 + width * i / M, a, Bpow, N, fastN);
+      vals[i] = v;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    const N2 = weierPickN(a, hi - lo);
+    if (round === 0 && N2 > N) { N = N2; continue; }
+    const pad = (hi - lo) * 0.06 + 1e-15;
+    YR = [lo - pad, hi + pad];
+    g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+    axes();
+    g.strokeStyle = '#1f3a6e'; g.lineWidth = 1.1; g.beginPath();
+    for (let i = 0; i <= M; i++) {
+      const px = i / M * W, py = Y(vals[i]);
+      i ? g.lineTo(px, py) : g.moveTo(px, py);
+    }
+    g.stroke();
+    document.getElementById('winfo').textContent =
+      `项数 N = ${N}（其中 ${Math.max(0, N - Math.max(fastN, 0))} 项 BigInt 精确相位）`;
+    break;
+  }
+}
+
+// ---------- 狄利克雷 ----------
+function drawDir() {
+  const m = +document.getElementById('dm').value;
+  const n = Math.max(1, Math.round(Math.pow(10, +document.getElementById('dn').value / 250)));
+  let mf = 1;
+  for (let i = 2; i <= m; i++) mf *= i;
+  document.getElementById('dm2').textContent = `m=${m} (m!=${mf})`;
+  document.getElementById('dn2').textContent = `n=${n}`;
+  YR = [-0.08, 1.12];
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  const w = 1;
+  g.strokeStyle = '#e3e3e3'; g.fillStyle = '#888'; g.font = '11px Menlo';
+  for (let t = 0; t <= 10; t++) {
+    const px = t / 10 * W;
+    g.beginPath(); g.moveTo(px, 0); g.lineTo(px, H); g.stroke();
+    g.fillText((t / 10).toFixed(1), px + 3, H - 6);
+  }
+  for (const t of [0, 0.5, 1]) {
+    g.beginPath(); g.moveTo(0, Y(t)); g.lineTo(W, Y(t)); g.stroke();
+    g.fillText(t.toFixed(1), 4, Y(t) - 3);
+  }
+  // 每像素列 min–max 真实值域带
+  g.fillStyle = 'rgba(60,90,150,0.5)';
+  const SUB = 64;
+  for (let i = 0; i < W; i++) {
+    let lo = Infinity, hi = -Infinity;
+    for (let j = 0; j <= SUB; j++) {
+      const v = dirichletApprox((i + j / SUB) / W, mf, n);
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    // 峰值补采样: 列内若含 k/m! 精确点, 值恰为 1
+    const k0 = Math.ceil(i / W * mf), k1 = Math.floor((i + 1) / W * mf);
+    if (k1 >= k0) hi = 1;
+    g.fillRect(i, Y(hi), 1, Math.max(1, Y(lo) - Y(hi)));
+  }
+  // 上/下积分线
+  g.strokeStyle = '#c0392b'; g.setLineDash([6, 4]); g.lineWidth = 1.4;
+  g.beginPath(); g.moveTo(0, Y(1)); g.lineTo(W, Y(1)); g.stroke();
+  g.strokeStyle = '#27713d';
+  g.beginPath(); g.moveTo(0, Y(0)); g.lineTo(W, Y(0)); g.stroke();
+  g.setLineDash([]);
+  g.font = '12px Menlo';
+  g.fillStyle = '#c0392b'; g.fillText('上积分 = 1（每个小区间 sup = 1）', 10, Y(1) - 8);
+  g.fillStyle = '#27713d'; g.fillText('下积分 = 0（每个小区间 inf = 0）＝ 勒贝格积分（ℚ 测度 0）', 10, Y(0) + 16);
+  // 已到位的有理点(分母整除 m!) 红点; 无理数样本蓝点
+  g.fillStyle = '#c0392b';
+  for (let k = 0; k <= mf; k++) {
+    const px = k / mf * W;
+    g.beginPath(); g.arc(px, Y(1), mf > 200 ? 1.2 : 2.5, 0, 7); g.fill();
+  }
+  g.fillStyle = '#2b5fb8';
+  for (const ir of [Math.SQRT2 - 1, Math.PI - 3, Math.E - 2, (Math.sqrt(5) - 1) / 2]) {
+    g.beginPath(); g.arc(ir * W, Y(0), 3, 0, 7); g.fill();
+  }
+}
+
+// ---------- 托梅 ----------
+function drawTho() {
+  const Q = +document.getElementById('tq').value;
+  const eq = +document.getElementById('te').value, eps = 1 / eq;
+  document.getElementById('tq2').textContent = 'Q=' + Q;
+  document.getElementById('te2').textContent = eq + ' = ' + eps.toFixed(3);
+  const [x0, x1] = VIEW.tho;
+  const width = x1 - x0;
+  let pts = thomaePoints(x0, x1, Q);
+  let qUsed = Q, cfNote = '';
+  if (pts.length < 40) {                             // 兜底1: 自动加密分母(期望 ~200 点)
+    const Q2 = Math.min(2e6, Math.max(Q, Math.ceil(Math.sqrt(660 / width))));
+    if (Q2 > Q) { pts = thomaePoints(x0, x1, Q2); qUsed = Q2; cfNote = `　分母自动加密到 ${Q2.toExponential(1)}`; }
+  }
+  if (pts.length < 40) {                             // 兜底2: 连分数 + mediant (任意小窗保证非空)
+    const extra = fracsByCF(x0, x1, 1e13, 220);
+    const seen = new Set(pts.map(p => p[0]));
+    for (const e of extra) if (!seen.has(e[0])) pts.push(e);
+    cfNote = '　Q 内无点 → 连分数补点(分母上限 1e13)';
+  }
+  let above = 0, ymax = 0;
+  for (const [x, v] of pts) {
+    if (v >= eps) above++;
+    if (v > ymax) ymax = v;
+  }
+  if (ymax === 0) ymax = 1;                        // 窗内无点(Q 内没有分数落进来)
+  YR = [-0.055 * ymax, ymax * 1.12];               // y 随窗内实测最高点自适应
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  axes();
+  // ε 线
+  g.strokeStyle = '#c0392b'; g.setLineDash([6, 4]);
+  g.beginPath(); g.moveTo(0, Y(eps)); g.lineTo(W, Y(eps)); g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = '#c0392b'; g.font = '12px Menlo';
+  g.fillText(`ε = 1/${eq}`, W - 90, Y(eps) - 6);
+  const rDot = pts.length < 60 ? 3 : (pts.length < 400 ? 2.2 : 1.6);   // 点稀则画大
+  for (const [x, v] of pts) {
+    g.fillStyle = v >= eps ? '#c0392b' : 'rgba(31,58,110,0.55)';
+    g.beginPath(); g.arc(X(x), Y(v), v >= eps ? Math.max(3, rDot) : rDot, 0, 7); g.fill();
+  }
+  document.getElementById('tinfo').textContent =
+    `窗内点数 = ${pts.length}　最高点 = ${ymax === 1 && !pts.length ? '—' : (1 / Math.round(1 / ymax) === ymax ? '1/' + Math.round(1 / ymax) : ymax.toPrecision(3))}　高于 ε 的只有 ${above} 个（有限! 这就是无理点连续 + 黎曼可积的原因）` + cfNote;
+}
+
+// ---------- 康托 ----------
+function drawCan() {
+  const k = +document.getElementById('ck').value;
+  document.getElementById('ck2').textContent = 'k=' + k;
+  const [x0, x1] = VIEW.can;
+  const width = x1 - x0;
+  const M = 2 * W, vals = new Float64Array(M + 1);
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i <= M; i++) {
+    const v = cantorVal(x0 + width * i / M);
+    vals[i] = v;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  const pad = (hi - lo) * 0.06 + 1e-12;
+  YR = [lo - pad, hi + pad];
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  axes();
+  // 第 k 层折线逼近: c_k, 在 3^-k 网格上取 cantorVal 再线性插值 == 标准迭代逼近
+  g.strokeStyle = '#e08a2e'; g.setLineDash([5, 4]); g.lineWidth = 1.3; g.beginPath();
+  const grid = Math.pow(3, k);
+  let started = false;
+  for (let j = 0; j <= grid; j++) {
+    const x = j / grid;
+    if (x < x0 - 1 / grid || x > x1 + 1 / grid) continue;
+    const px = X(x), py = Y(cantorVal(x));
+    started ? g.lineTo(px, py) : g.moveTo(px, py);
+    started = true;
+  }
+  g.stroke(); g.setLineDash([]);
+  g.strokeStyle = '#1f3a6e'; g.lineWidth = 1.4; g.beginPath();
+  for (let i = 0; i <= M; i++) {
+    const px = i / M * W, py = Y(vals[i]);
+    i ? g.lineTo(px, py) : g.moveTo(px, py);
+  }
+  g.stroke();
+  document.getElementById('cinfo').textContent =
+    `蓝 = 极限函数, 橙虚线 = 第 k 层折线(3^k = ${grid} 段)`;
+}
+
+function zoomTip() {
+  const el = document.getElementById('zoomtip');
+  if (TAB === 'dir') {
+    el.innerHTML = '此图固定 [0,1]，无缩放（有理数的稠密性在任何尺度都一样）';
+    return;
+  }
+  const [x0, x1] = VIEW[TAB], w = x1 - x0;
+  const mag = (HOME[TAB][1] - HOME[TAB][0]) / w;
+  el.innerHTML = `🔍 在图上<span style="color:#b03030">拖框</span>或<span style="color:#b03030">滚轮</span>放大　`
+    + `窗口 x ∈ [${fmtx(x0, w)}, ${fmtx(x1, w)}]　`
+    + `宽 x<sub>右</sub> − x<sub>左</sub> = <span style="color:#b03030">${w.toExponential(3)}</span>　`
+    + `相对初始放大 <span style="color:#b03030">× ${mag >= 9999 ? mag.toExponential(2) : mag.toPrecision(3)}</span>`;
+}
+// ---------- 调度 / 交互 ----------
+const DRAW = { wei: drawWei, dir: drawDir, tho: drawTho, can: drawCan };
+function draw() { DRAW[TAB](); zoomTip(); }
+document.querySelectorAll('button[data-t]').forEach(b => b.addEventListener('click', () => {
+  TAB = b.dataset.t;
+  document.querySelectorAll('button[data-t]').forEach(x => x.classList.toggle('on', x === b));
+  for (const t of ['wei', 'dir', 'tho', 'can']) {
+    document.getElementById('bar-' + t).style.display = t === TAB ? 'flex' : 'none';
+    document.getElementById('hint-' + t).style.display = t === TAB ? 'block' : 'none';
+  }
+  draw();
+}));
+for (const id of ['wa', 'wb', 'dm', 'dn', 'tq', 'te', 'ck'])
+  document.getElementById(id).addEventListener('input', () => requestAnimationFrame(draw));
+document.getElementById('wreset').addEventListener('click', () => { VIEW.wei = HOME.wei.slice(); draw(); });
+document.getElementById('treset').addEventListener('click', () => { VIEW.tho = HOME.tho.slice(); draw(); });
+document.getElementById('creset').addEventListener('click', () => { VIEW.can = HOME.can.slice(); draw(); });
+
+const MINW = 1e-12;
+cv.addEventListener('wheel', e => {
+  if (TAB === 'dir') return;
+  e.preventDefault();
+  const [x0, x1] = VIEW[TAB], w = x1 - x0;
+  const cxf = e.offsetX / W, cx = x0 + w * cxf;
+  const f = e.deltaY > 0 ? 1.25 : 0.8;
+  const nw = Math.min(16, Math.max(MINW, w * f));
+  VIEW[TAB] = [cx - nw * cxf, cx + nw * (1 - cxf)];
+  requestAnimationFrame(draw);
+}, { passive: false });
+let dragX = null;
+cv.addEventListener('pointerdown', e => { if (TAB !== 'dir') { dragX = e.offsetX; cv.setPointerCapture(e.pointerId); } });
+cv.addEventListener('pointermove', e => {
+  if (dragX === null) return;
+  draw();
+  g.fillStyle = 'rgba(43,95,184,0.15)';
+  g.strokeStyle = '#2b5fb8';
+  const a = Math.min(dragX, e.offsetX), b2 = Math.max(dragX, e.offsetX);
+  g.fillRect(a, 0, b2 - a, H);
+  g.strokeRect(a + 0.5, 0.5, b2 - a, H - 1);
+});
+cv.addEventListener('pointerup', e => {
+  if (dragX === null) return;
+  const a = Math.min(dragX, e.offsetX), b2 = Math.max(dragX, e.offsetX);
+  dragX = null;
+  if (b2 - a > 8) {
+    const [x0, x1] = VIEW[TAB], w = x1 - x0;
+    const nx0 = x0 + w * a / W, nx1 = x0 + w * b2 / W;
+    if (nx1 - nx0 >= MINW) VIEW[TAB] = [nx0, nx1];
+  }
+  draw();
+});
+draw();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>
