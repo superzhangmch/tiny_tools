@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCMC：手绘一个分布，让马尔可夫链学会它</title>
+<style>
+  body { margin: 0; padding: 12px 16px; background: #fff; color: #222;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  h1 { font-size: 18px; margin: 4px 0 8px; }
+  button { padding: 4px 12px; font-size: 13px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  button.on { background: #2b5fb8; color: #fff; border-color: #2b5fb8; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+  .hint { color: #555; font-size: 12.5px; line-height: 1.6; max-width: 1150px; margin-top: 8px; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  .wrap { position: relative; }
+  .wrap canvas { display: block; border: 1px solid #999; }
+  .wrap .ov { position: absolute; left: 0; top: 0; border: none; touch-action: none; cursor: crosshair; }
+  .cap { font-size: 12px; color: #555; text-align: center; margin-top: 3px; }
+  b.k { color: #b03030; }
+  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .hint { display: none !important; }
+</style>
+</head>
+<body>
+<h1>MCMC（Metropolis）：手绘一个分布，让马尔可夫链学会它</h1>
+<div class="bar">
+  预设:
+  <button data-p="bimodal">双峰</button>
+  <button data-p="ring">圆环</button>
+  <button data-p="spiral">螺旋</button>
+  <button data-p="grad">渐变</button>
+  <button id="brush" class="on">🖌 画笔</button>
+  <button id="erase">◻ 橡皮</button>
+  <button id="clearAll">清空画布</button>
+  <button id="resetS">重置样本</button>
+</div>
+<div class="bar">
+  步长 σ: <input type="range" id="sigma" min="4" max="300" value="60" style="width:170px"><span class="mono" id="sigma2"></span>
+  每帧步数: <input type="range" id="spf" min="0" max="1000" value="600" style="width:150px"><span class="mono" id="spf2"></span>
+  burn-in: <input type="range" id="burn" min="0" max="5000" value="500" step="100" style="width:130px"><span class="mono" id="burn2"></span>
+  <label><input type="checkbox" id="trail" checked> 显示链迹</label>
+</div>
+<div class="bar mono" id="stat"></div>
+<div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:4px">
+  <div>
+    <div class="wrap">
+      <canvas id="tgt" width="128" height="128" style="width:460px;height:460px"></canvas>
+      <canvas id="ov" class="ov" width="460" height="460"></canvas>
+    </div>
+    <div class="cap">目标密度 p(x)（<b>在这里用鼠标涂画</b>）＋ 链的游走（红点 = 当前，橙线 = 最近轨迹）</div>
+  </div>
+  <div>
+    <div class="wrap"><canvas id="heat" width="128" height="128" style="width:460px;height:460px"></canvas></div>
+    <div class="cap">样本堆积热图（burn-in 之后的每一步记一票，被拒绝时原地重复记票）</div>
+  </div>
+</div>
+<div class="hint">
+  <b>规则只有一条</b>（Metropolis 1953）：从当前点 x 随机走一小步到 x′，若 p(x′) ≥ p(x) 就走过去；否则以概率 p(x′)/p(x) 走过去，剩下的情况留在原地（并把原地再记一票）。
+  只用密度的<b>比值</b>——不需要归一化常数，这正是它能采样任意手绘形状的原因。长跑之后，落脚点的分布就是 p 本身（右图应长成左图）。
+  <b class="k">试验</b>：① 步长调小 → 接受率飙高但挪不动（样本强相关）；调大 → 到处被拒（接受率↓）；教科书经验值 ≈ 0.23–0.44。
+  ② 选"双峰"再把步长调小——链会<b>卡在一座峰里</b>，另一座迟迟不长（多峰是 MCMC 的真实困境，不是 bug）。
+  ③ TV 距离（上方实测值）随样本数下降，但有 ~0.4·√(K/M) 的有限样本噪声地板（K=1024 个比较格），不会精确到 0。
+</div>
+
+<script>
+'use strict';
+// ===== 核心（无 DOM）=====
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function gauss(rng) {
+  return Math.sqrt(-2 * Math.log(Math.max(rng(), 1e-12))) * Math.cos(2 * Math.PI * rng());
+}
+function densityAt(G, N, x, y) {          // 双线性插值, [0,1)² 之外为 0
+  if (!(x >= 0 && y >= 0 && x < 1 && y < 1)) return 0;
+  const fx = x * (N - 1), fy = y * (N - 1);
+  const i = Math.floor(fx), j = Math.floor(fy), u = fx - i, v = fy - j;
+  const i1 = Math.min(i + 1, N - 1), j1 = Math.min(j + 1, N - 1);
+  return G[j * N + i] * (1 - u) * (1 - v) + G[j * N + i1] * u * (1 - v)
+       + G[j1 * N + i] * (1 - u) * v + G[j1 * N + i1] * u * v;
+}
+// Metropolis: 每步调用 onStep(x, y)（含拒绝后的原地重复）; 返回接受数
+function metropolisRun(G, N, st, sigma, steps, rng, onStep) {
+  let acc = 0, p0 = densityAt(G, N, st.x, st.y);
+  for (let k = 0; k < steps; k++) {
+    if (p0 <= 0) {                        // 起点落在零密度区: 随机重掷直至有支撑
+      st.x = rng(); st.y = rng();
+      p0 = densityAt(G, N, st.x, st.y);
+      continue;
+    }
+    const nx = st.x + sigma * gauss(rng), ny = st.y + sigma * gauss(rng);
+    const p1 = densityAt(G, N, nx, ny);
+    if (p1 >= p0 || rng() * p0 < p1) { st.x = nx; st.y = ny; p0 = p1; acc++; }
+    if (onStep) onStep(st.x, st.y);
+  }
+  return acc;
+}
+function tvDistance(A, B) {               // 两个非负网格各自归一后的总变差 ∈ [0,1]
+  let sa = 0, sb = 0;
+  for (let i = 0; i < A.length; i++) { sa += A[i]; sb += B[i]; }
+  if (!(sa > 0) || !(sb > 0)) return 1;
+  let tv = 0;
+  for (let i = 0; i < A.length; i++) tv += Math.abs(A[i] / sa - B[i] / sb);
+  return tv / 2;
+}
+function downsample(G, N, K) {            // N×N → K×K 块求和
+  const H = new Float64Array(K * K), r = N / K;
+  for (let j = 0; j < N; j++)
+    for (let i = 0; i < N; i++)
+      H[Math.floor(j / r) * K + Math.floor(i / r)] += G[j * N + i];
+  return H;
+}
+// ===== 核心结束 =====
+
+const N = 128, S = 460;
+const tgt = document.getElementById('tgt'), gT = tgt.getContext('2d');
+const ov = document.getElementById('ov'), gO = ov.getContext('2d');
+const heatCv = document.getElementById('heat'), gH = heatCv.getContext('2d');
+let G = new Float64Array(N * N);          // 目标密度(手绘)
+let HEAT = new Float64Array(N * N);       // 样本计票
+const rng = mulberry32(12345);
+const st = { x: 0.5, y: 0.5 };
+let stepCount = 0, accCount = 0, winSteps = 0, winAcc = 0;
+let trailBuf = [];
+let eraseMode = false, tvShown = '—';
+
+// --- 颜色: t∈[0,1] → 白→深蓝 ---
+function ramp(t) {
+  t = Math.max(0, Math.min(1, t));
+  return [Math.round(255 - 224 * t), Math.round(255 - 197 * t), Math.round(255 - 145 * t)];
+}
+function paintGrid(cv, ctx, A, gamma) {
+  let mx = 0;
+  for (let i = 0; i < A.length; i++) if (A[i] > mx) mx = A[i];
+  const img = ctx.createImageData(N, N);
+  for (let i = 0; i < A.length; i++) {
+    const c = ramp(mx ? Math.pow(A[i] / mx, gamma) : 0);
+    img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1]; img.data[i * 4 + 2] = c[2];
+    img.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+function redrawTarget() { paintGrid(tgt, gT, G, 0.85); }
+
+// --- 手绘 ---
+function splat(cx, cy, sign) {            // 单位坐标, 软刷
+  const R = 0.055;
+  const i0 = Math.max(0, Math.floor((cx - R * 1.6) * N)), i1 = Math.min(N - 1, Math.ceil((cx + R * 1.6) * N));
+  const j0 = Math.max(0, Math.floor((cy - R * 1.6) * N)), j1 = Math.min(N - 1, Math.ceil((cy + R * 1.6) * N));
+  for (let j = j0; j <= j1; j++)
+    for (let i = i0; i <= i1; i++) {
+      const d2 = ((i + 0.5) / N - cx) ** 2 + ((j + 0.5) / N - cy) ** 2;
+      const w = Math.exp(-d2 / (2 * R * R)) * 0.22;
+      G[j * N + i] = Math.max(0, G[j * N + i] + sign * w);
+    }
+}
+let painting = false, lastP = null;
+ov.addEventListener('pointerdown', e => {
+  painting = true; lastP = null; ov.setPointerCapture(e.pointerId); doPaint(e);
+});
+ov.addEventListener('pointermove', e => { if (painting) doPaint(e); });
+ov.addEventListener('pointerup', () => { painting = false; lastP = null; resetSamples(); });
+function doPaint(e) {
+  const r = ov.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  const sign = eraseMode ? -1 : 1;
+  if (lastP) {                            // 插值补点, 快速拖动不断线
+    const d = Math.hypot(x - lastP[0], y - lastP[1]), n = Math.ceil(d / 0.012);
+    for (let k = 1; k <= n; k++) splat(lastP[0] + (x - lastP[0]) * k / n, lastP[1] + (y - lastP[1]) * k / n, sign);
+  } else splat(x, y, sign);
+  lastP = [x, y];
+  redrawTarget();
+}
+
+// --- 预设 ---
+function blob(cx, cy, s, w) {
+  for (let j = 0; j < N; j++)
+    for (let i = 0; i < N; i++) {
+      const d2 = ((i + 0.5) / N - cx) ** 2 + ((j + 0.5) / N - cy) ** 2;
+      G[j * N + i] += w * Math.exp(-d2 / (2 * s * s));
+    }
+}
+const PRESETS = {
+  bimodal: () => { blob(0.31, 0.48, 0.075, 1); blob(0.71, 0.56, 0.075, 0.6); },
+  ring: () => {
+    for (let j = 0; j < N; j++)
+      for (let i = 0; i < N; i++) {
+        const r = Math.hypot((i + 0.5) / N - 0.5, (j + 0.5) / N - 0.5);
+        G[j * N + i] = Math.exp(-(((r - 0.29) / 0.05) ** 2));
+      }
+  },
+  spiral: () => {
+    for (let t = 0; t <= 1; t += 0.004) {
+      const a = 4.5 * Math.PI * t, r = 0.06 + 0.34 * t;
+      blob(0.5 + r * Math.cos(a), 0.5 + r * Math.sin(a), 0.035, 0.12 + 0.5 * t);
+    }
+  },
+  grad: () => { for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) G[j * N + i] = (i + 1) / N; },
+};
+document.body.addEventListener('click', e => {
+  const p = e.target.dataset && e.target.dataset.p;
+  if (!p) return;
+  G.fill(0); PRESETS[p]();
+  redrawTarget(); resetSamples();
+});
+
+// --- 控制 ---
+const $ = id => document.getElementById(id);
+$('brush').addEventListener('click', () => { eraseMode = false; $('brush').classList.add('on'); $('erase').classList.remove('on'); });
+$('erase').addEventListener('click', () => { eraseMode = true; $('erase').classList.add('on'); $('brush').classList.remove('on'); });
+$('clearAll').addEventListener('click', () => { G.fill(0); redrawTarget(); resetSamples(); });
+$('resetS').addEventListener('click', resetSamples);
+function resetSamples() {
+  HEAT.fill(0); stepCount = 0; accCount = 0; winSteps = 0; winAcc = 0; trailBuf = []; tvShown = '—';
+  if (densityAt(G, N, st.x, st.y) <= 0) { st.x = rng(); st.y = rng(); }
+}
+
+// --- 主循环 ---
+let frame = 0;
+function tick() {
+  const sigma = +$('sigma').value / 1000;
+  const spf = Math.round(Math.pow(10, +$('spf').value / 250));   // 1 ~ 10000
+  const burnN = +$('burn').value;
+  $('sigma2').textContent = sigma.toFixed(3);
+  $('spf2').textContent = spf;
+  $('burn2').textContent = burnN;
+  let hasMass = false;
+  for (let i = 0; i < G.length; i++) if (G[i] > 0) { hasMass = true; break; }
+  if (hasMass && spf > 0) {
+    const acc = metropolisRun(G, N, st, sigma, spf, rng, (x, y) => {
+      stepCount++;
+      if (stepCount > burnN) {
+        const i = Math.min(N - 1, Math.floor(x * N)), j = Math.min(N - 1, Math.floor(y * N));
+        HEAT[j * N + i]++;
+      }
+      if (trailBuf.length > 220) trailBuf.shift();
+      trailBuf.push([x, y]);
+    });
+    accCount += acc; winAcc += acc; winSteps += spf;
+    if (winSteps > 6000) { winAcc = Math.round(winAcc / 2); winSteps = Math.round(winSteps / 2); }  // 滑窗
+    paintGrid(heatCv, gH, HEAT, 0.6);
+    if (frame % 30 === 0) tvShown = tvDistance(downsample(G, N, 32), downsample(HEAT, N, 32)).toFixed(3);
+  }
+  // 覆盖层: 链迹 + 当前点
+  gO.clearRect(0, 0, S, S);
+  if ($('trail').checked && trailBuf.length > 1) {
+    gO.strokeStyle = 'rgba(224,138,46,0.75)'; gO.lineWidth = 1.2; gO.beginPath();
+    trailBuf.forEach(([x, y], k) => { k ? gO.lineTo(x * S, y * S) : gO.moveTo(x * S, y * S); });
+    gO.stroke();
+  }
+  if (hasMass) {
+    gO.fillStyle = '#c0392b';
+    gO.beginPath(); gO.arc(st.x * S, st.y * S, 4.5, 0, 7); gO.fill();
+    gO.strokeStyle = '#fff'; gO.lineWidth = 1.5; gO.stroke();
+  }
+  const M = Math.max(0, stepCount - +$('burn').value);
+  $('stat').textContent =
+    `接受率(滑窗) = ${winSteps ? (winAcc / winSteps).toFixed(3) : '—'}　样本 M = ${M.toLocaleString()}`
+    + `　TV 距离(32×32 实测) = ${tvShown}　噪声地板 ≈ ${M > 0 ? (0.4 * Math.sqrt(1024 / M)).toFixed(3) : '—'}`
+    + (hasMass ? '' : '　← 画布是空的, 先涂点密度');
+  frame++;
+  requestAnimationFrame(tick);
+}
+PRESETS.bimodal();
+redrawTarget();
+resetSamples();
+tick();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>

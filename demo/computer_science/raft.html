@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raft 共识：分布式选举 + 日志复制 + 脑裂实验</title>
+<style>
+:root{
+  --surface:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --base:#c3c2b7; --s1:#2a78d6; --s2:#eb6834; --down:#d03b3b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--page);color:var(--ink);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+#app{display:flex;flex-direction:column;height:100%}
+#toolbar{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:6px 10px;
+  background:var(--surface);border-bottom:1px solid var(--grid);font-size:13px}
+button{font:12px system-ui;padding:3px 9px;border:1px solid var(--base);border-radius:5px;
+  background:var(--surface);color:var(--ink);cursor:pointer}
+button:hover{background:#f0efec}
+button.warn{color:var(--down);border-color:var(--down)}
+button.pri{background:var(--s1);color:#fff;border-color:var(--s1)}
+button.on{background:var(--s1);color:#fff;border-color:var(--s1)}
+#toolbar label{color:var(--ink2)}
+#toolbar .sep{width:1px;height:18px;background:var(--grid)}
+#main{flex:1;display:flex;min-height:0}
+#left{flex:1;display:flex;flex-direction:column;min-width:0}
+#cwrap{flex:1;position:relative;min-height:220px}
+canvas#stage{position:absolute;inset:0;width:100%;height:100%;display:block;background:var(--surface)}
+#hint{position:absolute;left:10px;bottom:6px;font-size:12px;color:var(--muted);pointer-events:none;
+  background:rgba(252,252,251,.85);padding:2px 8px;border-radius:6px}
+#matrix{background:var(--surface);border-top:1px solid var(--grid);padding:8px 12px;
+  overflow-x:auto;font-size:12px;flex-shrink:0}
+#matrix .mrow{display:flex;align-items:center;gap:4px;margin:3px 0;white-space:nowrap}
+#matrix .mname{width:110px;color:var(--ink2);flex-shrink:0;font-variant-numeric:tabular-nums}
+#matrix .cell{width:26px;height:26px;border-radius:4px;display:inline-flex;align-items:center;
+  justify-content:center;font-size:11px;color:#fff;flex-shrink:0;border:2px dashed transparent}
+#matrix .cell.uncommitted{opacity:.45;border-color:var(--muted);color:var(--ink)}
+#matrix .cinfo{margin-left:8px;color:var(--muted)}
+#matrix .idxrow{color:var(--muted);font-size:10px}
+#matrix .idxrow span{display:inline-block;width:30px;text-align:center}
+#side{width:340px;overflow-y:auto;background:var(--surface);border-left:1px solid var(--grid);
+  padding:8px 10px;flex-shrink:0}
+#side details{margin-bottom:8px;border:1px solid var(--grid);border-radius:8px;padding:6px 9px}
+#side summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink2)}
+#selinfo{font-size:13px}
+.btnrow{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}
+#log{font-size:12px;max-height:300px;overflow-y:auto;color:var(--ink2)}
+#log div{padding:1px 0;border-bottom:1px dashed var(--grid)}
+#log .t{color:var(--muted);font-variant-numeric:tabular-nums;margin-right:5px}
+#log .bad{color:var(--down)} #log .good{color:#006300}
+#log .lead{color:var(--s1)} #log .cand{color:var(--s2)}
+#tips{font-size:12px;color:var(--ink2)} #tips li{margin:3px 0}
+input[type=range]{vertical-align:middle}
+#notePanel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(720px,92vw);max-height:84vh;overflow-y:auto;background:var(--surface);
+  border:1px solid var(--grid);border-radius:12px;padding:16px 20px;box-shadow:0 8px 40px rgba(0,0,0,.18)}
+#notePanel .nq{font-weight:600;margin:12px 0 3px;color:var(--ink)}
+#notePanel .na{font-size:13px;color:var(--ink2);line-height:1.65}
+#notePanel .na b{color:var(--ink)}
+@media (max-width:860px){
+  #main{flex-direction:column}
+  #side{width:100%;max-height:40%;border-left:none;border-top:1px solid var(--grid)}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <button id="bPause">⏸ 暂停</button>
+    <button id="bStep">单步</button>
+    <label>速度 <input id="rSpeed" type="range" min="-2" max="3" step="0.5" value="0" style="width:80px"> <span id="tSpeed">1×</span></label>
+    <span class="sep"></span>
+    <label>节点 <select id="selN"><option>3</option><option selected>5</option><option>7</option></select></label>
+    <button id="bRestart">↺ 重启集群</button>
+    <span class="sep"></span>
+    <button id="bWrite" class="pri">📝 客户端写入</button>
+    <label><input type="checkbox" id="cAuto"> 自动写入</label>
+    <span class="sep"></span>
+    <button id="bExp">🧪 零丢失实验</button>
+    <button id="bKillLeader" class="warn">💥 杀死 leader</button>
+    <button id="bSplit" class="warn">✂ 一键脑裂</button>
+    <button id="bHeal">愈合分区</button>
+    <span class="sep"></span>
+    <label>延迟 <input id="rDelay" type="range" min="40" max="400" step="20" value="140" style="width:70px"> <span id="tDelay">140ms</span></label>
+    <label>丢包 <input id="rLoss" type="range" min="0" max="40" step="5" value="0" style="width:70px"> <span id="tLoss">0%</span></label>
+    <button id="bNote" style="margin-left:auto">📒 笔记</button>
+  </div>
+  <div id="noteMask" style="display:none;position:fixed;inset:0;background:rgba(11,11,11,.35);z-index:50">
+    <div id="notePanel">
+      <div style="display:flex;align-items:center;margin-bottom:6px">
+        <b style="font-size:15px">关于 Raft 的五个疑问（学习笔记）</b>
+        <button id="bNoteClose" style="margin-left:auto">✕ 关闭</button>
+      </div>
+
+      <div class="nq">Q1：数据只能 master（leader）写入吗？</div>
+      <div class="na">是，这是刻意设计。共识最难的是"多个提议者并发提议怎么达成一致"（Paxos 的复杂性大半来自这里）；
+      Raft 釜底抽薪：先选举保证任意时刻至多一个合法提议者，"达成一致"就退化成 leader 说了算 + 多数派抄作业。
+      follower 收到写请求只会重定向到 leader（事件日志里能看到"重定向"）。
+      注意<b>读也不能随便读 follower</b>——它的数据可能落后甚至是未提交的分叉，线性一致读要走 leader（ReadIndex/lease）。</div>
+
+      <div class="nq">Q2：follower 靠同步得到数据，那 leader 挂了最多丢几条吧？</div>
+      <div class="na"><b>不对——已提交的一条都不丢，零条。</b>会消失的只有"没提交的"，而那些客户端从未收到成功回执（ack），
+      语义上等于请求没发生，重试即可。机制是选举限制：投票时日志不够新的候选人拿不到票，而"已提交"意味着在多数派上，
+      任何能当选的多数派必与之有交集 → 新 leader 数学上必然携带全部已提交日志。这是定理不是运气。<br>
+      你的直觉描述的其实是 <b>MySQL 异步主从</b>：先 ack 后同步，主挂真丢已确认数据。Raft 恰好反过来：<b>先多数派落盘、后 ack</b>，
+      代价是每笔写多一个复制 RTT。<br>
+      👉 对应实验：工具栏「🧪 零丢失实验」一键复现整个剧本。</div>
+
+      <div class="nq">Q3：写入全是串行的，撑不起大并发吧？现实中怎么解决？</div>
+      <div class="na">两层手段。<b>第一层：单组没那么慢</b>——"串行"指日志顺序串行，不是一条一个 RTT。
+      生产实现靠 batching（把并发到达的几百条请求打包进一条 AppendEntries、一次 fsync、一个 RTT）+
+      pipelining（不等上批 ack 就发下批）。RTT 决定延迟（几毫秒），不决定吞吐；单个 etcd 组实测几万写/秒。
+      本 demo 的 MAX_ENT=8 就是 batching 的极简版（消息上标"日志×8"）。<br>
+      <b>第二层（真正的答案）：分片</b>——TiKV/CockroachDB/Spanner/OceanBase 把数据按 key 切成上万个 region，
+      <b>每个 region 一个独立 Raft 组</b>，leader 均匀散布在所有机器上（multi-raft）。串行只在单分片内，分片间完全并行，
+      吞吐随机器数线性扩展。</div>
+
+      <div class="nq">Q4：那银行交易系统怎么办？撑得起大规模交易吗？</div>
+      <div class="na">银行反而是最佳案例：<b>账户天然就是分片键</b>，而同一账户的操作<b>本来就必须串行</b>
+      （余额检查、扣款不串行才是灾难）——Raft 单分片内的串行不是性能缺陷，是业务刚需白送了；
+      不同账户间毫无顺序约束，分片后天然并行。跨账户转账（两个分片）在两个 Raft 组之上跑两阶段提交
+      （Percolator/Spanner 模式）。存在性证明：支付宝双十一峰值几十万笔/秒，底下的 OceanBase 就是
+      "Paxos 分片 + 多副本零丢失"架构。</div>
+
+      <div class="nq">Q5：就是说，不同用户走了不同的 Raft？</div>
+      <div class="na">对。一笔请求的路径：账户号 → 定位到分片 region_1382 → 该 region 自己的 Raft 组（3 副本）→
+      组内走完整 Raft 流程。隔壁账户落在 region_2907，是<b>完全不同的一组 leader/follower</b>，两笔写入互不照面。
+      关键细节：① 一台机器同时是几百个组的 leader、几百个组的 follower，负载天然摊平；
+      ② 分片是动态的，变热就分裂/迁 leader；③ 每组独立选举独立故障，一台机器挂了只影响它当 leader 的那些组，
+      爆炸半径被切碎。<br>
+      分层图景：<b>Raft 管一个分片内的顺序与持久 → 2PC 管分片间的原子性 → 路由层管谁去哪</b>。
+      Kafka 同理：partition 内严格有序、partition 间并行。</div>
+
+      <div class="nq">Q6：还有个和 Raft 类似的叫什么来着？用它的不多吗？（Paxos）</div>
+      <div class="na"><b>Paxos</b>，Lamport 1989 年提出，是 Raft 的前辈，两者本质等价：Basic Paxos 只对单个值共识，
+      工程上用的 <b>Multi-Paxos</b>（稳定 proposer + 日志复制）结构上已和 Raft 几乎一样。
+      Raft 论文标题就叫《In Search of an <b>Understandable</b> Consensus Algorithm》——动机就是 Paxos 太难懂、
+      论文与工程之间鸿沟太大，各家实现的都是无法互相验证的魔改变体。<br>
+      "用得不多"是错觉，只是分布不同：<b>Paxos 藏在大厂闭源系统里</b>（Google Chubby/Spanner、Azure 存储、
+      OceanBase、PolarDB），<b>Raft 统治开源</b>（etcd/Kubernetes、Consul、TiKV、CockroachDB、Kafka KRaft），
+      2014 年后新系统几乎无脑选 Raft——工程师能看懂、能实现对、能调 bug。
+      另有两个亲戚：ZAB（ZooKeeper）和 Viewstamped Replication（1988 年，想法比 Paxos 还早，名气小得多）。
+      一句话：<b>同一个定理的两种讲法，Paxos 赢了历史和大厂，Raft 赢了人心和开源。</b></div>
+
+      <div class="nq">Q7：Paxos 和 Raft 是不是基本等价？</div>
+      <div class="na">是，且有学术背书（Howard &amp; Mortier 2020《Paxos vs Raft》）：<b>Raft 可视为 Multi-Paxos 的一个特定变体</b>，
+      安全性保证完全相同。等价的部分：同解状态机复制问题（2F+1 容忍 F 故障）、同样的"多数派交集 + 单调任期号
+      （term ≡ ballot）+ 见高就退"、正常路径同为 leader 一个 RTT 提交、同受 FLP 约束（安全性恒成立，活性靠随机化）。<br>
+      不等价的是工程性状，全是同一个取舍的侧面——<b>Raft 用"只许日志最新者当选"换掉了 Paxos 最烧脑的"当选后修补"</b>：<br>
+      · 谁能当 leader：Paxos 任何节点 / Raft 只有日志最新的节点（选举限制）<br>
+      · 当选后：Paxos 要反向学习补自己缺的日志 / Raft 天生最全，什么都不用做<br>
+      · 日志形态：Paxos 允许有洞、槽位乱序敲定 / Raft 严格连续无洞<br>
+      · 数据流向：Paxos 双向 / Raft 永远单向 leader→follower<br>
+      代价是灵活性：Paxos 的洞支持乱序提交的并行度，Flexible Paxos 还允许选举与复制用不同大小的法定人数
+      （如 5 节点 2 票复制 + 4 票选举），这些在原版 Raft 里施展不开。一句话：<b>数学上是同一个东西的两种参数化，
+      工程上是两种性格</b>——Paxos 把复杂度留给实现者换灵活性，Raft 把灵活性上交换可实现性。这正好解释 Q6 的现象。</div>
+
+      <div style="margin-top:10px;font-size:12px;color:var(--muted)">
+      配套：本目录另有「复杂网络模拟」demo——网络层管"包怎么送到"，Raft 管"一个分片怎么达成一致"，
+      分片 + 2PC 管"一万个分片怎么组成一个数据库"。</div>
+    </div>
+  </div>
+  <div id="main">
+    <div id="left">
+      <div id="cwrap">
+        <canvas id="stage"></canvas>
+        <div id="expbanner" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);
+          max-width:86%;font-size:12.5px;background:rgba(252,252,251,.94);border:1px solid var(--grid);
+          border-radius:8px;padding:4px 12px;pointer-events:none"></div>
+        <div id="hint">点击节点选中 · <b>Shift+点击 = 宕机/恢复</b> ｜ 圆弧 = 选举超时倒计时 ｜
+          <span style="color:#eb6834">橙空心 = 拉票 RV</span>，<span style="color:#2a78d6">蓝 = 日志复制 AE（空心 = 纯心跳）</span></div>
+      </div>
+      <div id="matrix"></div>
+    </div>
+    <div id="side">
+      <details open><summary>选中节点</summary><div id="selinfo"><span style="color:var(--muted);font-size:12px">点击画布上的服务器</span></div></details>
+      <details open><summary>事件日志</summary><div id="log"></div></details>
+      <details open><summary>玩法剧本</summary><ul id="tips">
+        <li><b>看选举</b>：刚启动谁的倒计时圆弧先耗尽谁先竞选。随机超时就是 Raft 防撞车的全部秘密——把丢包调高看选票分裂后怎么靠再随机一轮解决。</li>
+        <li><b>看复制</b>：写入几条命令，下方矩阵里看日志从 leader 行扩散到各行，虚线格（未提交）在多数派复制后变实（已提交）。</li>
+        <li><b>杀 leader</b>：心跳一停，follower 超时竞选，term+1。老 leader 复活后发现 term 落后自动退位。</li>
+        <li><b>脑裂（镇场戏）</b>：一键把 leader 和一个随从隔进少数派。此时向老 leader 写入照样进日志，但<b>永远无法提交</b>（凑不齐多数派）；多数派那边选出新 leader 正常提交。愈合后看少数派的未提交日志被<b>当场截断覆盖</b>——这就是"未提交的写入不算数"。</li>
+        <li><b>零丢失实验</b>：一键复现"leader 挂了到底丢不丢数据"——已提交（客户端 ack 过）的条目由选举限制保证新 leader 必然拥有，一条不丢；只在 leader 本地、没复制出去的条目会消失，但那些从未 ack 过，客户端重试即可。对比：异步主从复制是先 ack 后同步，主挂真会丢已确认数据；Raft 是先多数派后 ack。</li>
+        <li><b>安全性</b>：无论怎么折腾，同一 term 永远至多一个 leader；任何两个节点已提交的日志前缀永远一致。不服就使劲折腾试试。</li>
+      </ul></details>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== 核心（无 DOM）====================
+'use strict';
+function mulberry32(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+const RCFG={
+  EL_MIN:1500, EL_MAX:3000,   // 选举超时区间(演示时标, 约为真实的 10 倍慢放)
+  HB:600,                     // leader 心跳间隔
+  MAX_ENT:8,                  // 单条 AppendEntries 最多带几条日志
+};
+
+class MinHeap{
+  constructor(){this.a=[];}
+  _lt(x,y){return x.t<y.t||(x.t===y.t&&x.seq<y.seq);}
+  push(e){const a=this.a;a.push(e);let i=a.length-1;
+    while(i>0){const p=(i-1)>>1;if(this._lt(a[p],e))break;a[i]=a[p];i=p;}a[i]=e;}
+  pop(){const a=this.a,top=a[0],last=a.pop();
+    if(a.length){a[0]=last;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;
+      if(l<a.length&&this._lt(a[l],a[m]))m=l;if(r<a.length&&this._lt(a[r],a[m]))m=r;
+      if(m===i)break;const t=a[i];a[i]=a[m];a[m]=t;i=m;}}return top;}
+  peek(){return this.a[0];}
+  get size(){return this.a.length;}
+}
+
+class RaftSim{
+  constructor(n,seed,opts={}){
+    this.n=n;this.rng=mulberry32(seed);
+    this.now=0;this.eseq=0;this.heap=new MinHeap();
+    this.net=Object.assign({delay:140,jitter:110,loss:0},opts.net);
+    this.partition=null;            // null 或 数组 id->0/1
+    this.logs=[];this.visMsgs=new Set();
+    this.termLeaders=new Map();     // term -> Set(当选者)  安全性审计
+    this.writeSeq=0;this.autoClient=false;
+    this.nodes=[];
+    for(let i=0;i<n;i++)this.nodes.push({
+      id:i,alive:true,state:'F',term:0,votedFor:null,
+      log:[],commit:0,applied:0,appliedCmds:[],
+      votes:null,nextIndex:new Array(n).fill(1),matchIndex:new Array(n).fill(0),
+      leaderId:null,elGen:0,elDeadline:0,elDur:1,hbGen:0});
+    for(const nd of this.nodes)this.resetElection(nd);
+    const auto=()=>{if(this.autoClient)this.clientWrite(null,Math.floor(this.rng()*this.n));
+      this.schedule(2000,auto);};
+    this.schedule(2000,auto);
+    this.log('集群启动：全员 follower，term 0，等谁的选举超时先到期','');
+  }
+  schedule(dt,fn){this.heap.push({t:this.now+dt,seq:this.eseq++,fn});}
+  run(until,maxEv=1e9){let k=0;
+    while(this.heap.size&&this.heap.peek().t<=until&&k<maxEv){
+      const e=this.heap.pop();this.now=e.t;e.fn();k++;}
+    if(k<maxEv)this.now=until;return k;}
+  log(msg,cls){this.logs.push({t:this.now,msg,cls:cls||''});
+    if(this.logs.length>800)this.logs.splice(0,300);}
+  rand(a,b){return a+this.rng()*(b-a);}
+  blocked(a,b){return !!this.partition&&this.partition[a]!==this.partition[b];}
+  majority(){return Math.floor(this.n/2)+1;}
+
+  // ---- 不可靠网络: 延迟抖动 + 丢包 + 分区 ----
+  send(from,to,msg){
+    if(!this.nodes[from].alive)return;
+    msg.from=from;
+    const delay=this.net.delay+this.rng()*this.net.jitter;
+    const drop=this.blocked(from,to)||this.rng()<this.net.loss;
+    const vm={msg,from,to,t0:this.now,t1:this.now+delay,
+      dropAt:drop?this.now+delay*0.45:0};
+    this.visMsgs.add(vm);
+    this.schedule(delay,()=>{this.visMsgs.delete(vm);
+      if(drop)return;
+      const nd=this.nodes[to];
+      if(!nd.alive||this.blocked(from,to))return;   // 飞行途中分区生效也拦
+      this.recv(nd,msg);});
+  }
+
+  // ---- 选举定时器(随机超时是防撞车的全部秘密) ----
+  resetElection(nd){
+    nd.elGen++;const gen=nd.elGen;
+    nd.elDur=this.rand(RCFG.EL_MIN,RCFG.EL_MAX);
+    nd.elDeadline=this.now+nd.elDur;
+    this.schedule(nd.elDur,()=>{
+      if(nd.elGen===gen&&nd.alive&&nd.state!=='L')this.startElection(nd);});
+  }
+  startElection(nd){
+    nd.state='C';nd.term++;nd.votedFor=nd.id;nd.votes=new Set([nd.id]);nd.leaderId=null;
+    this.log(`S${nd.id} 选举超时 → 竞选 term ${nd.term}（先投自己一票，向全员拉票）`,'cand');
+    const last=nd.log.length,lastT=last?nd.log[last-1].term:0;
+    for(const o of this.nodes)if(o.id!==nd.id)
+      this.send(nd.id,o.id,{type:'RV',term:nd.term,lastIdx:last,lastTerm:lastT});
+    this.resetElection(nd);
+  }
+  stepDown(nd,term){
+    if(term>nd.term){nd.term=term;nd.votedFor=null;}
+    if(nd.state==='L')this.log(`S${nd.id} 发现更高 term，退位为 follower`,'bad');
+    nd.state='F';nd.votes=null;nd.hbGen++;
+    this.resetElection(nd);
+  }
+  becomeLeader(nd){
+    nd.state='L';nd.leaderId=nd.id;nd.hbGen++;
+    if(!this.termLeaders.has(nd.term))this.termLeaders.set(nd.term,new Set());
+    this.termLeaders.get(nd.term).add(nd.id);
+    // 生产实现的标准动作: 当选即追加一条本任期 no-op ——
+    // 既让前任遗留日志能尽快间接提交(5.4.2), 也能截断复活节点带回的陈旧分叉
+    nd.log.push({term:nd.term,cmd:'⊙no-op'});
+    for(const o of this.nodes){nd.nextIndex[o.id]=nd.log.length;nd.matchIndex[o.id]=0;}
+    this.log(`👑 S${nd.id} 当选 leader（term ${nd.term}，${nd.votes.size}/${this.n} 票），追加本任期 no-op 并开始心跳`,'lead');
+    this.heartbeat(nd,nd.hbGen);
+  }
+  heartbeat(nd,gen){
+    if(gen!==nd.hbGen||!nd.alive||nd.state!=='L')return;
+    for(const o of this.nodes)if(o.id!==nd.id)this.sendAppend(nd,o.id);
+    this.schedule(RCFG.HB,()=>this.heartbeat(nd,gen));
+  }
+  sendAppend(nd,to){
+    const ni=nd.nextIndex[to],prevIdx=ni-1;
+    const prevTerm=prevIdx>0?nd.log[prevIdx-1].term:0;
+    const ent=nd.log.slice(ni-1,ni-1+RCFG.MAX_ENT);
+    this.send(nd.id,to,{type:'AE',term:nd.term,prevIdx,prevTerm,ent,commit:nd.commit});
+  }
+  applyAll(nd){while(nd.applied<nd.commit){nd.appliedCmds.push(nd.log[nd.applied].cmd);nd.applied++;}}
+  advanceCommit(nd){
+    for(let N=nd.log.length;N>nd.commit;N--){
+      if(nd.log[N-1].term!==nd.term)continue;    // 论文 5.4.2: 只直接提交本任期的日志
+      let cnt=1;
+      for(const o of this.nodes)if(o.id!==nd.id&&nd.matchIndex[o.id]>=N)cnt++;
+      if(cnt>=this.majority()){
+        nd.commit=N;this.applyAll(nd);
+        this.log(`✓ leader S${nd.id} 提交到 #${N}（${cnt}/${this.n} 已复制）`,'good');
+        break;}
+    }
+  }
+
+  recv(nd,m){
+    if(m.term>nd.term)this.stepDown(nd,m.term);
+    switch(m.type){
+      case 'RV':{
+        let grant=false;
+        if(m.term===nd.term&&(nd.votedFor==null||nd.votedFor===m.from)){
+          const last=nd.log.length,lastT=last?nd.log[last-1].term:0;
+          // 日志新旧比较: 保证当选者拥有全部已提交日志(选举限制)
+          if(m.lastTerm>lastT||(m.lastTerm===lastT&&m.lastIdx>=last)){
+            grant=true;nd.votedFor=m.from;this.resetElection(nd);}
+        }
+        this.log(`S${nd.id} ${grant?'✓ 投票给':'✗ 拒绝'} S${m.from}（term ${m.term}${grant?'':'，'+(nd.votedFor!=null&&nd.votedFor!==m.from?'票已投 S'+nd.votedFor:'对方日志不够新或 term 落后')}）`,grant?'good':'');
+        this.send(nd.id,m.from,{type:'RVR',term:nd.term,grant});
+        break;}
+      case 'RVR':{
+        if(nd.state!=='C'||m.term!==nd.term)break;
+        if(m.grant){nd.votes.add(m.from);
+          if(nd.votes.size>=this.majority())this.becomeLeader(nd);}
+        break;}
+      case 'AE':{
+        if(m.term<nd.term){this.send(nd.id,m.from,{type:'AER',term:nd.term,ok:false,match:0});break;}
+        if(nd.state!=='F')this.log(`S${nd.id} 收到现任 leader S${m.from} 的心跳，放弃竞选`,'');
+        nd.state='F';nd.leaderId=m.from;this.resetElection(nd);
+        if(m.prevIdx>0&&(nd.log.length<m.prevIdx||nd.log[m.prevIdx-1].term!==m.prevTerm)){
+          if(m.ent.length)this.log(`S${nd.id} 日志在 #${m.prevIdx} 处对不上，拒绝（leader 将回退重试）`,'bad');
+          this.send(nd.id,m.from,{type:'AER',term:nd.term,ok:false,match:0});break;}
+        let idx=m.prevIdx;
+        for(const e of m.ent){
+          if(nd.log.length>idx&&nd.log[idx].term!==e.term){
+            this.log(`S${nd.id} 截断冲突日志 #${idx+1}..#${nd.log.length}（未提交的分叉被 leader 覆盖）`,'bad');
+            nd.log.length=idx;}
+          if(nd.log.length===idx)nd.log.push({term:e.term,cmd:e.cmd});
+          idx++;}
+        if(m.commit>nd.commit){nd.commit=Math.min(m.commit,nd.log.length);this.applyAll(nd);}
+        this.send(nd.id,m.from,{type:'AER',term:nd.term,ok:true,match:m.prevIdx+m.ent.length});
+        break;}
+      case 'AER':{
+        if(nd.state!=='L'||m.term!==nd.term)break;
+        const f=m.from;
+        if(m.ok){
+          if(m.match>nd.matchIndex[f]){nd.matchIndex[f]=m.match;nd.nextIndex[f]=m.match+1;
+            this.advanceCommit(nd);}
+          if(nd.nextIndex[f]<=nd.log.length)this.sendAppend(nd,f);  // 还有积压,继续推
+        }else{
+          nd.nextIndex[f]=Math.max(1,nd.nextIndex[f]-1);
+          this.sendAppend(nd,f);                                     // 回退一格立刻重试
+        }
+        break;}
+    }
+  }
+
+  // ---- 客户端 / 故障注入 ----
+  clientWrite(cmd,target){
+    cmd=cmd||('x←'+(++this.writeSeq));
+    let nd=this.nodes[target!=null?target:0];
+    if(!nd.alive){this.log(`客户端写「${cmd}」→ S${nd.id} 无响应（宕机）`,'bad');return null;}
+    if(nd.state!=='L'){
+      const L=nd.leaderId;
+      if(L!=null&&L!==nd.id&&this.nodes[L].alive&&this.nodes[L].state==='L'&&!this.blocked(nd.id,L)){
+        this.log(`客户端写「${cmd}」→ S${nd.id} 不是 leader，重定向到 S${L}`,'');
+        nd=this.nodes[L];
+      }else{this.log(`客户端写「${cmd}」→ S${nd.id} 不是 leader 且无可达 leader，写入失败`,'bad');return null;}
+    }
+    nd.log.push({term:nd.term,cmd});
+    this.log(`📝 leader S${nd.id} 追加 #${nd.log.length}「${cmd}」(term ${nd.term})，向多数派复制`,'lead');
+    for(const o of this.nodes)if(o.id!==nd.id)this.sendAppend(nd,o.id);
+    return nd.log.length;
+  }
+  toggleNode(id){
+    const nd=this.nodes[id];nd.alive=!nd.alive;
+    if(!nd.alive){nd.hbGen++;nd.elGen++;
+      this.log(`💥 S${id} 宕机${nd.state==='L'?'（它是 leader！心跳即将断供）':''}`,'bad');
+      nd.state='F';}
+    else{
+      nd.leaderId=null;nd.votes=null;
+      this.log(`S${id} 重启恢复（持久化状态保留：term=${nd.term}、日志 ${nd.log.length} 条）`,'good');
+      this.resetElection(nd);}
+  }
+  setPartition(groups){
+    this.partition=groups;
+    if(groups){
+      const g0=this.nodes.filter(n=>groups[n.id]===0).map(n=>'S'+n.id).join(',');
+      const g1=this.nodes.filter(n=>groups[n.id]===1).map(n=>'S'+n.id).join(',');
+      this.log(`✂ 网络分区：{${g0}} ⇹ {${g1}}（跨区消息全部被墙）`,'bad');
+    }else this.log('分区愈合，全网恢复连通（term 高的一方将统一天下）','good');
+  }
+  leader(){return this.nodes.find(n=>n.alive&&n.state==='L');}
+
+  // ---- 一键实验: 已提交零丢失 / 未确认消失 ----
+  startLossExperiment(){
+    if(this.expt&&!this.expt.done){this.log('实验已在进行中',''); return;}
+    const ex=this.expt={phase:'等待选出 leader',acked:[],unacked:[],done:false,ok:null};
+    this.log('🧪 零丢失实验开始：先写 3 条并等提交（客户端收到 ack），再让 leader 在复制前崩溃','lead');
+    let L=null,ackIdx=[];const t0=this.now;
+    const step=()=>{
+      if(ex.done)return;
+      if(this.now-t0>120000){ex.done=true;ex.ok=false;this.log('🧪 实验超时中止','bad');return;}
+      switch(ex.phase){
+        case '等待选出 leader':{
+          L=this.leader();
+          if(L){
+            ackIdx=[];
+            for(let i=1;i<=3;i++){const idx=this.clientWrite('实验·已确认'+i,L.id);if(idx)ackIdx.push(idx);}
+            ex.acked=[1,2,3].map(i=>'实验·已确认'+i);
+            ex.phase='写入并等待提交(ack)';
+          }
+          break;}
+        case '写入并等待提交(ack)':{
+          if(!L.alive||L.state!=='L'){ex.phase='等待选出 leader';break;}   // leader 意外更替,重来
+          if(ackIdx.length===3&&L.commit>=Math.max(...ackIdx)){
+            this.log('✓ 3 条「已确认」均已提交，客户端已拿到成功回执','good');
+            // 崩溃瞬间: 本地追加之后、还没向任何 follower 广播之前
+            for(let i=1;i<=3;i++)L.log.push({term:L.term,cmd:'实验·未确认'+i});
+            ex.unacked=[1,2,3].map(i=>'实验·未确认'+i);
+            this.log(`💥 leader S${L.id} 又收到 3 条写入，本地追加后、还没复制给任何人就崩溃了（客户端没收到 ack）`,'bad');
+            this.toggleNode(L.id);
+            ex.phase='等待新 leader 接管';
+          }
+          break;}
+        case '等待新 leader 接管':{
+          const NL=this.leader();
+          if(NL&&NL.id!==L.id&&ackIdx.length&&NL.commit>=Math.max(...ackIdx)){
+            this.log(`👑 新 leader S${NL.id} 就位且已提交全部「已确认」条目（选举限制保证它必然拥有），现在复活老 leader 看分叉下场`,'lead');
+            this.toggleNode(L.id);
+            ex.phase='等待老 leader 分叉被截断';
+          }
+          break;}
+        case '等待老 leader 分叉被截断':{
+          const NL=this.leader();if(!NL)break;
+          const gone=ex.unacked.every(c=>!this.nodes.some(n=>n.log.some(e=>e.cmd===c)));
+          const survived=ex.acked.every(c=>{
+            const i=NL.log.findIndex(e=>e.cmd===c);return i>=0&&i<NL.commit;});
+          if(gone&&survived&&L.commit>=Math.max(...ackIdx)){
+            ex.done=true;ex.ok=true;
+            this.log(`🧪 实验结论：已确认（提交并 ack 过）的 3/3 条全部幸存，一条不丢；`+
+              `未确认的 3 条全部消失——但客户端从未收到过它们的成功回执，语义上等于请求没发生，重试即可。`+
+              `已提交 = 零丢失，这是定理不是运气。`,'good');
+          }
+          break;}
+      }
+      if(!ex.done)this.schedule(300,step);
+    };
+    step();
+  }
+}
+// ==================== 核心结束 ====================
+
+// ==================== UI / 渲染 ====================
+const PAL={surface:'#fcfcfb',ink:'#0b0b0b',ink2:'#52514e',muted:'#898781',grid:'#e1e0d9',
+  base:'#c3c2b7',s1:'#2a78d6',s2:'#eb6834',down:'#d03b3b',good:'#0ca30c'};
+const TERM_COLORS=['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'];
+const termColor=t=>TERM_COLORS[(t-1+800)%8];
+const $=id=>document.getElementById(id);
+const cv=$('stage'),ctx=cv.getContext('2d');
+let sim,paused=false,speed=1,selId=null,logCount=0;
+
+function newSim(){
+  sim=new RaftSim(+$('selN').value,Math.floor(Math.random()*1e9),
+    {net:{delay:+$('rDelay').value,jitter:+$('rDelay').value*0.8,loss:+$('rLoss').value/100}});
+  selId=null;logCount=0;$('log').innerHTML='';renderSel();
+}
+function nodePos(i){
+  const w=cv.clientWidth,h=cv.clientHeight;
+  const R=Math.min(w,h)*0.34,cx=w/2,cy=h/2+6;
+  const a=-Math.PI/2+i/sim.n*2*Math.PI;
+  return [cx+R*Math.cos(a),cy+R*Math.sin(a)];
+}
+function resize(){
+  const dpr=window.devicePixelRatio||1;
+  cv.width=cv.clientWidth*dpr;cv.height=cv.clientHeight*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize',resize);
+
+let lastWall=performance.now(),uiTimer=0;
+function frame(tw){
+  const dt=Math.min(tw-lastWall,100);lastWall=tw;
+  if(!paused)sim.run(sim.now+dt*speed,20000);
+  draw();
+  uiTimer+=dt;
+  if(uiTimer>300){uiTimer=0;renderMatrix();if(!sideHover&&selId!=null)renderSel();
+    const eb=$('expbanner');
+    if(sim.expt){eb.style.display='block';
+      if(sim.expt.done)eb.innerHTML=sim.expt.ok
+        ?'🧪 <b style="color:#006300">结论：已确认(提交+ack)的写入 0 丢失；未确认的消失，但客户端从未拿到过 ack → 等于请求没发生，重试即可</b>'
+        :'<span style="color:#d03b3b">实验中止（网络太乱没跑完，可重试）</span>';
+      else eb.innerHTML='🧪 实验进行中：<b>'+sim.expt.phase+'</b>';
+    }else eb.style.display='none';}
+  drainLog();
+  requestAnimationFrame(frame);
+}
+
+function draw(){
+  const dpr=window.devicePixelRatio||1;   // 布局变化(矩阵长高)时画布缓冲要跟着重设,否则残留旧帧
+  if(cv.width!==Math.round(cv.clientWidth*dpr)||cv.height!==Math.round(cv.clientHeight*dpr))resize();
+  const w=cv.clientWidth,h=cv.clientHeight,now=sim.now;
+  ctx.fillStyle=PAL.surface;ctx.fillRect(0,0,w,h);
+  // 分区墙: 两组质心的垂直平分线
+  if(sim.partition){
+    const g=[[0,0,0],[0,0,0]];
+    for(const nd of sim.nodes){const [x,y]=nodePos(nd.id),k=sim.partition[nd.id];
+      g[k][0]+=x;g[k][1]+=y;g[k][2]++;}
+    if(g[0][2]&&g[1][2]){
+      const ax=g[0][0]/g[0][2],ay=g[0][1]/g[0][2],bx=g[1][0]/g[1][2],by=g[1][1]/g[1][2];
+      const mx=(ax+bx)/2,my=(ay+by)/2;
+      let dx=by-ay,dy=ax-bx;const L=Math.hypot(dx,dy)||1;dx/=L;dy/=L;
+      ctx.strokeStyle=PAL.down;ctx.lineWidth=3;ctx.setLineDash([10,8]);
+      ctx.beginPath();ctx.moveTo(mx-dx*900,my-dy*900);ctx.lineTo(mx+dx*900,my+dy*900);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle=PAL.down;ctx.font='13px system-ui';ctx.textAlign='center';
+      ctx.fillText('⚡ 分区',mx+dx*0,my-8);
+    }
+  }
+  // 连线(淡)
+  ctx.strokeStyle=PAL.grid;ctx.lineWidth=1;
+  for(let i=0;i<sim.n;i++)for(let j=i+1;j<sim.n;j++){
+    const [x1,y1]=nodePos(i),[x2,y2]=nodePos(j);
+    if(sim.blocked(i,j))continue;
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  }
+  // 消息
+  for(const vm of sim.visMsgs){
+    const u=Math.min((now-vm.t0)/(vm.t1-vm.t0),1);
+    const [x1,y1]=nodePos(vm.from),[x2,y2]=nodePos(vm.to);
+    if(vm.dropAt&&now>=vm.dropAt){         // 被丢/被墙: 画个渐隐 ✕
+      const ud=(vm.dropAt-vm.t0)/(vm.t1-vm.t0);
+      const x=x1+(x2-x1)*ud,y=y1+(y2-y1)*ud;
+      const fade=Math.max(0,1-(now-vm.dropAt)/500);
+      if(fade>0){ctx.globalAlpha=fade;ctx.strokeStyle=PAL.down;ctx.lineWidth=2;
+        ctx.beginPath();ctx.moveTo(x-5,y-5);ctx.lineTo(x+5,y+5);
+        ctx.moveTo(x+5,y-5);ctx.lineTo(x-5,y+5);ctx.stroke();ctx.globalAlpha=1;}
+      continue;
+    }
+    const x=x1+(x2-x1)*u,y=y1+(y2-y1)*u,m=vm.msg;
+    let label='';
+    if(m.type==='RV'){ctx.strokeStyle=PAL.s2;ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(x,y,6,0,7);ctx.stroke();label='拉票 t'+m.term;}
+    else if(m.type==='RVR'){
+      ctx.fillStyle=m.grant?PAL.good:PAL.muted;
+      ctx.beginPath();ctx.arc(x,y,4,0,7);ctx.fill();label=m.grant?'✓票':'✗';}
+    else if(m.type==='AE'){
+      ctx.beginPath();ctx.arc(x,y,m.ent.length?6:4,0,7);
+      if(m.ent.length){ctx.fillStyle=PAL.s1;ctx.fill();label='日志×'+m.ent.length;}
+      else{ctx.strokeStyle=PAL.s1;ctx.lineWidth=1.6;ctx.stroke();label='';}}
+    else{ctx.strokeStyle=m.ok?PAL.good:PAL.down;ctx.lineWidth=1.4;
+      ctx.beginPath();ctx.arc(x,y,3,0,7);ctx.stroke();}
+    if(label){ctx.fillStyle=PAL.ink2;ctx.font='10px system-ui';ctx.textAlign='center';
+      ctx.fillText(label,x,y-9);}
+  }
+  // 节点
+  for(const nd of sim.nodes){
+    const [x,y]=nodePos(nd.id),r=34;
+    // 选举倒计时圆弧(follower/candidate)
+    if(nd.alive&&nd.state!=='L'){
+      const rem=Math.max(0,(nd.elDeadline-now)/nd.elDur);
+      ctx.strokeStyle=rem<0.25?PAL.s2:PAL.base;ctx.lineWidth=3;
+      ctx.beginPath();ctx.arc(x,y,r+6,-Math.PI/2,-Math.PI/2+rem*2*Math.PI);ctx.stroke();
+    }
+    ctx.beginPath();ctx.arc(x,y,r,0,7);
+    if(!nd.alive){ctx.fillStyle='#f6dedb';ctx.fill();ctx.strokeStyle=PAL.down;ctx.lineWidth=2;ctx.stroke();
+      ctx.strokeStyle=PAL.down;ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(x-r*0.5,y-r*0.5);ctx.lineTo(x+r*0.5,y+r*0.5);
+      ctx.moveTo(x+r*0.5,y-r*0.5);ctx.lineTo(x-r*0.5,y+r*0.5);ctx.stroke();}
+    else if(nd.state==='L'){ctx.fillStyle=PAL.s1;ctx.fill();}
+    else if(nd.state==='C'){ctx.fillStyle=PAL.s2;ctx.fill();}
+    else{ctx.fillStyle='#fff';ctx.fill();ctx.strokeStyle=PAL.base;ctx.lineWidth=2;ctx.stroke();}
+    if(selId===nd.id){ctx.strokeStyle=PAL.ink;ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(x,y,r+11,0,7);ctx.stroke();}
+    const dark=nd.alive&&(nd.state==='L'||nd.state==='C');
+    ctx.fillStyle=dark?'#fff':PAL.ink;
+    ctx.font='bold 15px system-ui';ctx.textAlign='center';
+    ctx.fillText('S'+nd.id,x,y-2);
+    ctx.font='11px system-ui';
+    ctx.fillText('term '+nd.term,x,y+13);
+    if(nd.alive&&nd.state==='L'){ctx.font='16px system-ui';ctx.fillText('👑',x,y-r-12);}
+    ctx.fillStyle=PAL.muted;ctx.font='10px system-ui';
+    const sub=nd.alive?(nd.state==='L'?'LEADER':nd.state==='C'?'竞选中 已得'+(nd.votes?nd.votes.size:0)+'票'
+      :'follower'+(nd.votedFor!=null?' 投:S'+nd.votedFor:'')):'宕机';
+    ctx.fillText(sub,x,y+r+16);
+  }
+}
+
+// ---------- 日志复制矩阵 ----------
+function renderMatrix(){
+  const maxLen=Math.max(1,...sim.nodes.map(n=>n.log.length));
+  const from=Math.max(0,maxLen-28);   // 只显示最近 28 条,太长滚动也看不过来
+  let h='<div class="mrow idxrow"><span class="mname">日志索引 →'+(from?`（…前 ${from} 条略）`:'')+'</span>';
+  for(let i=from+1;i<=maxLen;i++)h+=`<span>#${i}</span>`;
+  h+='</div>';
+  for(const nd of sim.nodes){
+    const role=!nd.alive?'💀':nd.state==='L'?'👑':nd.state==='C'?'🗳':'';
+    h+=`<div class="mrow"><span class="mname">S${nd.id} ${role} <span style="color:${PAL.muted}">t${nd.term}</span></span>`;
+    for(let i=from;i<maxLen;i++){
+      const e=nd.log[i];
+      if(!e){h+=`<span class="cell" style="background:transparent;border-color:${'#eee'}"></span>`;continue;}
+      const committed=i<nd.commit;
+      h+=`<span class="cell ${committed?'':'uncommitted'}" style="background:${termColor(e.term)}" title="#${i+1} term ${e.term}「${e.cmd}」${committed?' 已提交':' 未提交'}">${e.term}</span>`;
+    }
+    h+=`<span class="cinfo">提交=${nd.commit} 已应用=${nd.applied}</span></div>`;
+  }
+  $('matrix').innerHTML=h;
+}
+
+// ---------- 侧栏 ----------
+let sideHover=false;
+$('side').addEventListener('mouseenter',()=>sideHover=true);
+$('side').addEventListener('mouseleave',()=>sideHover=false);
+function renderSel(){
+  const el=$('selinfo');
+  if(selId==null){el.innerHTML='<span style="color:var(--muted);font-size:12px">点击画布上的服务器</span>';return;}
+  const nd=sim.nodes[selId];
+  const st={F:'follower',C:'candidate（竞选中）',L:'LEADER'}[nd.state];
+  let h=`<b>S${nd.id}</b>　${nd.alive?st:'💀 宕机'}　term ${nd.term}`+
+    `<div style="font-size:12px;color:var(--ink2)">votedFor: ${nd.votedFor==null?'—':'S'+nd.votedFor}`+
+    `　日志 ${nd.log.length} 条　提交 ${nd.commit}　已应用 ${nd.applied}<br>`+
+    `已知 leader: ${nd.leaderId==null?'—':'S'+nd.leaderId}</div>`;
+  if(nd.state==='L'){
+    h+=`<div style="font-size:12px;color:var(--ink2)">nextIndex: [${nd.nextIndex.map((v,i)=>i===nd.id?'·':v).join(', ')}]<br>`+
+       `matchIndex: [${nd.matchIndex.map((v,i)=>i===nd.id?'·':v).join(', ')}]</div>`;}
+  h+=`<div class="btnrow">`+
+    `<button class="warn" onclick="UI.toggle()">${nd.alive?'💥 宕机':'恢复上线'}</button>`+
+    `<button class="pri" onclick="UI.writeTo()">向它写入</button></div>`;
+  const tail=nd.log.slice(-6).map((e,i)=>`#${nd.log.length-5>0?nd.log.length-5+i:i+1} t${e.term}「${e.cmd}」`).join('<br>');
+  h+=`<div style="font-size:11px;color:var(--muted)">日志尾部:<br>${tail||'（空）'}</div>`;
+  el.innerHTML=h;
+}
+const UI={
+  toggle(){if(selId!=null){sim.toggleNode(selId);renderSel();}},
+  writeTo(){if(selId!=null)sim.clientWrite(null,selId);},
+};
+cv.addEventListener('click',e=>{
+  const rect=cv.getBoundingClientRect(),mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  for(const nd of sim.nodes){
+    const [x,y]=nodePos(nd.id);
+    if(Math.hypot(mx-x,my-y)<46){
+      if(e.shiftKey)sim.toggleNode(nd.id);else selId=nd.id;
+      renderSel();return;}
+  }
+  selId=null;renderSel();
+});
+
+function drainLog(){
+  if(logCount>=sim.logs.length)return;
+  const el=$('log');const frag=document.createDocumentFragment();
+  for(;logCount<sim.logs.length;logCount++){
+    const L=sim.logs[logCount],d=document.createElement('div');
+    d.className=L.cls;
+    d.innerHTML=`<span class="t">${(L.t/1000).toFixed(1)}s</span>${L.msg}`;
+    frag.prepend(d);
+  }
+  el.prepend(frag);
+  while(el.children.length>250)el.lastChild.remove();
+}
+
+// ---------- 工具栏 ----------
+$('bPause').onclick=()=>{paused=!paused;$('bPause').textContent=paused?'▶ 继续':'⏸ 暂停';};
+$('bStep').onclick=()=>{paused=true;$('bPause').textContent='▶ 继续';sim.run(sim.now+50,20000);};
+$('rSpeed').oninput=e=>{speed=Math.pow(2,+e.target.value);
+  $('tSpeed').textContent=(speed<1?speed.toFixed(2):speed)+'×';};
+$('bRestart').onclick=newSim;
+$('selN').onchange=newSim;
+$('bWrite').onclick=()=>sim.clientWrite(null,Math.floor(Math.random()*sim.n));
+$('cAuto').onchange=e=>sim.autoClient=e.target.checked;
+$('bExp').onclick=()=>sim.startLossExperiment();
+$('bKillLeader').onclick=()=>{const L=sim.leader();
+  if(L)sim.toggleNode(L.id);else sim.log('当前没有 leader 可杀','');};
+$('bSplit').onclick=()=>{
+  const L=sim.leader()||sim.nodes[0];
+  const buddy=sim.nodes.find(n=>n.id!==L.id&&n.alive)||sim.nodes[(L.id+1)%sim.n];
+  const g=sim.nodes.map(n=>(n.id===L.id||n.id===buddy.id)?1:0);
+  sim.setPartition(g);
+};
+$('bHeal').onclick=()=>sim.setPartition(null);
+$('rDelay').oninput=e=>{sim.net.delay=+e.target.value;sim.net.jitter=+e.target.value*0.8;
+  $('tDelay').textContent=e.target.value+'ms';};
+$('rLoss').oninput=e=>{sim.net.loss=+e.target.value/100;$('tLoss').textContent=e.target.value+'%';};
+
+$('bNote').onclick=()=>$('noteMask').style.display='block';
+$('bNoteClose').onclick=()=>$('noteMask').style.display='none';
+$('noteMask').addEventListener('click',e=>{if(e.target===$('noteMask'))$('noteMask').style.display='none';});
+
+// ---------- 启动 ----------
+resize();newSim();requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>假设检验的兑现率：说 5% 就得付 5%</title>
+<style>
+  body { margin: 0; padding: 12px 16px; background: #fff; color: #222;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  h1 { font-size: 18px; margin: 4px 0 8px; }
+  button { padding: 4px 12px; font-size: 13px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  button.on { background: #2b5fb8; color: #fff; border-color: #2b5fb8; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+  .hint { color: #555; font-size: 12.5px; line-height: 1.6; max-width: 1150px; margin-top: 8px; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  canvas { display: block; border: 1px solid #999; touch-action: none; }
+  .cap { font-size: 12px; color: #555; margin: 2px 0 8px; }
+  b.k { color: #b03030; }
+  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .hint { display: none !important; }
+</style>
+</head>
+<body>
+<h1>假设检验的兑现率：总体由你定，检验说 5% 就得付 5%</h1>
+<div class="bar">
+  总体:
+  <button data-p="normal">正态样</button>
+  <button class="on" data-p="skew">偏态</button>
+  <button data-p="bimodal">双峰</button>
+  <button data-p="uniform">均匀</button>
+  <button data-p="cauchy">柯西(重尾)</button>
+  n = <input type="range" id="ns" min="0" max="8" value="2" style="width:130px"><span class="mono" id="ns2"></span>
+  α:
+  <button data-a="0.01">1%</button>
+  <button class="on" data-a="0.05">5%</button>
+  <button data-a="0.10">10%</button>
+</div>
+<div class="bar">
+  H₀: μ = μ₀ = <input type="range" id="mu0" min="0" max="1000" value="500" style="width:210px"><span class="mono" id="mu02"></span>
+  <button id="setMean">μ₀ ← 真均值(让 t 检验的 H₀ 为真)</button>
+  <button id="setMed">μ₀ ← 真中位数(让符号检验的 H₀ 为真)</button>
+  <button id="resetAcc">重新累计</button>
+</div>
+<div class="bar mono" id="stat1"></div>
+<div class="bar mono" id="stat2"></div>
+<canvas id="dcv" width="1100" height="150"></canvas>
+<div class="cap">总体密度（<b>拖动手绘</b>）　<span style="color:#1f3a6e">▎真均值 μ</span>　<span style="color:#27713d">▎真中位数</span>　<span style="color:#c0392b">┆ 你的假设 μ₀</span></div>
+<div style="display:flex; gap:16px; flex-wrap:wrap">
+  <div>
+    <canvas id="pcv" width="542" height="290"></canvas>
+    <div class="cap">t 检验 p 值的直方图。<b>H₀ 为真时应是均匀的</b>（灰线）——"p&lt;0.05 恰有 5%"全靠它；H₀ 为假时堆向 0</div>
+  </div>
+  <div>
+    <canvas id="ccv" width="542" height="290"></canvas>
+    <div class="cap">最近 120 条 (1−α) 置信区间：<span style="color:#27713d">盖住真均值(绿)</span> / <span style="color:#c0392b">没盖住(红)</span>，横线 = 真均值</div>
+  </div>
+</div>
+<div class="hint">
+  流程：从你画的总体反复抽 n 个 → 做 <b>t 检验</b>（H₀: 均值 = μ₀）和<b>符号检验</b>（H₀: 中位数 = μ₀）→ 数出实付账单与承诺对账。
+  <b class="k">该看的实验</b>：① 按"μ₀ ← 真均值"：t 拒绝率应 ≈ α（承诺兑现），p 值直方图变均匀；把 μ₀ 拖离真值 → 拒绝率变成<b>功效</b>，随 |μ₀−μ| 和 n 增大而升。
+  ② 偏态总体 + n=5：t 检验实付 &gt; 名义 α（正态假设小样本下失守，靠 CLT 要 n 够大才救回来）；符号检验不看分布形状，仍守约（离散性还偏保守，实付 ≤ α）。
+  ③ 柯西：均值不存在，t 检验的"真值"都无从谈起——见读数注记。④ CI 覆盖率与拒绝率是同一枚硬币：t 检验在 α 拒绝 ⟺ (1−α) CI 不含 μ₀。
+  t 分布 CDF 由正则不完全贝塔函数精确计算（非正态近似），符号检验用精确二项尾概率。
+</div>
+
+<script>
+'use strict';
+// ===== 核心（无 DOM）=====
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function logGamma(x) {
+  const c = [76.18009172947146, -86.50532032941677, 24.01409824083091,
+    -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
+  let y = x, tmp = x + 5.5;
+  tmp -= (x + 0.5) * Math.log(tmp);
+  let ser = 1.000000000190015;
+  for (let j = 0; j < 6; j++) ser += c[j] / ++y;
+  return -tmp + Math.log(2.5066282746310005 * ser / x);
+}
+function betacf(a, b, x) {
+  const FPMIN = 1e-300;
+  const qab = a + b, qap = a + 1, qam = a - 1;
+  let c = 1, d = 1 - qab * x / qap;
+  if (Math.abs(d) < FPMIN) d = FPMIN;
+  d = 1 / d;
+  let h = d;
+  for (let m = 1; m <= 300; m++) {
+    const m2 = 2 * m;
+    let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d;
+    const del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) < 3e-14) break;
+  }
+  return h;
+}
+function ibeta(a, b, x) {                      // 正则不完全贝塔 I_x(a,b)
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const bt = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+  return x < (a + 1) / (a + b + 2) ? bt * betacf(a, b, x) / a : 1 - bt * betacf(b, a, 1 - x) / b;
+}
+function tCDF(t, nu) {
+  const p = 0.5 * ibeta(nu / 2, 0.5, nu / (nu + t * t));
+  return t >= 0 ? 1 - p : p;
+}
+function tQuantile(p, nu) {
+  let lo = -300, hi = 300;
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2;
+    if (tCDF(mid, nu) < p) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+function tTestP(mean, sd, n, mu0) {            // 双侧单样本 t; sd 为样本标准差(n−1)
+  if (!(sd > 0)) return mean === mu0 ? 1 : 0;
+  const t = (mean - mu0) / (sd / Math.sqrt(n));
+  return 2 * (1 - tCDF(Math.abs(t), n - 1));
+}
+function signTestP(k, n) {                     // 双侧符号检验: k = 大于 μ0 的个数(去掉平局)
+  if (n === 0) return 1;
+  const tailHi = k === 0 ? 1 : ibeta(k, n - k + 1, 0.5);         // P(X ≥ k)
+  const tailLo = k === n ? 1 : ibeta(n - k, k + 1, 0.5);         // P(X ≤ k) = P(X' ≥ n−k)
+  return Math.min(1, 2 * Math.min(tailHi, tailLo));
+}
+// 手绘网格密度 → 采样器 + 精确均值/中位数 (分段常数)
+function buildPop(f) {
+  const K = f.length, dx = 1 / K;
+  let tot = 0;
+  for (const v of f) tot += v;
+  if (!(tot > 0)) return null;
+  const p = Array.from(f, v => v / tot);
+  let mu = 0;
+  for (let i = 0; i < K; i++) mu += p[i] * (i + 0.5) * dx;
+  const cdf = new Float64Array(K + 1);
+  for (let i = 0; i < K; i++) cdf[i + 1] = cdf[i] + p[i];
+  let med = 0.5;
+  for (let i = 0; i < K; i++)
+    if (cdf[i + 1] >= 0.5) { med = (i + (0.5 - cdf[i]) / (p[i] || 1e-300)) * dx; break; }
+  const sample = rng => {
+    const u = rng();
+    let lo = 0, hi = K;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (cdf[mid] <= u) lo = mid; else hi = mid;
+    }
+    const w = cdf[lo + 1] - cdf[lo];
+    return (lo + (w > 0 ? (u - cdf[lo]) / w : 0.5)) * dx;
+  };
+  return { mu, median: med, sample };
+}
+// ===== 核心结束 =====
+
+const K = 256;
+let fvals = new Float64Array(K);
+let useCauchy = false, pop = null;
+const NS = [5, 8, 10, 15, 20, 30, 50, 100, 200];
+let ALPHA = 0.05;
+const rng = mulberry32(4242);
+const $ = id => document.getElementById(id);
+const dcv = $('dcv'), gD = dcv.getContext('2d');
+const pcv = $('pcv'), gP = pcv.getContext('2d');
+const ccv = $('ccv'), gC = ccv.getContext('2d');
+
+// 累计器
+const PB = 40;
+let pHist = new Float64Array(PB), nSim = 0, rejT = 0, rejS = 0, nS = 0, cover = 0;
+let ciList = [], tq = 2;
+function resetAcc() {
+  pHist.fill(0); nSim = 0; rejT = 0; rejS = 0; nS = 0; cover = 0; ciList = [];
+  const n = NS[+$('ns').value];
+  tq = tQuantile(1 - ALPHA / 2, n - 1);
+}
+
+// 手绘
+let drawing = false, lastX = null;
+dcv.addEventListener('pointerdown', e => { if (!useCauchy) { drawing = true; lastX = null; dcv.setPointerCapture(e.pointerId); dpaint(e); } });
+dcv.addEventListener('pointermove', e => { if (drawing) dpaint(e); });
+dcv.addEventListener('pointerup', () => { drawing = false; lastX = null; rebuildPop(); });
+function dpaint(e) {
+  const r = dcv.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  const i = Math.max(0, Math.min(K - 1, Math.floor(x * K)));
+  const h = Math.max(0, Math.min(1, 1 - y));
+  if (lastX !== null && Math.abs(i - lastX[0]) > 1) {
+    const [i0, h0] = lastX, d = i - i0, sgn = Math.sign(d);
+    for (let k = 1; k <= Math.abs(d); k++) fvals[i0 + sgn * k] = h0 + (h - h0) * k / Math.abs(d);
+  } else fvals[i] = h;
+  lastX = [i, h];
+  document.querySelectorAll('button[data-p]').forEach(b => b.classList.remove('on'));
+}
+const PRESETS = {
+  normal: () => { for (let i = 0; i < K; i++) fvals[i] = Math.exp(-((((i + 0.5) / K - 0.5) / 0.11) ** 2)); },
+  skew: () => { for (let i = 0; i < K; i++) fvals[i] = Math.exp(-5.5 * (i + 0.5) / K); },
+  bimodal: () => {
+    for (let i = 0; i < K; i++) {
+      const x = (i + 0.5) / K;
+      fvals[i] = Math.exp(-(((x - 0.25) / 0.07) ** 2)) + 0.6 * Math.exp(-(((x - 0.72) / 0.09) ** 2));
+    }
+  },
+  uniform: () => fvals.fill(0.7),
+  cauchy: null,
+};
+function rebuildPop() {
+  if (useCauchy) pop = { mu: NaN, median: 0.5, sample: r => 0.5 + 0.06 * Math.tan(Math.PI * (r() - 0.5)) };
+  else pop = buildPop(fvals);
+  resetAcc();
+}
+document.body.addEventListener('click', e => {
+  const p = e.target.dataset && e.target.dataset.p;
+  const a = e.target.dataset && e.target.dataset.a;
+  if (p) {
+    document.querySelectorAll('button[data-p]').forEach(b => b.classList.toggle('on', b === e.target));
+    useCauchy = p === 'cauchy';
+    if (!useCauchy) { fvals.fill(0); PRESETS[p](); }
+    rebuildPop();
+  }
+  if (a) {
+    ALPHA = +a;
+    document.querySelectorAll('button[data-a]').forEach(b => b.classList.toggle('on', b === e.target));
+    resetAcc();
+  }
+});
+$('ns').addEventListener('input', resetAcc);
+$('mu0').addEventListener('input', resetAcc);
+$('resetAcc').addEventListener('click', resetAcc);
+$('setMean').addEventListener('click', () => {
+  if (pop && isFinite(pop.mu)) { $('mu0').value = Math.round(pop.mu * 1000); resetAcc(); }
+});
+$('setMed').addEventListener('click', () => {
+  if (pop) { $('mu0').value = Math.round(pop.median * 1000); resetAcc(); }
+});
+
+function frame() {
+  const n = NS[+$('ns').value];
+  const mu0 = +$('mu0').value / 1000;
+  $('ns2').textContent = 'n=' + n;
+  $('mu02').textContent = mu0.toFixed(3);
+  if (pop && nSim < 400000) {
+    const B = Math.max(30, Math.floor(3000 / n));
+    for (let b = 0; b < B; b++) {
+      let s = 0, s2 = 0, k = 0, ties = 0;
+      for (let i = 0; i < n; i++) {
+        const v = pop.sample(rng);
+        s += v; s2 += v * v;
+        if (v > mu0) k++; else if (v === mu0) ties++;
+      }
+      const mean = s / n;
+      const sd = Math.sqrt(Math.max((s2 - n * mean * mean) / (n - 1), 0));
+      const pT = tTestP(mean, sd, n, mu0);
+      const pS = signTestP(k, n - ties);
+      nSim++;
+      pHist[Math.min(PB - 1, Math.floor(pT * PB))]++;
+      if (pT < ALPHA) rejT++;
+      if (pS < ALPHA) rejS++;
+      nS++;
+      const half = tq * sd / Math.sqrt(n);
+      const truth = isFinite(pop.mu) ? pop.mu : 0.5;
+      const ok = mean - half <= truth && truth <= mean + half;
+      if (ok) cover++;
+      if (ciList.length >= 120) ciList.shift();
+      ciList.push([mean - half, mean + half, ok]);
+    }
+  }
+  draw(n, mu0);
+  requestAnimationFrame(frame);
+}
+function draw(n, mu0) {
+  // 总体
+  gD.fillStyle = '#fff'; gD.fillRect(0, 0, dcv.width, dcv.height);
+  const DW = dcv.width, DH = dcv.height;
+  if (useCauchy) {
+    gD.strokeStyle = '#1f3a6e'; gD.lineWidth = 2; gD.beginPath();
+    for (let px = 0; px <= DW; px++) {
+      const x = px / DW, d = 0.06 / (Math.PI * (0.0036 + (x - 0.5) ** 2));
+      const y = DH - d / (1 / (Math.PI * 0.06)) * (DH - 20) - 2;
+      px ? gD.lineTo(px, y) : gD.moveTo(px, y);
+    }
+    gD.stroke();
+    gD.fillStyle = '#888'; gD.font = '12px Menlo';
+    gD.fillText('柯西(中心 0.5, 尾巴伸到画布外±∞): 均值不存在 —— t 检验连"真值"都没有', 12, 16);
+  } else {
+    gD.fillStyle = 'rgba(31,58,110,0.25)'; gD.strokeStyle = '#1f3a6e'; gD.lineWidth = 1.5;
+    gD.beginPath(); gD.moveTo(0, DH);
+    for (let i = 0; i < K; i++) gD.lineTo((i + 0.5) / K * DW, DH - fvals[i] * (DH - 12));
+    gD.lineTo(DW, DH); gD.closePath(); gD.fill(); gD.stroke();
+  }
+  if (pop) {
+    if (isFinite(pop.mu)) {
+      gD.strokeStyle = '#1f3a6e'; gD.lineWidth = 2;
+      gD.beginPath(); gD.moveTo(pop.mu * DW, 0); gD.lineTo(pop.mu * DW, DH); gD.stroke();
+    }
+    gD.strokeStyle = '#27713d'; gD.lineWidth = 2;
+    gD.beginPath(); gD.moveTo(pop.median * DW, 0); gD.lineTo(pop.median * DW, DH); gD.stroke();
+    gD.strokeStyle = '#c0392b'; gD.setLineDash([5, 4]); gD.lineWidth = 2;
+    gD.beginPath(); gD.moveTo(mu0 * DW, 0); gD.lineTo(mu0 * DW, DH); gD.stroke();
+    gD.setLineDash([]);
+  }
+  // p 值直方图
+  gP.fillStyle = '#fff'; gP.fillRect(0, 0, pcv.width, pcv.height);
+  let mx = 0;
+  for (let i = 0; i < PB; i++) mx = Math.max(mx, pHist[i]);
+  const uni = nSim / PB;
+  mx = Math.max(mx, uni) || 1;
+  gP.fillStyle = 'rgba(31,58,110,0.55)';
+  for (let i = 0; i < PB; i++) {
+    const h = pHist[i] / mx * (pcv.height - 40);
+    gP.fillRect(i / PB * pcv.width + 1, pcv.height - 20 - h, pcv.width / PB - 2, h);
+  }
+  gP.strokeStyle = '#999'; gP.setLineDash([5, 4]);
+  const uy = pcv.height - 20 - uni / mx * (pcv.height - 40);
+  gP.beginPath(); gP.moveTo(0, uy); gP.lineTo(pcv.width, uy); gP.stroke(); gP.setLineDash([]);
+  // α 线
+  gP.strokeStyle = '#c0392b';
+  gP.beginPath(); gP.moveTo(ALPHA * pcv.width, pcv.height - 20); gP.lineTo(ALPHA * pcv.width, 8); gP.stroke();
+  gP.fillStyle = '#c0392b'; gP.font = '11px Menlo';
+  gP.fillText('α=' + ALPHA, ALPHA * pcv.width + 4, 16);
+  gP.fillStyle = '#888';
+  gP.fillText('0', 4, pcv.height - 6); gP.fillText('p=1', pcv.width - 30, pcv.height - 6);
+  // CI 带
+  gC.fillStyle = '#fff'; gC.fillRect(0, 0, ccv.width, ccv.height);
+  if (ciList.length) {
+    const truth = pop && isFinite(pop.mu) ? pop.mu : 0.5;
+    let lo = truth, hi = truth;
+    for (const [a, b] of ciList) { lo = Math.min(lo, a); hi = Math.max(hi, b); }
+    const pad = (hi - lo) * 0.08 + 1e-9;
+    const Y = v => ccv.height - 14 - (v - (lo - pad)) / (hi - lo + 2 * pad) * (ccv.height - 28);
+    gC.strokeStyle = '#111'; gC.lineWidth = 1;
+    gC.beginPath(); gC.moveTo(0, Y(truth)); gC.lineTo(ccv.width, Y(truth)); gC.stroke();
+    ciList.forEach(([a, b, ok], i) => {
+      const x = (i + 0.5) / 120 * ccv.width;
+      gC.strokeStyle = ok ? 'rgba(39,113,61,0.7)' : '#c0392b';
+      gC.lineWidth = ok ? 1.6 : 2.4;
+      gC.beginPath(); gC.moveTo(x, Y(a)); gC.lineTo(x, Y(b)); gC.stroke();
+    });
+  }
+  // 读数
+  if (!pop) { $('stat1').textContent = '画布是空的, 先画个总体'; $('stat2').textContent = ''; return; }
+  const muTxt = isFinite(pop.mu) ? pop.mu.toFixed(4) : '不存在(柯西)';
+  const h0t = isFinite(pop.mu) ? (Math.abs(mu0 - pop.mu) < 0.002 ? '真' : '假') : '—';
+  const h0s = Math.abs(mu0 - pop.median) < 0.002 ? '真' : '假';
+  $('stat1').textContent = `总体真值: μ = ${muTxt}, 中位数 = ${pop.median.toFixed(4)}　H₀(μ=${mu0.toFixed(3)}): 对 t 检验为${h0t}, 对符号检验为${h0s}`;
+  const fr = v => nSim ? (v / nSim).toFixed(4) : '—';
+  $('stat2').textContent = `已做 ${nSim.toLocaleString()} 次实验(每次抽 ${n} 个)`
+    + `　t 拒绝率 = ${fr(rejT)}${h0t === '真' ? ` (承诺 α=${ALPHA})` : h0t === '假' ? ' (= 功效)' : ''}`
+    + `　符号拒绝率 = ${fr(rejS)}${h0s === '真' ? ` (承诺 ≤ ${ALPHA}, 离散偏保守)` : ' (= 功效)'}`
+    + `　CI 覆盖率 = ${fr(cover)} (承诺 ${(1 - ALPHA).toFixed(2)}${isFinite(pop.mu) ? '' : ', 参照中心 0.5'})`;
+}
+PRESETS.skew();
+rebuildPop();
+frame();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>

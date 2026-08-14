@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>贝叶斯更新：手绘先验，看数据碾过去</title>
+<style>
+  body { margin: 0; padding: 12px 16px; background: #fff; color: #222;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  h1 { font-size: 18px; margin: 4px 0 8px; }
+  button { padding: 4px 12px; font-size: 13px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  button.on { background: #2b5fb8; color: #fff; border-color: #2b5fb8; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+  .hint { color: #555; font-size: 12.5px; line-height: 1.6; max-width: 1150px; margin-top: 8px; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  canvas { display: block; border: 1px solid #999; touch-action: none; cursor: crosshair; }
+  .cap { font-size: 12px; color: #555; margin: 2px 0 8px; }
+  b.k { color: #b03030; }
+  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .hint { display: none !important; }
+</style>
+</head>
+<body>
+<h1>贝叶斯更新：一枚未知硬币，手绘你的先验，看数据一颗颗碾过去</h1>
+<div class="bar">
+  真实正面概率 θ*: <input type="range" id="theta" min="1" max="99" value="62" style="width:170px"><span class="mono" id="theta2"></span>
+  抛硬币:
+  <button id="f1">抛 1 次</button>
+  <button id="f10">抛 10 次</button>
+  <button id="f100">抛 100 次</button>
+  <button id="auto">▶ 自动抛</button>
+  <button id="resetD">清零数据</button>
+  先验预设:
+  <button data-p="flat">均匀(无知)</button>
+  <button data-p="fair">迷信公平币</button>
+  <button data-p="wrong">顽固押 0.2</button>
+  <button data-p="zero">禁区先验(0.5~0.8 = 0)</button>
+  <button id="clearP">清空手绘</button>
+  <label><input type="checkbox" id="showRef" checked> 显示"均匀先验的人"作对照(绿)</label>
+</div>
+<div class="bar mono" id="stat"></div>
+<canvas id="pcv" width="1100" height="180"></canvas>
+<div class="cap">先验 π(θ)（<b>在这里拖动手绘</b>——你在看到任何数据前对 θ 的信念，形状随意，无需归一化）</div>
+<canvas id="cv" width="1100" height="340"></canvas>
+<div class="cap">后验 p(θ | 数据) ∝ π(θ)·θ^正面数·(1−θ)^反面数　蓝 = 你的后验，绿细线 = 均匀先验者的后验，红竖线 = 真值 θ*</div>
+<div class="hint">
+  <b>规则一行</b>：后验 ∝ 先验 × 似然。每抛一次，整条曲线乘上 θ（正面）或 1−θ（反面），再归一。
+  <b class="k">看三件事</b>：① 数据少时先验主导（"顽固押 0.2"的人后验偏得厉害），几百次后两个先验不同的人<b>殊途同归</b>——被同一份数据碾平；
+  ② 后验宽度按 1/√n 收窄（读数里的实测标准差可对照）；
+  ③ <b>例外</b>：选"禁区先验"且把 θ* 放进 0.5~0.8——先验为 0 的地方似然乘多少都是 0，<b>这个人永远学不到真相</b>（后验被禁区外最近的地方顶住）。
+  Cromwell 法则：永远别把任何可能性的先验设成精确的 0。
+</div>
+
+<script>
+'use strict';
+// ===== 核心（无 DOM）=====
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// 网格后验: log 空间避免下溢; prior 为任意非负数组(不必归一)
+function posterior(prior, heads, tails) {
+  const K = prior.length, out = new Float64Array(K);
+  let mx = -Infinity;
+  const lg = new Float64Array(K);
+  for (let i = 0; i < K; i++) {
+    const th = (i + 0.5) / K;
+    lg[i] = prior[i] > 0 ? Math.log(prior[i]) + heads * Math.log(th) + tails * Math.log(1 - th) : -Infinity;
+    if (lg[i] > mx) mx = lg[i];
+  }
+  if (mx === -Infinity) return out;            // 先验全 0
+  let s = 0;
+  for (let i = 0; i < K; i++) { out[i] = Math.exp(lg[i] - mx); s += out[i]; }
+  for (let i = 0; i < K; i++) out[i] /= s;     // 归一(离散和为 1)
+  return out;
+}
+function gridStats(p) {                        // 归一化网格的均值/方差/众数
+  const K = p.length;
+  let mu = 0, e2 = 0, mi = 0;
+  for (let i = 0; i < K; i++) {
+    const th = (i + 0.5) / K;
+    mu += p[i] * th; e2 += p[i] * th * th;
+    if (p[i] > p[mi]) mi = i;
+  }
+  return { mean: mu, sd: Math.sqrt(Math.max(e2 - mu * mu, 0)), map: (mi + 0.5) / K };
+}
+function tvGrid(a, b) {
+  let tv = 0;
+  for (let i = 0; i < a.length; i++) tv += Math.abs(a[i] - b[i]);
+  return tv / 2;
+}
+// ===== 核心结束 =====
+
+const K = 256;
+let prior = new Float64Array(K).fill(1);
+const flatPrior = new Float64Array(K).fill(1);
+let heads = 0, tails = 0, autoOn = false;
+const rng = mulberry32(777);
+const $ = id => document.getElementById(id);
+const pcv = $('pcv'), gP = pcv.getContext('2d');
+const cv = $('cv'), gp = cv.getContext('2d');
+const PW = pcv.width, PH = pcv.height, HW = cv.width, HH = cv.height;
+
+// --- 手绘先验 ---
+let drawing = false, lastX = null;
+pcv.addEventListener('pointerdown', e => { drawing = true; lastX = null; pcv.setPointerCapture(e.pointerId); dpaint(e); });
+pcv.addEventListener('pointermove', e => { if (drawing) dpaint(e); });
+pcv.addEventListener('pointerup', () => { drawing = false; lastX = null; });
+function dpaint(e) {
+  const r = pcv.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  const i = Math.max(0, Math.min(K - 1, Math.floor(x * K)));
+  const h = Math.max(0, Math.min(1, 1 - y));
+  if (lastX !== null && Math.abs(i - lastX[0]) > 1) {
+    const [i0, h0] = lastX, d = i - i0, sgn = Math.sign(d);
+    for (let k = 1; k <= Math.abs(d); k++) prior[i0 + sgn * k] = h0 + (h - h0) * k / Math.abs(d);
+  } else prior[i] = h;
+  lastX = [i, h];
+  document.querySelectorAll('button[data-p]').forEach(b => b.classList.remove('on'));
+}
+const PRESETS = {
+  flat: () => prior.fill(0.6),
+  fair: () => { for (let i = 0; i < K; i++) prior[i] = Math.exp(-((((i + 0.5) / K - 0.5) / 0.05) ** 2)); },
+  wrong: () => { for (let i = 0; i < K; i++) prior[i] = 0.03 + Math.exp(-((((i + 0.5) / K - 0.2) / 0.06) ** 2)); },
+  zero: () => { for (let i = 0; i < K; i++) { const t = (i + 0.5) / K; prior[i] = t > 0.5 && t < 0.8 ? 0 : 0.6; } },
+};
+document.body.addEventListener('click', e => {
+  const p = e.target.dataset && e.target.dataset.p;
+  if (!p) return;
+  document.querySelectorAll('button[data-p]').forEach(b => b.classList.toggle('on', b === e.target));
+  PRESETS[p]();
+});
+$('clearP').addEventListener('click', () => prior.fill(0));
+
+// --- 数据 ---
+function flip(n) {
+  const th = +$('theta').value / 100;
+  for (let i = 0; i < n; i++) (rng() < th ? heads++ : tails++);
+}
+$('f1').addEventListener('click', () => flip(1));
+$('f10').addEventListener('click', () => flip(10));
+$('f100').addEventListener('click', () => flip(100));
+$('resetD').addEventListener('click', () => { heads = 0; tails = 0; });
+$('auto').addEventListener('click', () => {
+  autoOn = !autoOn;
+  $('auto').textContent = autoOn ? '⏸ 停' : '▶ 自动抛';
+  $('auto').classList.toggle('on', autoOn);
+});
+
+// --- 绘制 ---
+function drawCurve(ctx, w, h, arr, fill, stroke, lw) {
+  let mx = 0;
+  for (const v of arr) mx = Math.max(mx, v);
+  if (!mx) return;
+  ctx.beginPath(); ctx.moveTo(0, h);
+  for (let i = 0; i < K; i++) ctx.lineTo((i + 0.5) / K * w, h - arr[i] / mx * (h - 16));
+  ctx.lineTo(w, h);
+  if (fill) { ctx.fillStyle = fill; ctx.closePath(); ctx.fill(); }
+  ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.stroke();
+}
+function frame() {
+  if (autoOn && heads + tails < 200000) flip(Math.min(50, Math.ceil((heads + tails + 1) / 20)));
+  const th = +$('theta').value / 100;
+  $('theta2').textContent = 'θ* = ' + th.toFixed(2);
+  // 先验图
+  gP.fillStyle = '#fff'; gP.fillRect(0, 0, PW, PH);
+  drawCurve(gP, PW, PH, prior, 'rgba(120,120,120,0.25)', '#666', 1.5);
+  gP.strokeStyle = '#c0392b'; gP.setLineDash([5, 4]);
+  gP.beginPath(); gP.moveTo(th * PW, 0); gP.lineTo(th * PW, PH); gP.stroke(); gP.setLineDash([]);
+  // 后验图
+  const post = posterior(prior, heads, tails);
+  const ref = posterior(flatPrior, heads, tails);
+  gp.fillStyle = '#fff'; gp.fillRect(0, 0, HW, HH);
+  gp.strokeStyle = '#e3e3e3'; gp.fillStyle = '#888'; gp.font = '11px Menlo';
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+    gp.beginPath(); gp.moveTo(t * HW, 0); gp.lineTo(t * HW, HH); gp.stroke();
+    gp.fillText(t.toFixed(2), Math.min(t * HW + 3, HW - 32), HH - 6);
+  }
+  drawCurve(gp, HW, HH, post, 'rgba(31,58,110,0.3)', '#1f3a6e', 2);
+  if ($('showRef').checked) drawCurve(gp, HW, HH, ref, null, '#27713d', 1.2);
+  gp.strokeStyle = '#c0392b'; gp.setLineDash([5, 4]); gp.lineWidth = 1.6;
+  gp.beginPath(); gp.moveTo(th * HW, 0); gp.lineTo(th * HW, HH); gp.stroke(); gp.setLineDash([]);
+  // 读数
+  const s = gridStats(post), n = heads + tails;
+  let priorSum = 0;
+  for (const v of prior) priorSum += v;
+  $('stat').textContent = priorSum === 0
+    ? '先验全为 0 —— 什么都不可能, 数据也救不了(先画个先验)'
+    : `n = ${n.toLocaleString()} (正 ${heads} / 反 ${tails})　后验实测: 均值 = ${s.mean.toFixed(4)}, MAP = ${s.map.toFixed(3)}, 标准差 = ${s.sd.toFixed(4)}`
+      + `　与均匀先验者的 TV 距离 = ${tvGrid(post, ref).toFixed(3)}`
+      + `　|后验均值 − θ*| = ${Math.abs(s.mean - th).toFixed(4)}`;
+  requestAnimationFrame(frame);
+}
+PRESETS.wrong();
+document.querySelector('button[data-p="wrong"]').classList.add('on');
+frame();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>
