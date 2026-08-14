@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>复杂网络模拟：IP 路由自组织 + TCP</title>
+<style>
+:root{
+  --surface:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --base:#c3c2b7; --border:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --down:#d03b3b; --good:#0ca30c;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--page);color:var(--ink);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+#app{display:flex;flex-direction:column;height:100%}
+#toolbar{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;padding:6px 10px;
+  background:var(--surface);border-bottom:1px solid var(--grid);font-size:13px}
+#toolbar button{font:12px system-ui;padding:3px 9px;border:1px solid var(--base);border-radius:5px;
+  background:var(--surface);color:var(--ink);cursor:pointer}
+#toolbar button:hover{background:#f0efec}
+#toolbar button.warn{color:var(--down);border-color:var(--down)}
+#toolbar button.on{background:var(--s1);color:#fff;border-color:var(--s1)}
+#toolbar label{color:var(--ink2)}
+#toolbar .sep{width:1px;height:18px;background:var(--grid)}
+#stats{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+#main{flex:1;display:flex;min-height:0}
+#cwrap{flex:1;position:relative;min-width:0}
+canvas#net{position:absolute;inset:0;width:100%;height:100%;display:block;background:var(--surface);cursor:grab}
+#hud{position:absolute;left:10px;top:8px;font-size:12px;color:var(--ink2);pointer-events:none;
+  background:rgba(252,252,251,.85);padding:3px 8px;border-radius:6px;border:1px solid var(--border)}
+#hint{position:absolute;left:10px;bottom:8px;font-size:12px;color:var(--muted);pointer-events:none;
+  background:rgba(252,252,251,.85);padding:2px 8px;border-radius:6px}
+#side{width:352px;overflow-y:auto;background:var(--surface);border-left:1px solid var(--grid);padding:8px 10px;flex-shrink:0}
+#side details{margin-bottom:8px;border:1px solid var(--grid);border-radius:8px;padding:6px 9px;background:var(--surface)}
+#side summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink2)}
+#side h4{margin:6px 0 4px;font-size:12px;color:var(--muted);font-weight:600}
+#selinfo{font-size:13px}
+#selinfo .btnrow{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}
+#selinfo button{font:12px system-ui;padding:3px 8px;border:1px solid var(--base);border-radius:5px;background:var(--surface);cursor:pointer}
+#selinfo button.warn{color:var(--down);border-color:var(--down)}
+#selinfo button.pri{background:var(--s1);color:#fff;border-color:var(--s1)}
+table.rt{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+table.rt th,table.rt td{border-bottom:1px solid var(--grid);padding:1px 6px;text-align:left;color:var(--ink2)}
+table.rt th{color:var(--muted);font-weight:600}
+.rtwrap{max-height:180px;overflow-y:auto;margin-top:4px}
+#flows .frow{display:flex;gap:6px;align-items:center;font-size:12px;padding:3px 4px;border-radius:5px;cursor:pointer;color:var(--ink2)}
+#flows .frow:hover{background:#f0efec}
+#flows .frow.sel{background:#e8f0fb}
+#flows .dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+#flows .stopb{margin-left:auto;font:11px system-ui;padding:0 5px;border:1px solid var(--base);
+  border-radius:4px;background:var(--surface);cursor:pointer;color:var(--down)}
+.chartbox{margin-top:6px}
+.chartbox .ct{font-size:12px;color:var(--ink2);margin-bottom:2px}
+canvas.strip{width:100%;height:110px;display:block;background:var(--surface);border:1px solid var(--grid);border-radius:6px}
+#log{font-size:12px;max-height:230px;overflow-y:auto;color:var(--ink2)}
+#log div{padding:1px 0;border-bottom:1px dashed var(--grid)}
+#log .t{color:var(--muted);font-variant-numeric:tabular-nums;margin-right:5px}
+#log .bad{color:var(--down)} #log .good{color:#006300} #log .flow{color:var(--s1)}
+#tips{font-size:12px;color:var(--ink2)} #tips li{margin:3px 0}
+@media (max-width:860px){
+  #main{flex-direction:column}
+  #side{width:100%;max-height:45%;border-left:none;border-top:1px solid var(--grid)}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <button id="bPause">⏸ 暂停</button>
+    <button id="bStep">单步</button>
+    <label>速度 <input id="rSpeed" type="range" min="-2" max="6" step="0.5" value="0" style="width:90px;vertical-align:middle"> <span id="tSpeed">1×</span></label>
+    <span class="sep"></span>
+    <label>规模 <select id="selScale">
+      <option value="s">小 (~45)</option>
+      <option value="m">中 (~140)</option>
+      <option value="l" selected>大 (~280)</option>
+    </select></label>
+    <button id="bRestart">↺ 冷启动重建</button>
+    <span class="sep"></span>
+    <button id="bKill" class="warn">💥 随机杀 5 个</button>
+    <button id="bRevive">全部复活</button>
+    <span class="sep"></span>
+    <button id="bFlow">＋随机 TCP 流</button>
+    <button id="bDiff">扩散视图</button>
+    <button id="bCtl" class="on">控制报文</button>
+    <span id="stats"></span>
+  </div>
+  <div id="main">
+    <div id="cwrap">
+      <canvas id="net"></canvas>
+      <div id="hud"></div>
+      <div id="hint">拖动平移 · 滚轮缩放 · 点击选中 · <b>Shift+点击 = 直接 down/up</b>（节点或链路）<br>
+    数据按流着色（对应侧栏色块）：实心 = 数据段，空心 = ACK ｜ 路由协议：<span style="color:#4a3aa7">紫空心 = 路由更新(DV)</span>，灰空心 = 心跳 ｜ <span style="color:#e87ba4">粉 = 测试包</span></div>
+    </div>
+    <div id="side">
+      <details open><summary>选中对象</summary><div id="selinfo"><span style="color:var(--muted);font-size:12px">点击画布上的节点或链路</span></div></details>
+      <details open><summary>TCP 流</summary>
+        <div id="flows"><span style="color:var(--muted);font-size:12px">尚无流。用工具栏“＋随机 TCP 流”，或选两个节点手动建。</span></div>
+        <div class="chartbox"><div class="ct">拥塞窗口 cwnd / ssthresh（段）</div><canvas id="cCwnd" class="strip"></canvas></div>
+        <div class="chartbox"><div class="ct">吞吐量（段/秒，接收端）</div><canvas id="cThr" class="strip"></canvas></div>
+      </details>
+      <details open><summary>事件日志</summary><div id="log"></div></details>
+      <details><summary>玩法提示</summary><ul id="tips">
+        <li><b>冷启动</b>：刚启动时所有路由表是空的——立刻选两个节点发测试包，它第一跳就会死。等几秒钟距离向量协议八卦收敛后再发，就通了。</li>
+        <li><b>扩散视图</b>：选中一个节点后开启，全网按“到它的跳数”染色，灰色=还不知道路。冷启动或故障后看知识像墨水一样晕开。</li>
+        <li><b>Shift+点击</b>节点/链路直接制造故障。宕机没有告别报文：邻居要等心跳超时才发现，期间还在往尸体上扔包。</li>
+        <li><b>TCP 流</b>建立后点击流查看 cwnd 锯齿：队列溢出丢包→慢启动/快速重传，全是涌现的。中途杀掉路径上的路由器，看它绕路自愈。</li>
+        <li><b>分区</b>：把一个区域对外的链路全断掉，路由计数到无穷后被删除，测试包报“无路由”。</li>
+      </ul></details>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== 核心（无 DOM）====================
+'use strict';
+function mulberry32(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+const CFG={
+  HELLO_INT:800, DEAD_T:2800,          // 心跳与邻居失联判定(ms)
+  DV_INT:2000, TRIG_MIN:150,           // 距离向量周期/触发更新最小间隔
+  AGE_T:7000, GC_T:4000,               // 路由老化置 INF / INF 后清除
+  INF:32, TTL:64,
+  RTO_INIT:1000, RTO_MIN:200, RTO_MAX:30000, MAXW:256, FLOW_LEN:4000,
+};
+const TIERS={ core:{d0:3,dj:5,bw:3.0,q:50}, up:{d0:2,dj:4,bw:1.6,q:36},
+              intra:{d0:1,dj:3,bw:0.9,q:26}, inter:{d0:4,dj:5,bw:1.2,q:30} };
+const SCALES={ s:{regions:5,perRegion:8}, m:{regions:10,perRegion:13}, l:{regions:16,perRegion:16} };
+
+class MinHeap{
+  constructor(){this.a=[];}
+  _lt(x,y){return x.t<y.t||(x.t===y.t&&x.seq<y.seq);}
+  push(e){const a=this.a;a.push(e);let i=a.length-1;
+    while(i>0){const p=(i-1)>>1;if(this._lt(a[p],e))break;a[i]=a[p];i=p;}a[i]=e;}
+  pop(){const a=this.a,top=a[0],last=a.pop();
+    if(a.length){a[0]=last;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;
+      if(l<a.length&&this._lt(a[l],a[m]))m=l;if(r<a.length&&this._lt(a[r],a[m]))m=r;
+      if(m===i)break;const tmp=a[i];a[i]=a[m];a[m]=tmp;i=m;}}return top;}
+  peek(){return this.a[0];}
+  get size(){return this.a.length;}
+}
+
+class RNode{
+  constructor(sim,id,region,x,y,core,idx){
+    this.sim=sim;this.id=id;this.region=region;this.x=x;this.y=y;this.core=core;
+    this.idx=idx;                                    // 区域内编号 → IP 第三段
+    this.ipStr=`10.${region}.${idx}.1`;
+    this.ipInt=((10<<24)|(region<<16)|(idx<<8)|1)>>>0;
+    this.hostKey=this.ipStr+'/32';                   // 主机路由(只在区域内传播)
+    this.alive=true;
+    this.ports=[];              // {link, peer}
+    this.rt=new Map();          // dest('N7'|'P3') -> {cost, via:Link, ts, dead}
+    this.nbrUp=new Map();       // linkId -> bool（我认为对面活着吗）
+    this.nbrLast=new Map();     // linkId -> 最近一次收到 hello 的时间
+    this.pendingTrig=false;this.lastSend=-1e9;
+  }
+}
+// ---- IP 前缀工具: CIDR 解析(带缓存) + 按位最长前缀匹配 ----
+const CIDR_CACHE=new Map();
+function parseCidr(s){
+  let v=CIDR_CACHE.get(s);
+  if(!v){const [ip,b]=s.split('/'),q=ip.split('.').map(Number);
+    v={p:((q[0]<<24)|(q[1]<<16)|(q[2]<<8)|q[3])>>>0,bits:+b};CIDR_CACHE.set(s,v);}
+  return v;
+}
+function regionPrefix(r){return `10.${r}.0.0/16`;}
+// 在 node 的路由表里对 dstNode 的 IP 做最长前缀匹配; /32 主机路由自然压过 /16 区域前缀
+function lookupRoute(node,dstNode){
+  const dip=dstNode.ipInt;let best=null,bits=-1;
+  for(const [d,e] of node.rt){
+    if(e.cost>=CFG.INF)continue;
+    const c=parseCidr(d);
+    if(c.bits<=bits)continue;
+    if(((dip^c.p)>>>(32-c.bits))===0){best=e;bits=c.bits;}
+  }
+  return best;
+}
+class Link{
+  constructor(id,a,b,tier,delay,bw,qcap){
+    this.id=id;this.a=a;this.b=b;this.tier=tier;
+    this.delay=delay;this.bw=bw;this.qcap=qcap;this.up=true;
+    this.q=[{len:0,busy:0},{len:0,busy:0}];    // 两个方向: 0 = a→b
+  }
+  dirFrom(nd){return nd===this.a?0:1;}
+  other(nd){return nd===this.a?this.b:this.a;}
+}
+class Flow{
+  constructor(sim,id,src,dst,total){
+    this.sim=sim;this.id=id;this.src=src;this.dst=dst;this.total=total;
+    this.state='SYN_SENT';
+    this.una=0;this.nxt=0;this.cwnd=1;this.ssthresh=64;this.dup=0;
+    this.srtt=null;this.rttvar=0;this.rto=CFG.RTO_INIT;
+    this.txTime=new Map();this.rtoSeq=0;this.timeouts=0;this.retx=0;this.fastRetx=0;
+    this.rcvNxt=0;this.ooo=new Set();this.synT=sim.now;
+    this.histC=[];this.histT=[];this._lastR=0;
+    this.startT=sim.now;this.doneT=null;
+  }
+  get flight(){return this.nxt-this.una;}
+}
+
+class Sim{
+  constructor(cfg,seed){
+    this.cfg=Object.assign({regions:10,perRegion:13},cfg);
+    this.seed=seed;this.rng=mulberry32(seed);
+    this.now=0;this.eseq=0;this.heap=new MinHeap();
+    this.nodes=[];this.links=[];this.flows=[];
+    this.logs=[];this.visPkts=new Set();this.visFx=[];
+    this.stats={drops:{queue:0,ttl:0,noroute:0,dead:0},delivered:0,rtChanges:0};
+    this.pingSeq=0;
+    buildTopology(this);
+    this.byKey=new Map(this.nodes.map(n=>[n.hostKey,n]));
+    for(const nd of this.nodes){
+      this.schedule(this.rng()*CFG.HELLO_INT,()=>helloLoop(this,nd));
+      this.schedule(CFG.DV_INT*0.3+this.rng()*CFG.DV_INT,()=>dvLoop(this,nd));
+    }
+    this.log('冷启动：全部路由表为空，等待距离向量协议自行收敛…','good');
+  }
+  schedule(dt,fn){this.heap.push({t:this.now+dt,seq:this.eseq++,fn});}
+  run(until,maxEv=1e9){let n=0;
+    while(this.heap.size&&this.heap.peek().t<=until&&n<maxEv){
+      const e=this.heap.pop();this.now=e.t;e.fn();n++;}
+    if(n<maxEv)this.now=until;return n;}
+  log(msg,cls){this.logs.push({t:this.now,msg,cls:cls||''});
+    if(this.logs.length>600)this.logs.splice(0,200);}
+  fx(x,y,kind){this.visFx.push({x,y,kind,life:1});
+    if(this.visFx.length>400)this.visFx.splice(0,100);}
+  // ---- 故障注入 ----
+  toggleNode(nd){
+    nd.alive=!nd.alive;
+    if(!nd.alive){
+      this.log(`💥 R${nd.id} 宕机（无告别报文，邻居需心跳超时才发现）`,'bad');
+      this.fx(nd.x,nd.y,'dead');
+      for(const p of nd.ports){const d=p.link.dirFrom(nd);p.link.q[d].len=0;p.link.q[d].busy=this.now;}
+    }else{
+      nd.rt.clear();nd.nbrUp.clear();nd.nbrLast.clear();  // 重启 = 表清空,从零学起
+      this.log(`R${nd.id} 恢复上线（路由表清空，重新学习）`,'good');
+    }
+  }
+  toggleLink(L){
+    L.up=!L.up;
+    if(!L.up){
+      L.q[0].len=0;L.q[0].busy=this.now;L.q[1].len=0;L.q[1].busy=this.now;
+      this.log(`✂ 链路 R${L.a.id}–R${L.b.id} 断开`,'bad');
+    }else this.log(`链路 R${L.a.id}–R${L.b.id} 恢复`,'good');
+  }
+  sendPing(src,dst){
+    const id=++this.pingSeq;
+    const pkt={kind:'PING',id,src,dst,ttl:CFG.TTL,size:1,hops:0,t0:this.now};
+    this.log(`测试包 #${id}：R${src} → R${dst} 出发`);
+    forward(this,this.nodes[src],pkt);
+    return pkt;
+  }
+  startFlow(src,dst,total){
+    const f=new Flow(this,this.flows.length,src,dst,total||CFG.FLOW_LEN);
+    this.flows.push(f);
+    this.log(`TCP 流 f${f.id}：R${src} → R${dst}${isFinite(f.total)?'':'（持续流）'}，发 SYN（三次握手）`,'flow');
+    tcpSendCtlSeg(this,f,'SYN');armRto(this,f);
+    const sampler=()=>{ if(f.state==='FAILED')return;
+      if((f.state==='DONE'||f.state==='STOPPED')&&this.now>f.doneT+1500)return;
+      f.histT.push([this.now,(f.rcvNxt-f._lastR)*4]);f._lastR=f.rcvNxt;
+      if(f.histT.length>2400)f.histT=f.histT.filter((_,i)=>i%2===0);
+      this.schedule(250,sampler);};
+    this.schedule(250,sampler);
+    return f;
+  }
+  stopFlow(f){
+    if(f.state!=='EST'&&f.state!=='SYN_SENT')return;
+    f.state='STOPPED';f.doneT=this.now;f.rtoSeq++;   // 取消 RTO 定时器
+    this.log(`⏹ 流 f${f.id} 手动停止：已传 ${f.una} 段，重传 ${f.retx}`,'flow');
+  }
+}
+// 按路由表逐跳走一遍(控制面视角), 返回节点数组; 走不通返回已走到的部分并标记 broken
+function tracePath(sim,srcId,dstId){
+  const path=[sim.nodes[srcId]];let nd=sim.nodes[srcId];
+  for(let i=0;i<128;i++){
+    if(nd.id===dstId)return {path,broken:false};
+    const e=lookupRoute(nd,sim.nodes[dstId]);
+    if(!nd.alive||!e||!e.via.up)return {path,broken:true};
+    nd=e.via.other(nd);path.push(nd);
+  }
+  return {path,broken:true};  // 环路
+}
+
+// ---------- 拓扑生成：骨干环 + 区域簇，层次化 ----------
+function buildTopology(sim){
+  const rng=sim.rng,{regions:R,perRegion:PN}=sim.cfg;
+  const nodes=sim.nodes,links=sim.links,seen=new Set();
+  const mk=(region,x,y,core,idx)=>{const nd=new RNode(sim,nodes.length,region,x,y,core,idx);nodes.push(nd);return nd;};
+  const link=(a,b,tier)=>{
+    if(a===b)return;const key=a.id<b.id?a.id+'_'+b.id:b.id+'_'+a.id;
+    if(seen.has(key))return;seen.add(key);
+    const p=TIERS[tier];
+    const L=new Link(links.length,a,b,tier,p.d0+rng()*p.dj,p.bw*(0.7+rng()*0.6),p.q);
+    links.push(L);a.ports.push({link:L,peer:b});b.ports.push({link:L,peer:a});};
+  // 骨干（区域 0）：环只做连通性保底,再叠随机长弦 → 网状,不是环拓扑
+  const CN=Math.max(5,Math.round(R*0.75)),RC=250;
+  const cores=[];
+  for(let i=0;i<CN;i++){const a=i/CN*2*Math.PI;
+    cores.push(mk(0,RC*Math.cos(a),RC*Math.sin(a),true,i));}
+  for(let i=0;i<CN;i++)link(cores[i],cores[(i+1)%CN],'core');
+  for(let k=0;k<Math.round(CN*1.2);k++){
+    const i=Math.floor(rng()*CN),j=Math.floor(rng()*CN);
+    if(j!==i)link(cores[i],cores[j],'core');
+  }
+  // 各区域
+  const RR=780,BLOB=140,regionNodes=[];
+  for(let r=1;r<=R;r++){
+    const ang=(r-1)/R*2*Math.PI+Math.PI/R;
+    const cx=RR*Math.cos(ang),cy=RR*Math.sin(ang),arr=[];
+    for(let k=0;k<PN;k++){
+      const a2=rng()*2*Math.PI,d=Math.sqrt(rng())*BLOB;
+      arr.push(mk(r,cx+d*Math.cos(a2),cy+d*Math.sin(a2),false,k));
+      if(k>0)link(arr[k],arr[Math.floor(rng()*k)],'intra');   // 随机树保证连通
+    }
+    const extra=Math.round(PN*0.35);
+    for(let k=0;k<extra;k++)link(arr[Math.floor(rng()*PN)],arr[Math.floor(rng()*PN)],'intra');
+    const ci=Math.round((r-1)/R*CN)%CN;
+    link(arr[0],cores[ci],'up');                              // 网关 1：就近上联
+    if(PN>1&&CN>1){                                           // 网关 2：多宿到"另一个"核心,避免同核单点
+      let cj=Math.floor(rng()*(CN-1));if(cj>=ci)cj++;
+      link(arr[1],cores[cj],'up');
+    }
+    regionNodes.push(arr);
+  }
+  for(let k=0;k<Math.round(R*0.6);k++){                       // 区域间随机对等互联
+    const r1=Math.floor(rng()*R),r2=Math.floor(rng()*R);
+    if(r1===r2)continue;
+    const a=regionNodes[r1],b=regionNodes[r2];
+    link(a[Math.floor(rng()*a.length)],b[Math.floor(rng()*b.length)],'inter');
+  }
+  // 区域内简单斥力松弛,去重叠
+  for(let it=0;it<50;it++)for(const arr of regionNodes)
+    for(let i=0;i<arr.length;i++)for(let j=i+1;j<arr.length;j++){
+      const A=arr[i],B=arr[j],dx=B.x-A.x,dy=B.y-A.y,d=Math.hypot(dx,dy)||0.01;
+      if(d<46){const push=(46-d)/d*0.4;A.x-=dx*push;A.y-=dy*push;B.x+=dx*push;B.y+=dy*push;}}
+}
+
+// ---------- 心跳与邻居失联检测 ----------
+function helloLoop(sim,nd){
+  if(nd.alive){
+    for(const p of nd.ports)sendCtl(sim,p.link,nd,{kind:'HELLO'});
+    for(const p of nd.ports){
+      const lid=p.link.id;
+      if(nd.nbrUp.get(lid)&&sim.now-(nd.nbrLast.get(lid)||0)>CFG.DEAD_T){
+        nd.nbrUp.set(lid,false);
+        sim.log(`R${nd.id} 心跳超时，判定邻居 R${p.peer.id} 失联`,'bad');
+        invalidateVia(sim,nd,p.link);
+      }
+    }
+    ageRoutes(sim,nd);
+  }
+  sim.schedule(CFG.HELLO_INT*(0.9+sim.rng()*0.2),()=>helloLoop(sim,nd));
+}
+function invalidateVia(sim,nd,link){
+  let ch=false;
+  for(const e of nd.rt.values())
+    if(e.via===link&&e.cost<CFG.INF){e.cost=CFG.INF;e.dead=sim.now;ch=true;}
+  if(ch){sim.stats.rtChanges++;trigger(sim,nd);}
+}
+function ageRoutes(sim,nd){
+  let ch=false;
+  for(const [d,e] of nd.rt){
+    if(e.cost<CFG.INF&&sim.now-e.ts>CFG.AGE_T){e.cost=CFG.INF;e.dead=sim.now;ch=true;}
+    else if(e.cost>=CFG.INF&&sim.now-(e.dead||0)>CFG.GC_T)nd.rt.delete(d);
+  }
+  if(ch){sim.stats.rtChanges++;trigger(sim,nd);}
+}
+
+// ---------- 距离向量协议（RIP 思想：水平分割+毒性逆转,前缀聚合）----------
+function dvLoop(sim,nd){
+  if(nd.alive){nd.lastSend=sim.now;
+    for(const p of nd.ports)if(nd.nbrUp.get(p.link.id))sendVector(sim,nd,p);}
+  sim.schedule(CFG.DV_INT*(0.9+sim.rng()*0.2),()=>dvLoop(sim,nd));
+}
+function sendVector(sim,nd,port){
+  const sameRegion=port.peer.region===nd.region,ent=[[regionPrefix(nd.region),0]];
+  if(sameRegion)ent.push([nd.hostKey,0]);
+  for(const [d,e] of nd.rt){
+    if(!sameRegion&&d.endsWith('/32'))continue;   // /32 主机路由不出区域边界——地址聚合
+    if(d===regionPrefix(nd.region)||d===nd.hostKey)continue;
+    ent.push([d,e.via===port.link?CFG.INF:e.cost]);   // 毒性逆转
+  }
+  sendCtl(sim,port.link,nd,{kind:'DV',ent});
+}
+function recvDV(sim,nd,port,ent){
+  let ch=false;
+  for(const [d,c0] of ent){
+    if(d===regionPrefix(nd.region)||d===nd.hostKey)continue;
+    const c=Math.min(CFG.INF,c0+1),cur=nd.rt.get(d);
+    if(cur&&cur.via===port.link){
+      cur.ts=sim.now;
+      if(cur.cost!==c){cur.cost=c;if(c>=CFG.INF)cur.dead=sim.now;ch=true;}
+    }else if((!cur||c<cur.cost)&&c<CFG.INF){
+      nd.rt.set(d,{cost:c,via:port.link,ts:sim.now});ch=true;
+    }
+  }
+  if(ch){sim.stats.rtChanges++;trigger(sim,nd);}
+}
+function trigger(sim,nd){
+  if(nd.pendingTrig)return;nd.pendingTrig=true;
+  const dt=Math.max(CFG.TRIG_MIN-(sim.now-nd.lastSend),20+sim.rng()*80);
+  sim.schedule(dt,()=>{nd.pendingTrig=false;
+    if(!nd.alive)return;nd.lastSend=sim.now;
+    for(const p of nd.ports)if(nd.nbrUp.get(p.link.id))sendVector(sim,nd,p);});
+}
+function recvHello(sim,nd,port){
+  const lid=port.link.id;
+  nd.nbrLast.set(lid,sim.now);
+  if(!nd.nbrUp.get(lid)){
+    nd.nbrUp.set(lid,true);
+    sendVector(sim,nd,port);          // 新邻居,立即全量交换
+    trigger(sim,nd);
+  }
+}
+
+// ---------- 控制报文（旁路队列,只吃传播时延）----------
+function sendCtl(sim,link,from,msg){
+  if(!link.up)return;
+  const dir=link.dirFrom(from),to=link.other(from);
+  const vp={ctl:true,kind:msg.kind,link,dir,t0:sim.now,t1:sim.now+link.delay};
+  sim.visPkts.add(vp);
+  sim.schedule(link.delay,()=>{
+    sim.visPkts.delete(vp);
+    if(!link.up||!to.alive||!from.alive)return;
+    if(msg.kind==='HELLO')recvHello(sim,to,{link,peer:from});
+    else recvDV(sim,to,{link,peer:from},msg.ent);
+  });
+}
+
+// ---------- IP 转发：逐跳查表,TTL,有限队列 ----------
+function dropPkt(sim,node,pkt,reason){
+  sim.stats.drops[reason]++;sim.fx(node.x,node.y,'drop_'+reason);
+  if(pkt.kind==='PING'){
+    const why={queue:'队列溢出',ttl:'TTL 耗尽(路由环路)',noroute:'无路由',dead:'节点/链路故障'}[reason];
+    sim.log(`测试包 #${pkt.id} 在 R${node.id} 被丢弃：${why}`,'bad');
+  }
+}
+function forward(sim,node,pkt){
+  if(!node.alive){dropPkt(sim,node,pkt,'dead');return;}
+  if(pkt.dst===node.id){deliver(sim,node,pkt);return;}
+  if(--pkt.ttl<=0){dropPkt(sim,node,pkt,'ttl');return;}
+  pkt.hops++;
+  const e=lookupRoute(node,sim.nodes[pkt.dst]);   // 按目的 IP 做最长前缀匹配
+  if(!e){dropPkt(sim,node,pkt,'noroute');return;}
+  sendOnLink(sim,e.via,node,pkt);
+}
+function sendOnLink(sim,link,from,pkt){
+  if(!link.up){dropPkt(sim,from,pkt,'dead');return;}
+  const dir=link.dirFrom(from),q=link.q[dir];
+  if(q.len+pkt.size>link.qcap){dropPkt(sim,from,pkt,'queue');return;}  // 队列按字节计
+  q.len+=pkt.size;
+  const tx=pkt.size/link.bw;
+  q.busy=Math.max(q.busy,sim.now)+tx;
+  const depart=q.busy,arrive=depart+link.delay;
+  const vp={pkt,link,dir,t0:depart-tx,t1:arrive};
+  sim.visPkts.add(vp);
+  sim.schedule(depart-sim.now,()=>{q.len=Math.max(0,q.len-pkt.size);});
+  sim.schedule(arrive-sim.now,()=>{
+    sim.visPkts.delete(vp);
+    const to=dir===0?link.b:link.a;
+    if(!link.up||!to.alive){dropPkt(sim,to,pkt,'dead');return;}
+    forward(sim,to,pkt);
+  });
+}
+function deliver(sim,node,pkt){
+  sim.stats.delivered++;
+  if(pkt.kind==='PING'){
+    pkt.delivered=true;sim.fx(node.x,node.y,'ok');
+    sim.log(`✓ 测试包 #${pkt.id} 送达 R${node.id}：${pkt.hops} 跳，${(sim.now-pkt.t0).toFixed(0)}ms`,'good');
+  }else if(pkt.kind==='TCP')tcpRecv(sim,sim.flows[pkt.flow],pkt);
+}
+
+// ---------- TCP（思想版 Reno：握手/滑窗/RTO/快速重传/慢启动）----------
+function tcpPkt(f,flags,fields){
+  // ACK/SYN 远小于数据段(现实里 ~40B vs ~1500B), 否则反向 ACK 流会吃满瓶颈
+  const size=flags==='DATA'?1:0.05;
+  return Object.assign({kind:'TCP',flow:f.id,flags,size,ttl:CFG.TTL,hops:0},fields);
+}
+function tcpSendCtlSeg(sim,f,flags){       // SYN / SYNACK
+  const fromDst=flags==='SYNACK';
+  const p=tcpPkt(f,flags,{src:fromDst?f.dst:f.src,dst:fromDst?f.src:f.dst});
+  forward(sim,sim.nodes[p.src],p);
+}
+function sendSeg(sim,f,seq,isRetx){
+  if(isRetx){f.txTime.delete(seq);f.retx++;}
+  else f.txTime.set(seq,sim.now);
+  forward(sim,sim.nodes[f.src],tcpPkt(f,'DATA',{src:f.src,dst:f.dst,seq}));
+}
+function pump(sim,f){
+  while(f.nxt<f.una+Math.floor(f.cwnd)&&f.nxt<f.total){sendSeg(sim,f,f.nxt,false);f.nxt++;}
+}
+function pushC(sim,f){
+  f.histC.push([sim.now,f.cwnd,f.ssthresh]);
+  if(f.histC.length>3000)f.histC=f.histC.filter((_,i)=>i%2===0);
+}
+function armRto(sim,f){
+  f.rtoSeq++;const gen=f.rtoSeq;
+  sim.schedule(f.rto,()=>{
+    if(f.rtoSeq!==gen||f.state==='DONE'||f.state==='FAILED')return;
+    onTimeout(sim,f);});
+}
+function onTimeout(sim,f){
+  if(f.state==='STOPPED')return;
+  f.timeouts++;
+  if(f.timeouts>=12){f.state='FAILED';
+    sim.log(`✗ 流 f${f.id} 连续超时 ${f.timeouts} 次，放弃（对端死亡/分区,TCP 只能靠超时发现）`,'bad');return;}
+  f.rto=Math.min(f.rto*2,CFG.RTO_MAX);
+  if(f.state==='SYN_SENT'){sim.log(`流 f${f.id} SYN 超时重发`,'flow');f.synT=sim.now;tcpSendCtlSeg(sim,f,'SYN');}
+  else{
+    f.ssthresh=Math.max(Math.floor(f.flight/2),2);f.cwnd=1;f.dup=0;
+    pushC(sim,f);
+    sim.log(`流 f${f.id} RTO 超时：重传 seq=${f.una}，cwnd→1（慢启动重来）`,'flow');
+    sendSeg(sim,f,f.una,true);
+    f.nxt=f.una+1;   // go-back-N: 窗口内成片丢失时从头重走,否则死等一洞一个 RTO
+  }
+  armRto(sim,f);
+}
+function rttSample(f,s){
+  if(f.srtt==null){f.srtt=s;f.rttvar=s/2;}
+  else{f.rttvar=0.75*f.rttvar+0.25*Math.abs(f.srtt-s);f.srtt=0.875*f.srtt+0.125*s;}
+  f.rto=Math.min(Math.max(f.srtt+4*f.rttvar,CFG.RTO_MIN),CFG.RTO_MAX);
+}
+function tcpRecv(sim,f,pkt){
+  if(!f)return;
+  if(pkt.dst===f.dst){                     // ---- 接收端 ----
+    if(pkt.flags==='SYN'){
+      if(!f._gotSyn){f._gotSyn=true;sim.log(`流 f${f.id} 对端收到 SYN，回 SYN-ACK`,'flow');}
+      tcpSendCtlSeg(sim,f,'SYNACK');return;
+    }
+    if(pkt.flags==='DATA'){
+      if(pkt.seq===f.rcvNxt){f.rcvNxt++;while(f.ooo.has(f.rcvNxt)){f.ooo.delete(f.rcvNxt);f.rcvNxt++;}}
+      else if(pkt.seq>f.rcvNxt)f.ooo.add(pkt.seq);
+      forward(sim,sim.nodes[f.dst],tcpPkt(f,'ACK',{src:f.dst,dst:f.src,ack:f.rcvNxt}));
+    }
+    return;
+  }
+  // ---- 发送端 ----
+  if(pkt.flags==='SYNACK'){
+    if(f.state!=='SYN_SENT')return;
+    f.state='EST';f.timeouts=0;rttSample(f,sim.now-f.synT);
+    sim.log(`流 f${f.id} 连接建立(ESTABLISHED)，开始发数据 ${f.total} 段`,'flow');
+    pushC(sim,f);pump(sim,f);armRto(sim,f);return;
+  }
+  if(pkt.flags!=='ACK'||f.state!=='EST')return;
+  const a=pkt.ack;
+  if(a>f.una){
+    // RTT 采样用最老未确认段(una): 它不会被前面段的重传恢复期污染;
+    // 被重传过的段没有 txTime 条目(Karn 规则),自动不采样
+    const newly=a-f.una,t0=f.txTime.get(f.una);
+    if(t0!==undefined)rttSample(f,sim.now-t0);
+    for(let s=f.una;s<a;s++)f.txTime.delete(s);
+    f.una=a;if(a>f.nxt)f.nxt=a;f.dup=0;f.timeouts=0;
+    if(f.cwnd<f.ssthresh)f.cwnd=Math.min(f.cwnd+newly,CFG.MAXW);   // 慢启动
+    else f.cwnd=Math.min(f.cwnd+newly/f.cwnd,CFG.MAXW);            // 拥塞避免
+    pushC(sim,f);
+    if(f.una>=f.total){
+      f.state='DONE';f.doneT=sim.now;f.rtoSeq++;
+      sim.log(`✓ 流 f${f.id} 传输完成：${f.total} 段 / ${((sim.now-f.startT)/1000).toFixed(1)}s，超时重传 ${f.retx-f.fastRetx}，快速重传 ${f.fastRetx}`,'good');
+      return;
+    }
+    armRto(sim,f);pump(sim,f);
+  }else if(a===f.una&&f.flight>0){
+    f.dup++;
+    if(f.dup===3){                                                  // 三次重复 ACK
+      f.fastRetx++;f.ssthresh=Math.max(Math.floor(f.flight/2),2);f.cwnd=Math.max(f.ssthresh,1);
+      pushC(sim,f);
+      sim.log(`流 f${f.id} 三次重复 ACK：快速重传 seq=${f.una}，cwnd 减半`,'flow');
+      sendSeg(sim,f,f.una,true);pump(sim,f);
+    }
+  }
+}
+// ==================== 核心结束 ====================
+
+// ==================== UI / 渲染 ====================
+const PAL={
+  surface:'#fcfcfb',ink:'#0b0b0b',ink2:'#52514e',muted:'#898781',grid:'#e1e0d9',base:'#c3c2b7',
+  node:'#9ec5f4',core:'#256abf',down:'#d03b3b',good:'#0ca30c',
+  s1:'#2a78d6',s2:'#eb6834',s3:'#1baf7a',ping:'#e87ba4',hull:'#f4f3f0',dv:'#4a3aa7',
+  seq:['#cde2fb','#b7d3f6','#9ec5f4','#86b6ef','#6da7ec','#5598e7','#3987e5','#2a78d6','#256abf','#1c5cab','#184f95','#104281','#0d366b'],
+};
+const flowColors=[PAL.s1,PAL.s2,PAL.s3];
+const $=id=>document.getElementById(id);
+const cv=$('net'),ctx=cv.getContext('2d');
+let sim,view={x:0,y:0,k:0.4},paused=false,speed=1;
+let sel=null;               // {type:'node'|'link', ref}
+let selFlow=null,markA=null,markB=null,diffMode=false,showCtl=true;
+let hulls=[],logCount=0,rtChangePrev=0,convRate=0;
+
+function newSim(){
+  const sc=SCALES[$('selScale').value];
+  sim=new Sim(sc,12345);
+  sel=null;selFlow=null;markA=null;markB=null;logCount=0;rtChangePrev=0;
+  computeHulls();fitView();renderSel();renderFlows();
+  $('log').innerHTML='';
+}
+function computeHulls(){
+  hulls=[];const byR=new Map();
+  for(const nd of sim.nodes){if(!byR.has(nd.region))byR.set(nd.region,[]);byR.get(nd.region).push(nd);}
+  for(const [r,arr] of byR){
+    if(r===0)continue;
+    const pts=arr.map(n=>[n.x,n.y]),h=convexHull(pts);
+    const cx=arr.reduce((s,n)=>s+n.x,0)/arr.length,cy=arr.reduce((s,n)=>s+n.y,0)/arr.length;
+    hulls.push({r,cx,cy,pts:h.map(([x,y])=>{const dx=x-cx,dy=y-cy,d=Math.hypot(dx,dy)||1;
+      return [x+dx/d*42,y+dy/d*42];})});
+  }
+}
+function convexHull(pts){
+  pts=pts.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
+  const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lo=[],hi=[];
+  for(const p of pts){while(lo.length>=2&&cross(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}
+  for(const p of pts.slice().reverse()){while(hi.length>=2&&cross(hi[hi.length-2],hi[hi.length-1],p)<=0)hi.pop();hi.push(p);}
+  return lo.slice(0,-1).concat(hi.slice(0,-1));
+}
+function fitView(){
+  const w=cv.clientWidth,h=cv.clientHeight;
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  for(const nd of sim.nodes){minX=Math.min(minX,nd.x);maxX=Math.max(maxX,nd.x);
+    minY=Math.min(minY,nd.y);maxY=Math.max(maxY,nd.y);}
+  const k=Math.min(w/(maxX-minX+260),h/(maxY-minY+260));
+  view={k,x:w/2-k*(minX+maxX)/2,y:h/2-k*(minY+maxY)/2};
+}
+function resize(){
+  const dpr=window.devicePixelRatio||1;
+  cv.width=cv.clientWidth*dpr;cv.height=cv.clientHeight*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  for(const id of ['cCwnd','cThr']){const c=$(id);
+    c.width=c.clientWidth*dpr;c.height=c.clientHeight*dpr;}
+}
+window.addEventListener('resize',()=>{resize();});
+
+// ---------- 主循环 ----------
+let lastWall=performance.now(),uiTimer=0;
+function frame(tw){
+  const dt=Math.min(tw-lastWall,100);lastWall=tw;
+  if(!paused){
+    const n=sim.run(sim.now+dt*speed,40000);
+    if(n>=40000&&speed>1){speed=Math.max(1,speed/2);$('rSpeed').value=Math.log2(speed);
+      $('tSpeed').textContent=fmtSpeed();sim.log(`事件过多，自动降速到 ${fmtSpeed()}`,'');}
+  }
+  draw();
+  uiTimer+=dt;
+  if(uiTimer>450){uiTimer=0;updatePanels();}
+  drainLog();
+  requestAnimationFrame(frame);
+}
+function fmtSpeed(){return (speed<1?speed.toFixed(2):Math.round(speed))+'×';}
+
+// ---------- 画布渲染 ----------
+function draw(){
+  const w=cv.clientWidth,h=cv.clientHeight;
+  ctx.save();
+  ctx.fillStyle=PAL.surface;ctx.fillRect(0,0,w,h);
+  ctx.translate(view.x,view.y);ctx.scale(view.k,view.k);
+  const k=view.k,now=sim.now;
+  // 区域底衬
+  ctx.fillStyle=PAL.hull;ctx.strokeStyle=PAL.grid;ctx.lineWidth=1/k;
+  for(const hu of hulls){
+    ctx.beginPath();hu.pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));
+    ctx.closePath();ctx.fill();ctx.stroke();
+  }
+  if(k>0.25){ctx.fillStyle=PAL.muted;ctx.font=`${12/k}px system-ui`;ctx.textAlign='center';
+    for(const hu of hulls)ctx.fillText('区域 '+hu.r,hu.cx,hu.cy-165);}
+  // 链路（负载染色）
+  for(const L of sim.links){
+    if(!L.up){
+      ctx.strokeStyle=PAL.down;ctx.lineWidth=1.2/k;ctx.setLineDash([5/k,4/k]);
+      ctx.beginPath();ctx.moveTo(L.a.x,L.a.y);ctx.lineTo(L.b.x,L.b.y);ctx.stroke();
+      ctx.setLineDash([]);continue;
+    }
+    const bl=Math.max(L.q[0].busy-now,L.q[1].busy-now,0)/(L.qcap/L.bw);
+    const load=Math.min(bl,1);
+    if(load<0.03){ctx.strokeStyle=PAL.grid;ctx.lineWidth=(L.tier==='core'?1.6:1)/k;}
+    else{ctx.strokeStyle=PAL.seq[Math.min(12,2+Math.round(load*10))];
+      ctx.lineWidth=(1.2+3*load)/k;}
+    ctx.beginPath();ctx.moveTo(L.a.x,L.a.y);ctx.lineTo(L.b.x,L.b.y);ctx.stroke();
+  }
+  if(sel&&sel.type==='link'){const L=sel.ref;
+    ctx.strokeStyle=PAL.ink;ctx.lineWidth=3.4/k;ctx.globalAlpha=0.35;
+    ctx.beginPath();ctx.moveTo(L.a.x,L.a.y);ctx.lineTo(L.b.x,L.b.y);ctx.stroke();ctx.globalAlpha=1;}
+  // 选中流的当前路由路径高亮（控制面视角,收敛时整条线会跳到新路线）
+  if(selFlow&&(selFlow.state==='EST'||selFlow.state==='SYN_SENT')){
+    const idx=sim.flows.indexOf(selFlow);
+    const col=idx>=0&&idx<3?flowColors[idx]:PAL.muted;
+    const {path,broken}=tracePath(sim,selFlow.src,selFlow.dst);
+    if(path.length>1){
+      ctx.strokeStyle=col;ctx.lineWidth=5.5/k;ctx.globalAlpha=0.30;
+      ctx.lineJoin='round';ctx.beginPath();
+      path.forEach((n,i)=>i?ctx.lineTo(n.x,n.y):ctx.moveTo(n.x,n.y));
+      ctx.stroke();ctx.globalAlpha=1;
+    }
+    if(broken){const last=path[path.length-1],r=12;
+      ctx.strokeStyle=PAL.down;ctx.lineWidth=3/k;
+      ctx.beginPath();ctx.moveTo(last.x-r,last.y-r);ctx.lineTo(last.x+r,last.y+r);
+      ctx.moveTo(last.x+r,last.y-r);ctx.lineTo(last.x-r,last.y+r);ctx.stroke();}
+  }
+  // 节点
+  const diffTarget=diffMode&&sel&&sel.type==='node'?sel.ref:null;
+  for(const nd of sim.nodes){
+    const r=nd.core?11:7;
+    let fill=nd.core?PAL.core:PAL.node;
+    if(diffTarget&&nd.alive){
+      if(nd===diffTarget)fill=PAL.ink;
+      else{
+        const e=lookupRoute(nd,diffTarget);
+        fill=e?PAL.seq[Math.min(12,e.cost)]:'#f0efec';
+      }
+    }
+    if(!nd.alive)fill=PAL.down;
+    ctx.fillStyle=fill;ctx.beginPath();ctx.arc(nd.x,nd.y,r,0,7);ctx.fill();
+    ctx.strokeStyle=nd.alive?'rgba(11,11,11,.25)':PAL.down;ctx.lineWidth=1/k;ctx.stroke();
+    if(!nd.alive){ctx.strokeStyle='#fff';ctx.lineWidth=2.2/Math.max(k,0.4);
+      ctx.beginPath();ctx.moveTo(nd.x-r*0.55,nd.y-r*0.55);ctx.lineTo(nd.x+r*0.55,nd.y+r*0.55);
+      ctx.moveTo(nd.x+r*0.55,nd.y-r*0.55);ctx.lineTo(nd.x-r*0.55,nd.y+r*0.55);ctx.stroke();}
+  }
+  if(sel&&sel.type==='node'){const nd=sel.ref;
+    ctx.strokeStyle=PAL.ink;ctx.lineWidth=2/k;
+    ctx.beginPath();ctx.arc(nd.x,nd.y,(nd.core?11:7)+4/k,0,7);ctx.stroke();}
+  for(const [m,lab,col] of [[markA,'A',PAL.s1],[markB,'B',PAL.s2]])if(m!=null){
+    const nd=sim.nodes[m];ctx.strokeStyle=col;ctx.lineWidth=2.4/k;
+    ctx.beginPath();ctx.arc(nd.x,nd.y,(nd.core?11:7)+7/k,0,7);ctx.stroke();
+    ctx.fillStyle=col;ctx.font=`bold ${13/k}px system-ui`;ctx.textAlign='center';
+    ctx.fillText(lab,nd.x,nd.y-(nd.core?11:7)-9/k);}
+  if(k>1.1){ctx.fillStyle=PAL.muted;ctx.font=`${9/k}px system-ui`;ctx.textAlign='center';
+    for(const nd of sim.nodes)ctx.fillText(nd.ipStr,nd.x,nd.y-10);}
+  // 包
+  let drawn=0,skip=sim.visPkts.size>2200?3:1,i=0;
+  for(const vp of sim.visPkts){
+    i++;
+    if(vp.ctl){
+      if(!showCtl)continue;
+      const p=lerpPkt(vp,now);if(!p)continue;
+      // 路由协议家族: 紫=DV 更新, 浅灰=心跳 —— 与任何数据流的颜色都不同
+      ctx.strokeStyle=vp.kind==='DV'?PAL.dv:PAL.base;ctx.lineWidth=1/k;
+      ctx.beginPath();ctx.arc(p[0],p[1],2.6/Math.max(k,0.3),0,7);ctx.stroke();
+      continue;
+    }
+    if(i%skip)continue;
+    const p=lerpPkt(vp,now);if(!p)continue;
+    const pk=vp.pkt;
+    if(pk.kind==='PING'){ctx.fillStyle=PAL.ping;
+      ctx.beginPath();ctx.arc(p[0],p[1],6/Math.max(k,0.35),0,7);ctx.fill();}
+    else if(pk.kind==='TCP'){
+      // 数据按流着色(与侧栏流列表色块一致); 数据实心, ACK 空心; 选中流放大
+      const col=pk.flow<3?flowColors[pk.flow]:PAL.muted;
+      const isSel=selFlow&&pk.flow===selFlow.id;
+      const r=(isSel?4:2.6)/Math.max(k,0.35);
+      ctx.beginPath();ctx.arc(p[0],p[1],r,0,7);
+      if(pk.flags==='ACK'){ctx.strokeStyle=col;ctx.lineWidth=(isSel?1.6:1.1)/k;ctx.stroke();}
+      else{ctx.fillStyle=col;ctx.fill();}
+    }
+    if(++drawn>2400)break;
+  }
+  // 特效
+  for(let j=sim.visFx.length-1;j>=0;j--){
+    const f=sim.visFx[j];f.life-=0.04;
+    if(f.life<=0){sim.visFx.splice(j,1);continue;}
+    ctx.globalAlpha=f.life;
+    const R=(1-f.life)*20+6;
+    if(f.kind==='ok'){ctx.strokeStyle=PAL.good;ctx.lineWidth=2/k;
+      ctx.beginPath();ctx.arc(f.x,f.y,R,0,7);ctx.stroke();}
+    else{const col=f.kind==='drop_queue'?PAL.s2:f.kind==='drop_ttl'?'#4a3aa7':
+        f.kind==='drop_noroute'?PAL.muted:PAL.down;
+      ctx.strokeStyle=col;ctx.lineWidth=2/k;
+      ctx.beginPath();ctx.moveTo(f.x-R/2,f.y-R/2);ctx.lineTo(f.x+R/2,f.y+R/2);
+      ctx.moveTo(f.x+R/2,f.y-R/2);ctx.lineTo(f.x-R/2,f.y+R/2);ctx.stroke();}
+    ctx.globalAlpha=1;
+  }
+  ctx.restore();
+  // HUD
+  const st=sim.stats,d=st.drops;
+  $('hud').innerHTML=`t = ${(sim.now/1000).toFixed(1)}s　路由：${convRate>2?`<b style="color:${PAL.s2}">收敛中（${convRate}/s 变更）</b>`:'<b style="color:#006300">已稳定</b>'}`+
+    (diffTarget?`　<span style="color:${PAL.muted}">扩散视图目标：${diffTarget.ipStr}（浅=近，深=远，灰=未知）</span>`:'');
+  $('stats').textContent=`在途 ${sim.visPkts.size} | 送达 ${st.delivered} | 丢弃 队列${d.queue}/TTL${d.ttl}/无路由${d.noroute}/故障${d.dead}`;
+}
+function lerpPkt(vp,now){
+  if(now<vp.t0)return null;
+  const u=Math.min((now-vp.t0)/(vp.t1-vp.t0),1);
+  const A=vp.dir===0?vp.link.a:vp.link.b,B=vp.dir===0?vp.link.b:vp.link.a;
+  return [A.x+(B.x-A.x)*u,A.y+(B.y-A.y)*u];
+}
+
+// ---------- 交互 ----------
+let sideHover=false;
+$('side').addEventListener('mouseenter',()=>sideHover=true);
+$('side').addEventListener('mouseleave',()=>sideHover=false);
+let dragging=false,dragMoved=false,dx0=0,dy0=0;
+cv.addEventListener('mousedown',e=>{dragging=true;dragMoved=false;dx0=e.clientX;dy0=e.clientY;});
+window.addEventListener('mousemove',e=>{
+  if(!dragging)return;
+  const dx=e.clientX-dx0,dy=e.clientY-dy0;
+  if(Math.abs(dx)+Math.abs(dy)>4)dragMoved=true;
+  if(dragMoved){view.x+=dx;view.y+=dy;dx0=e.clientX;dy0=e.clientY;}
+});
+window.addEventListener('mouseup',e=>{
+  if(dragging&&!dragMoved&&e.target===cv)handleClick(e);
+  dragging=false;
+});
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const f=Math.exp(-e.deltaY*0.0012);
+  const rect=cv.getBoundingClientRect(),mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  view.x=mx-(mx-view.x)*f;view.y=my-(my-view.y)*f;view.k*=f;
+},{passive:false});
+function world(e){
+  const rect=cv.getBoundingClientRect();
+  return [(e.clientX-rect.left-view.x)/view.k,(e.clientY-rect.top-view.y)/view.k];
+}
+function handleClick(e){
+  const [wx,wy]=world(e),tol=Math.max(10/view.k,9);
+  let best=null,bd=tol;
+  for(const nd of sim.nodes){
+    const d=Math.hypot(nd.x-wx,nd.y-wy)-(nd.core?11:7);
+    if(d<bd){bd=d;best=nd;}
+  }
+  if(best){
+    if(e.shiftKey)sim.toggleNode(best);
+    else sel={type:'node',ref:best};
+    renderSel();return;
+  }
+  let bestL=null;bd=Math.max(7/view.k,6);
+  for(const L of sim.links){
+    const d=ptSegDist(wx,wy,L.a.x,L.a.y,L.b.x,L.b.y);
+    if(d<bd){bd=d;bestL=L;}
+  }
+  if(bestL){
+    if(e.shiftKey)sim.toggleLink(bestL);
+    else sel={type:'link',ref:bestL};
+    renderSel();return;
+  }
+  sel=null;renderSel();
+}
+function ptSegDist(px,py,ax,ay,bx,by){
+  const dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy;
+  const t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/(L2||1)));
+  return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));
+}
+
+// ---------- 侧栏 ----------
+function renderSel(){
+  const el=$('selinfo');
+  if(!sel){el.innerHTML='<span style="color:var(--muted);font-size:12px">点击画布上的节点或链路</span>';return;}
+  if(sel.type==='node'){
+    const nd=sel.ref;
+    let h=`<b>R${nd.id}</b>　<span style="font-variant-numeric:tabular-nums;color:var(--s1)">${nd.ipStr}</span>　`+
+      `${nd.core?'骨干路由器':'区域 '+nd.region+' 路由器'}　`+
+      `<span style="color:${nd.alive?'#006300':'var(--down)'}">${nd.alive?'● 在线':'✕ 宕机'}</span>`+
+      `<div class="btnrow">`+
+      `<button class="warn" onclick="UI.toggle()">${nd.alive?'💥 宕机':'恢复上线'}</button>`+
+      `<button onclick="UI.setA()">设为 A（源）</button>`+
+      `<button onclick="UI.setB()">设为 B（宿）</button></div>`;
+    if(markA!=null&&markB!=null&&markA!==markB)
+      h+=`<div class="btnrow"><button class="pri" onclick="UI.ping()">A→B 发测试包</button>`+
+         `<button class="pri" onclick="UI.mkFlow()">A→B 定量流</button>`+
+         `<button class="pri" onclick="UI.mkFlowInf()">A→B 持续流 ∞</button></div>`;
+    h+=`<h4>邻居（${nd.ports.length}）</h4><div style="font-size:12px;color:var(--ink2)">`+
+      nd.ports.map(p=>{
+        const up=p.link.up&&nd.nbrUp.get(p.link.id);
+        return `<span style="margin-right:8px;${up?'':'color:var(--down)'}">R${p.peer.id}${p.link.up?(up?'':'⌛'):'✂'}</span>`;
+      }).join('')+`</div>`;
+    const rows=[...nd.rt.entries()].sort((a,b)=>a[1].cost-b[1].cost).slice(0,60)
+      .map(([d,e])=>{
+        const n2=sim.byKey.get(d);
+        const who=d.endsWith('/32')?(n2?'R'+n2.id:''):'区域'+d.split('.')[1];
+        const via=e.via.other(nd);
+        return `<tr><td>${d} <span style="color:var(--muted)">${who}</span></td>`+
+          `<td>${e.cost>=CFG.INF?'∞':e.cost}</td><td>${via.ipStr}</td></tr>`;
+      }).join('');
+    h+=`<h4>路由表（${nd.rt.size} 条，/32 主机路由 + /16 区域前缀，转发按最长前缀匹配）</h4>`+
+      `<div class="rtwrap"><table class="rt">`+
+      `<tr><th>目的 CIDR</th><th>跳数</th><th>下一跳</th></tr>${rows}</table></div>`;
+    el.innerHTML=h;
+  }else{
+    const L=sel.ref;
+    el.innerHTML=`<b>链路 R${L.a.id} – R${L.b.id}</b>　${L.tier}　`+
+      `<span style="color:${L.up?'#006300':'var(--down)'}">${L.up?'● 正常':'✂ 断开'}</span>`+
+      `<div style="font-size:12px;color:var(--ink2)">时延 ${L.delay.toFixed(1)}ms · 带宽 ${(L.bw*1000).toFixed(0)} 段/s · 队列上限 ${L.qcap}<br>`+
+      `当前队列 →${L.q[0].len.toFixed(0)} / ←${L.q[1].len.toFixed(0)}</div>`+
+      `<div class="btnrow"><button class="warn" onclick="UI.toggle()">${L.up?'✂ 断开':'恢复'}</button></div>`;
+  }
+}
+const UI={
+  toggle(){if(!sel)return;
+    if(sel.type==='node')sim.toggleNode(sel.ref);else sim.toggleLink(sel.ref);
+    renderSel();},
+  setA(){if(sel&&sel.type==='node'){markA=sel.ref.id;renderSel();}},
+  setB(){if(sel&&sel.type==='node'){markB=sel.ref.id;renderSel();}},
+  ping(){if(markA!=null&&markB!=null)sim.sendPing(markA,markB);},
+  mkFlow(){if(markA!=null&&markB!=null){selFlow=sim.startFlow(markA,markB);renderFlows();}},
+  mkFlowInf(){if(markA!=null&&markB!=null){selFlow=sim.startFlow(markA,markB,Infinity);renderFlows();}},
+  stopFlow(i){sim.stopFlow(sim.flows[i]);renderFlows();},
+  selFlow(i){selFlow=sim.flows[i];renderFlows();},
+};
+function renderFlows(){
+  const el=$('flows');
+  if(!sim.flows.length){el.innerHTML='<span style="color:var(--muted);font-size:12px">尚无流。用工具栏“＋随机 TCP 流”，或选两个节点手动建。</span>';return;}
+  el.innerHTML=sim.flows.map((f,i)=>{
+    const col=i<3?flowColors[i]:PAL.muted;
+    const st={SYN_SENT:'握手中',EST:'传输中',DONE:'✓完成',FAILED:'✗失败',STOPPED:'⏹已停'}[f.state];
+    const prog=isFinite(f.total)?Math.round(f.una/f.total*100)+'%':'∞ 已传'+f.una;
+    const stop=(f.state==='EST'||f.state==='SYN_SENT')?
+      `<button class="stopb" onclick="event.stopPropagation();UI.stopFlow(${i})" title="停止">⏹</button>`:'';
+    return `<div class="frow ${selFlow===f?'sel':''}" onclick="UI.selFlow(${i})">`+
+      `<span class="dot" style="background:${col}"></span>`+
+      `f${f.id}　R${f.src}→R${f.dst}　${st}　${prog}　cwnd=${f.cwnd.toFixed(1)}　重传${f.retx}${stop}</div>`;
+  }).join('');
+}
+function updatePanels(){
+  convRate=Math.round((sim.stats.rtChanges-rtChangePrev)/0.45);
+  rtChangePrev=sim.stats.rtChanges;
+  // 悬停侧栏时暂停周期性 DOM 重建, 否则按钮会在按下与松开之间被换掉,click 丢失
+  if(!sideHover){renderFlows();if(sel)renderSel();}
+  drawStrip($('cCwnd'),selFlow?[
+    {pts:selFlow.histC.map(p=>[p[0],p[1]]),color:PAL.s1,label:'cwnd'},
+    {pts:selFlow.histC.map(p=>[p[0],p[2]]),color:PAL.muted,dash:[4,3],label:'ssthresh'},
+  ]:[]);
+  drawStrip($('cThr'),selFlow?[
+    {pts:selFlow.histT,color:PAL.s1,label:''},
+  ]:[]);
+}
+// ---------- 迷你曲线图 ----------
+function drawStrip(c,series){
+  const g=c.getContext('2d'),dpr=window.devicePixelRatio||1;
+  const W=c.width/dpr,H=c.height/dpr;
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.fillStyle=PAL.surface;g.fillRect(0,0,W,H);
+  if(!series.length||!series[0].pts.length){
+    g.fillStyle=PAL.muted;g.font='11px system-ui';g.textAlign='center';
+    g.fillText('选中一条 TCP 流查看',W/2,H/2);return;}
+  const Tw=30000,t1=sim.now,t0=t1-Tw;
+  let ymax=1;
+  for(const s of series)for(const p of s.pts)if(p[0]>=t0&&isFinite(p[1]))ymax=Math.max(ymax,p[1]);
+  ymax*=1.12;
+  for(let i=1;i<=3;i++){const y=H-4-(H-18)*i/3;
+    g.strokeStyle=PAL.grid;g.lineWidth=1;g.beginPath();g.moveTo(30,y);g.lineTo(W-4,y);g.stroke();}
+  g.fillStyle=PAL.muted;g.font='10px system-ui';g.textAlign='left';
+  g.fillText(ymax.toFixed(0),2,12);
+  g.fillText(((t0<0?0:t0)/1000).toFixed(0)+'s',30,H-1);
+  g.textAlign='right';g.fillText((t1/1000).toFixed(0)+'s',W-4,H-1);
+  const X=t=>30+(W-36)*(t-t0)/Tw,Y=v=>H-14-(H-28)*v/ymax;
+  const usedLabelY=[];
+  for(const s of series){
+    g.strokeStyle=s.color;g.lineWidth=2;g.setLineDash(s.dash||[]);
+    g.beginPath();let started=false,lastV=null,py=null;
+    for(const [t,v] of s.pts){
+      if(t<t0-1000){lastV=v;continue;}
+      const x=Math.max(X(t),30),y=Y(v);
+      if(!started){g.moveTo(x,lastV!=null?Y(lastV):y);g.lineTo(x,y);started=true;}
+      else{g.lineTo(x,py);g.lineTo(x,y);}   // 阶梯线
+      py=y;lastV=v;
+    }
+    if(started&&lastV!=null){g.lineTo(X(t1),Y(lastV));}
+    g.stroke();g.setLineDash([]);
+    if(s.label&&lastV!=null){
+      let ly=Math.max(Y(lastV)-4,10);
+      while(usedLabelY.some(u=>Math.abs(u-ly)<11))ly+=11;   // 避免标签互相压住
+      usedLabelY.push(ly);
+      g.fillStyle=PAL.ink2;g.font='10px system-ui';g.textAlign='right';
+      g.fillText(`${s.label} ${lastV.toFixed(1)}`,W-6,ly);}
+  }
+}
+// ---------- 日志 ----------
+function drainLog(){
+  if(logCount>=sim.logs.length)return;
+  const el=$('log');const frag=document.createDocumentFragment();
+  for(;logCount<sim.logs.length;logCount++){
+    const L=sim.logs[logCount],d=document.createElement('div');
+    d.className=L.cls;
+    d.innerHTML=`<span class="t">${(L.t/1000).toFixed(1)}s</span>${L.msg}`;
+    frag.prepend(d);
+  }
+  el.prepend(frag);
+  while(el.children.length>250)el.lastChild.remove();
+}
+
+// ---------- 工具栏 ----------
+$('bPause').onclick=()=>{paused=!paused;$('bPause').textContent=paused?'▶ 继续':'⏸ 暂停';};
+$('bStep').onclick=()=>{paused=true;$('bPause').textContent='▶ 继续';sim.run(sim.now+25,40000);};
+$('rSpeed').oninput=e=>{speed=Math.pow(2,+e.target.value);$('tSpeed').textContent=fmtSpeed();};
+$('bRestart').onclick=()=>newSim();
+$('selScale').onchange=()=>newSim();
+$('bKill').onclick=()=>{
+  const alive=sim.nodes.filter(n=>n.alive);
+  for(let i=0;i<5&&alive.length;i++){
+    const j=Math.floor(Math.random()*alive.length);
+    sim.toggleNode(alive[j]);alive.splice(j,1);
+  }
+  renderSel();
+};
+$('bRevive').onclick=()=>{
+  for(const nd of sim.nodes)if(!nd.alive)sim.toggleNode(nd);
+  for(const L of sim.links)if(!L.up)sim.toggleLink(L);
+  renderSel();
+};
+$('bFlow').onclick=()=>{
+  const cand=sim.nodes.filter(n=>n.alive&&!n.core);
+  if(cand.length<2)return;
+  let a=cand[Math.floor(Math.random()*cand.length)],b;
+  const other=cand.filter(n=>n.region!==a.region);
+  b=(other.length?other:cand.filter(n=>n!==a))[Math.floor(Math.random()*(other.length||cand.length-1))];
+  if(!b||b===a)return;
+  selFlow=sim.startFlow(a.id,b.id);renderFlows();
+};
+$('bDiff').onclick=()=>{diffMode=!diffMode;$('bDiff').classList.toggle('on',diffMode);};
+$('bCtl').onclick=()=>{showCtl=!showCtl;$('bCtl').classList.toggle('on',showCtl);};
+
+// ---------- 启动 ----------
+resize();newSim();requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bootstrap：一份样本硬拽出抽样分布</title>
+<style>
+  body { margin: 0; padding: 12px 16px; background: #fff; color: #222;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  h1 { font-size: 18px; margin: 4px 0 8px; }
+  button { padding: 4px 12px; font-size: 13px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  button.on { background: #2b5fb8; color: #fff; border-color: #2b5fb8; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+  .hint { color: #555; font-size: 12.5px; line-height: 1.6; max-width: 1150px; margin-top: 8px; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  canvas { display: block; border: 1px solid #999; }
+  .cap { font-size: 12px; color: #555; margin: 2px 0 8px; }
+  b.k { color: #b03030; }
+  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .hint { display: none !important; }
+</style>
+</head>
+<body>
+<h1>Bootstrap：上帝不给你第二份样本，你就自己抽自己</h1>
+<div class="bar">
+  总体:
+  <button class="on" data-d="skew">偏态</button>
+  <button data-d="bimodal">双峰</button>
+  <button data-d="uniform">均匀</button>
+  样本量 n: <input type="range" id="ns" min="0" max="6" value="3" style="width:130px"><span class="mono" id="ns2"></span>
+  统计量:
+  <button class="on" data-s="mean">均值</button>
+  <button data-s="median">中位数</button>
+  <button data-s="sd">标准差</button>
+  <button data-s="max">最大值(失灵案例)</button>
+  <button id="newSample">🎲 重抽一份原始样本</button>
+</div>
+<div class="bar mono" id="stat"></div>
+<canvas id="scv" width="1100" height="90"></canvas>
+<div class="cap">你手里唯一的一份样本（每点一个观测；bootstrap 只能看到这些）</div>
+<div style="display:flex; gap:16px; flex-wrap:wrap">
+  <div>
+    <canvas id="bcv" width="542" height="330"></canvas>
+    <div class="cap"><b>Bootstrap 世界</b>：从这份样本<b>有放回</b>重抽 n 个 → 算统计量，重复上万次</div>
+  </div>
+  <div>
+    <canvas id="tcv" width="542" height="330"></canvas>
+    <div class="cap"><b>上帝视角</b>：每次从真总体抽全新的 n 个 → 统计量的真实抽样分布（现实中不可得）</div>
+  </div>
+</div>
+<div class="hint">
+  <b>问题</b>：统计量（均值、中位数…）离真值有多远？答案需要"统计量的抽样分布"，但那要无数份新样本——你只有一份。
+  <b>Efron 1979</b>：把这份样本当作总体的替身，<b>有放回重抽</b>——左图就这样凭一份数据"硬拽"出了右图的近似。
+  对照两图的实测标准误 SE 和 95% 区间（读数在上方）：均值/中位数/标准差下相当接近——这就是为什么它无处不在。
+  <b class="k">失灵案例</b>：切到"最大值"——bootstrap 的最大值永远 ≤ 样本最大值，左图变成贴在样本最大值上的几根离散尖刺
+  （P(重抽 max = 样本 max) = 1−(1−1/n)ⁿ ≈ 63%），右图却是连续分布且延伸到样本没见过的地方。
+  <b>教训</b>：bootstrap 靠"样本 ≈ 总体"，在分布的<b>边缘</b>（极值、重尾）这个替身骗不了人。按"重抽一份原始样本"再看：换一份样本，左图整体搬家——bootstrap 自身也有围绕真相的抖动。
+</div>
+
+<script>
+'use strict';
+// ===== 核心（无 DOM）=====
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const STATS = {
+  mean: a => { let s = 0; for (const v of a) s += v; return s / a.length; },
+  median: a => {
+    const b = [...a].sort((x, y) => x - y), m = b.length >> 1;
+    return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2;
+  },
+  sd: a => {
+    let s = 0, s2 = 0;
+    for (const v of a) { s += v; s2 += v * v; }
+    const m = s / a.length;
+    return Math.sqrt(Math.max(s2 / a.length - m * m, 0));
+  },
+  max: a => Math.max(...a),
+};
+// 有放回重抽一份并算统计量
+function bootOnce(sample, statFn, rng, buf) {
+  const n = sample.length;
+  for (let i = 0; i < n; i++) buf[i] = sample[Math.floor(rng() * n)];
+  return statFn(buf);
+}
+function quantileSorted(sorted, q) {
+  return sorted[Math.max(0, Math.min(sorted.length - 1, Math.floor(q * sorted.length)))];
+}
+function summarize(arr) {                      // 实测 SE 与 95% 分位区间
+  const n = arr.length;
+  if (n < 30) return null;
+  let s = 0, s2 = 0;
+  for (const v of arr) { s += v; s2 += v * v; }
+  const m = s / n;
+  const sorted = [...arr].sort((a, b) => a - b);
+  return { mean: m, se: Math.sqrt(Math.max(s2 / n - m * m, 0)),
+           lo: quantileSorted(sorted, 0.025), hi: quantileSorted(sorted, 0.975) };
+}
+// ===== 核心结束 =====
+
+const NS = [10, 20, 30, 50, 100, 200, 500];
+const rng = mulberry32(99);
+const $ = id => document.getElementById(id);
+let DIST = 'skew', STAT = 'mean';
+const POPS = {                                  // 总体采样器(逆变换/组合)
+  skew: r => { const u = Math.max(r(), 1e-12); return -Math.log(u) * 0.25; },          // 指数, 均值 0.25
+  bimodal: r => 0.3 + 0.07 * boxg(r) + (r() < 0.4 ? 0.45 : 0),                          // 0.3 峰 + 0.75 峰
+  uniform: r => r(),
+};
+function boxg(r) { return Math.sqrt(-2 * Math.log(Math.max(r(), 1e-12))) * Math.cos(2 * Math.PI * r()); }
+
+let sample = [], bootVals = [], trueVals = [], buf = null;
+const BMAX = 40000;
+function newSample() {
+  const n = NS[+$('ns').value];
+  sample = Array.from({ length: n }, () => POPS[DIST](rng));
+  buf = new Float64Array(n);
+  bootVals = []; trueVals = [];
+}
+document.body.addEventListener('click', e => {
+  const d = e.target.dataset && e.target.dataset.d;
+  const s = e.target.dataset && e.target.dataset.s;
+  if (d) { DIST = d; document.querySelectorAll('button[data-d]').forEach(b => b.classList.toggle('on', b === e.target)); newSample(); }
+  if (s) { STAT = s; document.querySelectorAll('button[data-s]').forEach(b => b.classList.toggle('on', b === e.target)); bootVals = []; trueVals = []; }
+});
+$('ns').addEventListener('input', newSample);
+$('newSample').addEventListener('click', newSample);
+
+const scv = $('scv'), gS = scv.getContext('2d');
+const bcv = $('bcv'), gB = bcv.getContext('2d');
+const tcv = $('tcv'), gT = tcv.getContext('2d');
+
+function frame() {
+  const n = NS[+$('ns').value];
+  $('ns2').textContent = 'n=' + n;
+  const statFn = STATS[STAT];
+  if (bootVals.length < BMAX) {
+    const batch = Math.max(50, Math.floor(30000 / n));
+    for (let i = 0; i < batch; i++) {
+      bootVals.push(bootOnce(sample, statFn, rng, buf));
+      const fresh = new Float64Array(n);
+      for (let k = 0; k < n; k++) fresh[k] = POPS[DIST](rng);
+      trueVals.push(statFn(fresh));
+    }
+  }
+  // ---- 共同 x 范围(两边合并的 1%~99% 分位) ----
+  const all = bootVals.concat(trueVals).sort((a, b) => a - b);
+  const lo = quantileSorted(all, 0.003), hi = quantileSorted(all, 0.997);
+  const pad = (hi - lo) * 0.08 + 1e-9;
+  const x0 = lo - pad, x1 = hi + pad;
+  // ---- 样本带 ----
+  gS.fillStyle = '#fff'; gS.fillRect(0, 0, scv.width, scv.height);
+  const smin = Math.min(...sample), smax = Math.max(...sample);
+  const sp = (smax - smin) * 0.06 + 1e-9;
+  gS.fillStyle = 'rgba(31,58,110,0.5)';
+  for (const v of sample) {
+    const x = (v - (smin - sp)) / (smax - smin + 2 * sp) * scv.width;
+    gS.beginPath(); gS.arc(x, 45 + (rng() - 0.5) * 40, 3, 0, 7); gS.fill();
+  }
+  gS.fillStyle = '#888'; gS.font = '11px Menlo';
+  gS.fillText(smin.toPrecision(3), 6, 84); gS.fillText(smax.toPrecision(3), scv.width - 60, 84);
+  // ---- 两个直方图 ----
+  const B = 70;
+  const mkHist = vals => {
+    const h = new Float64Array(B);
+    let out = 0;
+    for (const v of vals) {
+      const bi = Math.floor((v - x0) / (x1 - x0) * B);
+      if (bi >= 0 && bi < B) h[bi]++; else out++;
+    }
+    return { h, out };
+  };
+  const hb = mkHist(bootVals), ht = mkHist(trueVals);
+  const mx = Math.max(...hb.h, ...ht.h, 1);
+  const drawH = (g2, cvel, hh, col, label, summ) => {
+    g2.fillStyle = '#fff'; g2.fillRect(0, 0, cvel.width, cvel.height);
+    g2.fillStyle = col;
+    for (let i = 0; i < B; i++) {
+      const hgt = hh.h[i] / mx * (cvel.height - 40);
+      g2.fillRect(i / B * cvel.width + 1, cvel.height - 18 - hgt, cvel.width / B - 2, hgt);
+    }
+    if (summ) {                                 // 95% 区间横杆
+      const X = v => (v - x0) / (x1 - x0) * cvel.width;
+      g2.strokeStyle = '#111'; g2.lineWidth = 2;
+      g2.beginPath(); g2.moveTo(X(summ.lo), 14); g2.lineTo(X(summ.hi), 14); g2.stroke();
+      g2.beginPath(); g2.moveTo(X(summ.mean), 8); g2.lineTo(X(summ.mean), 20); g2.stroke();
+    }
+    g2.fillStyle = '#888'; g2.font = '11px Menlo';
+    g2.fillText(label, 8, cvel.height - 4);
+    g2.fillText(x0.toPrecision(3), 4, cvel.height - 22);
+    g2.fillText(x1.toPrecision(3), cvel.width - 58, cvel.height - 22);
+  };
+  const sb = summarize(bootVals), st = summarize(trueVals);
+  drawH(gB, bcv, hb, 'rgba(192,57,43,0.55)', 'bootstrap 重抽 ' + bootVals.length.toLocaleString() + ' 次', sb);
+  drawH(gT, tcv, ht, 'rgba(31,58,110,0.55)', '真抽样 ' + trueVals.length.toLocaleString() + ' 次(上帝视角)', st);
+  if (sb && st) {
+    $('stat').textContent =
+      `统计量 = ${ { mean: '均值', median: '中位数', sd: '标准差', max: '最大值' }[STAT] }　`
+      + `SE: bootstrap ${sb.se.toPrecision(3)} vs 真 ${st.se.toPrecision(3)}　`
+      + `95% 区间: boot [${sb.lo.toPrecision(3)}, ${sb.hi.toPrecision(3)}] vs 真 [${st.lo.toPrecision(3)}, ${st.hi.toPrecision(3)}]`
+      + (STAT === 'max' ? `　P(boot max = 样本 max) 理论 ${(1 - Math.pow(1 - 1 / n, n)).toFixed(3)}` : '');
+  }
+  requestAnimationFrame(frame);
+}
+newSample();
+frame();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>

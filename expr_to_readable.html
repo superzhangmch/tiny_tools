@@ -25,12 +25,15 @@
 	}
 	#delims {
 	    display: inline-block;
-	    background-color: #e8e8e8;
-	    padding: 4px 10px;
-	    border-radius: 4px;
 	    margin-left: 8px;
 	}
 	#delims label { margin-right: 6px; }
+	.chip {
+	    background-color: #e8e8e8;
+	    padding: 1px 6px;
+	    border-radius: 3px;
+	    font-family: monospace;
+	}
     </style>
     <script>
 	// startup.typeset=false: 不自动扫描全页（否则定界符控件里的 "$$…$$" 标签文字会被当公式渲染），
@@ -40,17 +43,19 @@
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
-	<h1>expr to readable</h1>
+	<h1>latex to readable text</h1>
 	<textarea id="inputText" placeholder="general math expr or latex expr"></textarea>
     <pre id="readableOut"></pre>
     <button id="copyButton">copy transformed expr</button>
-    <label><input type="checkbox" id="stripText" checked> 剥离 \text{…}</label>
+    <button id="renderButton">render latex</button>
+    <label><input type="checkbox" id="stripText" checked> 剥离 <span class="chip">\text{…}</span></label>
+    <label><input type="checkbox" id="transMatrix" checked> 转换 <span class="chip">matrix/cases/align/⏟</span></label>
     <span id="delims">
 	定界符:
-	<label><input type="checkbox" data-open="$$" data-close="$$" checked> $$…$$</label>
-	<label><input type="checkbox" data-open="$" data-close="$" checked> $…$</label>
-	<label><input type="checkbox" data-open="\(" data-close="\)" checked> \(…\)</label>
-	<label><input type="checkbox" data-open="\[" data-close="\]" checked> \[…\]</label>
+	<label><input type="checkbox" data-open="$$" data-close="$$" checked> <span class="chip">$$…$$</span></label>
+	<label><input type="checkbox" data-open="$" data-close="$" checked> <span class="chip">$…$</span></label>
+	<label><input type="checkbox" data-open="\(" data-close="\)" checked> <span class="chip">\(…\)</span></label>
+	<label><input type="checkbox" data-open="\[" data-close="\]" checked> <span class="chip">\[…\]</span></label>
 	自定义: <input id="customOpen" size="8" placeholder="开, 如 \begin{equation}"> <input id="customClose" size="8" placeholder="闭">
     </span>
     <span id=copyStatus></span>
@@ -59,97 +64,12 @@
 
     <div id="div_err"></div>
 
+    <script src="js/latex2readable.js"></script>
     <script>
- 	// <<
-	var m_latex2char = {'infty': '∞', 'vartheta': 'ϑ', 'varkappa': 'ϰ', 'varpi': 'ϖ', 'varrho': 'ϱ', 'varsigma': 'ς', 'varepsilon': 'ε', 'varphi': 'φ', 'alpha': 'α', 'beta': 'β',
-'gamma': 'γ', 'delta': 'δ', 'epsilon': 'ε', 'zeta': 'ζ', 'eta': 'η', 'theta': 'θ', 'iota': 'ι', 'kappa': 'κ', 'lambda': 'λ', 'mu': 'μ', 'nu': 'ν', 'xi': 'ξ',
-'pi': 'π', 'rho': 'ρ', 'sigma': 'σ', 'tau': 'τ', 'upsilon': 'υ', 'phi': 'φ', 'chi': 'χ', 'psi': 'ψ', 'omega': 'ω', 'Gamma': 'Γ', 'Delta': 'Δ', 'Theta': 'Θ',
-'Lambda': 'Λ', 'Xi': 'Ξ', 'Pi': 'Π', 'Sigma': 'Σ', 'Upsilon': 'Υ', 'Phi': 'Φ', 'Psi': 'Ψ', 'Omega': 'Ω', 'pm': '±', 'times': '×', 'div': '÷', 'cdot': '⋅',
-'leq': '≤', 'geq': '≥', 'neq': '≠', 'approx': '≈', 'equiv': '≡', 'sum': '∑', 'prod': '∏', 'int': '∫', 'partial': '∂', 'nabla': '∇', 'forall': '∀',
-'exists': '∃', 'not=': '≠', 'in': '∈', 'notin': '∉', 'subset': '⊂', 'supset': '⊃', 'subseteq': '⊆', 'supseteq': '⊇', 'cap': '∩', 'cup': '∪', 'emptyset': '∅',
-'to': '→', 'gets': '←', 'leftrightarrow': '↔', 'implies': '⇒', 'iff': '⇔', 'aleph': 'ℵ', 'hbar': 'ħ', 'degree': '°', 'prime': '′', 'land': '∧', 'lor': '∨',
-'neg': '¬', 'top': '⊤', 'bot': '⊥', 'vdash': '⊢', 'dashv': '⊣', 'leftarrow': '←', 'Leftarrow': '⇐', 'rightarrow': '→', 'Rightarrow': '⇒', 'Leftrightarrow': '⇔',
-'mapsto': '↦', 'hookleftarrow': '↩', 'hookrightarrow': '↪', 'leftharpoonup': '↼', 'rightharpoonup': '⇀', 'leftharpoondown': '↽', 'rightharpoondown': '⇁',
-'rightleftharpoons': '⇌', 'leadsto': '⇝', 'uparrow': '↑', 'Uparrow': '⇑', 'downarrow': '↓', 'Downarrow': '⇓', 'updownarrow': '↕', 'Updownarrow': '⇕', 'nearrow': '↗',
-'searrow': '↘', 'swarrow': '↙', 'nwarrow': '↖', 'longleftarrow': '⟵', 'Longleftarrow': '⟸', 'longrightarrow': '⟶', 'Longrightarrow': '⟹', 'longleftrightarrow': '⟷',
-'Longleftrightarrow': '⟺', 'longmapsto': '⟼', 'bigcap': '⋂', 'bigcup': '⋃', 'bigvee': '⋁', 'bigwedge': '⋀', 'bigodot': '⨀', 'bigoplus': '⨁', 'bigotimes': '⨂',
-'biguplus': '⨄', 'bigsqcup': '⨆', 'oint': '∮', 'coprod': '∐', 'smallint': '∬', 'ldots': '…', 'cdots': '⋯', 'vdots': '⋮', 'ddots': '⋱', 'imath': 'ı', 'jmath': 'ȷ',
-'ell': 'ℓ', 'wp': '℘', 'Re': 'ℜ', 'Im': 'ℑ', 'mho': '℧', 'Box': '□', 'Diamond': '◇', 'triangle': '△', 'angle': '∠', 'surd': '√', 'propto': '∝', 'flat': '♭',
-'natural': '♮', 'sharp': '♯', 'circ': '∘', 'bullet': '•', 'square': '□', 'blacksquare': '■', 'blacktriangle': '▲', 'triangledown': '▽', 'blacktriangledown': '▼',
-'lozenge': '◊', 'blacklozenge': '⬧', 'star': '⋆', 'ast': '∗', 'oplus': '⊕', 'ominus': '⊖', 'otimes': '⊗', 'oslash': '⊘', 'odot': '⊙', 'dagger': '†', 'ddagger': '‡',
-	   'amalg': '⨿', 'uplus': '⊎', 'vee': '∨', 'wedge': '∧', 'setminus': '\\', 'wr': '≀', 'diamond': '⋄', 'iint': '∬', 'iiint': '∭',
-	   'Vert': '‖', 'lVert': '‖', 'rVert': '‖', 'vert': '|', 'lvert': '|', 'rvert': '|',
-	   'le': '≤', 'ge': '≥', 'ne': '≠', 'mid': '|', 'nmid': '∤',
-	   'dots': '…', 'dotsc': '…', 'dotso': '…', 'dotsb': '⋯', 'dotsm': '⋯', 'dotsi': '⋯',
-		    }
-
-	    var m_sqrt = {2: '√', 3: '∛', 4: '∜'}
-	    var sup1 = '0123456789abcdefghijklmnoprstuvwxyzABDEGHIJKLMNOPRTUW+-=()βγδεθιφχ';
-	    var sup2 = '⁰¹²³⁴⁵⁶⁷⁸⁹ᵃᵇᶜᵈᵉᶠᵍʰⁱʲᵏˡᵐⁿᵒᵖʳˢᵗᵘᵛʷˣʸᶻᴬᴮᴰᴱᴳᴴᴵᴶᴷᴸᴹᴺᴼᴾᴿᵀᵁᵂ⁺⁻⁼⁽⁾ᵝᵞᵟᵋᶿᶥᵠᵡ';
-	    var m_sup = {}; for (var i = 0; i < sup1.length; i++) { m_sup[sup1[i]] = sup2[i]; }
-
-	    var sub1 = '0123456789aehijklmnoprstuvx+-=()βγρφχ';
-	    var sub2 = '₀₁₂₃₄₅₆₇₈₉ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ₊₋₌₍₎ᵦᵧᵨᵩᵪ';
-	    var m_sub = {}; for (var i = 0; i < sub1.length; i++) { m_sub[sub1[i]] = sub2[i]; }
-
-	    // "(...)²" 这种括号组带上下标的整体是原子的，不需要再包括号
-	    var re_paren_pow = new RegExp('^\\([^()]*\\)[' + sup2 + sub2 + ']*$');
-
-	    // 组合变音符（跟在基字符后面）
-	    var m_accent = {hat:'̂', widehat:'̂', check:'̌', tilde:'̃', widetilde:'̃',
-		acute:'́', grave:'̀', ddot:'̈', dot:'̇', breve:'̆', bar:'̄',
-		mathring:'̊', vec:'⃗', overrightarrow:'⃗', overleftarrow:'⃖',
-		overline:'̅', underline:'̲'};
-
-	    // 数学字母区 U+1D400-1D7FF。ex: 更早收进 Letterlike Symbols 的例外码位，主区对应位置是空洞
-	    var m_math_alphabet = {
-		mathbb:  {A:0x1D538, a:0x1D552, d:0x1D7D8, ex:{C:'ℂ',H:'ℍ',N:'ℕ',P:'ℙ',Q:'ℚ',R:'ℝ',Z:'ℤ'}},
-		mathcal: {A:0x1D49C, a:0x1D4B6, ex:{B:'ℬ',E:'ℰ',F:'ℱ',H:'ℋ',I:'ℐ',L:'ℒ',M:'ℳ',R:'ℛ',e:'ℯ',g:'ℊ',o:'ℴ'}},
-		mathfrak:{A:0x1D504, a:0x1D51E, ex:{C:'ℭ',H:'ℌ',I:'ℑ',R:'ℜ',Z:'ℨ'}},
-		mathbf:  {A:0x1D400, a:0x1D41A, d:0x1D7CE, ex:{}},
-		mathit:  {A:0x1D434, a:0x1D44E, ex:{h:'ℎ'}},
-		mathsf:  {A:0x1D5A0, a:0x1D5BA, d:0x1D7E2, ex:{}},
-		mathtt:  {A:0x1D670, a:0x1D68A, d:0x1D7F6, ex:{}},
-	    };
-	    m_math_alphabet.mathscr = m_math_alphabet.mathcal;
-	    m_math_alphabet.boldsymbol = m_math_alphabet.mathbf;
-
-	    function math_alphabet(cmd, s) {
-		var b = m_math_alphabet[cmd];
-		var r = '';
-		for (var c of s) {
-			if (b.ex[c]) { r += b.ex[c]; continue; }
-			var code = c.codePointAt(0);
-			if (c >= 'A' && c <= 'Z') r += String.fromCodePoint(b.A + code - 65);
-			else if (c >= 'a' && c <= 'z') r += String.fromCodePoint(b.a + code - 97);
-			else if (c >= '0' && c <= '9' && b.d) r += String.fromCodePoint(b.d + code - 48);
-			else if (c == ' ') r += c;
-			else return null;  // 有转不了的字符，整体放弃
-		}
-		return r;
-	    }
-
-	function trans(m, s) {
-		var cc = 0;
-		var r = '';
-		for (var c of s) {
-			if (m[c]) {
-				r += m[c];
-			} else {
-				r += c;
-				if (c != ' ' && c != '\t') {
-					cc += 1;
-				}
-			}
-		}
-		if (cc == 0) return r;
-		return "";
-	}
-	// >> 
-
 	const expressionInput = document.getElementById('inputText');
 	const readableOut = document.getElementById('readableOut');
 	const renderedMath = document.getElementById('renderedMath');
+	var last_render = null;   // 最近一次转换的渲染素材，点 render latex 按钮才渲染
 
 	expressionInput.addEventListener('input', () => {
 	    const expression = expressionInput.value;
@@ -159,10 +79,22 @@
 	document.getElementById('stripText').addEventListener('change', () => {
 	    convertExpressionToLatex(expressionInput.value);
 	});
+	document.getElementById('transMatrix').addEventListener('change', () => {
+	    convertExpressionToLatex(expressionInput.value);
+	});
 	for (var delim_el of document.querySelectorAll('#delims input')) {
 	    delim_el.addEventListener('change', () => convertExpressionToLatex(expressionInput.value));
 	    delim_el.addEventListener('input', () => convertExpressionToLatex(expressionInput.value));
 	}
+	document.getElementById('renderButton').addEventListener('click', () => {
+	    if (!last_render) return;
+	    if (last_render.mode == 'mixed') {
+		renderedMath.textContent = last_render.text;
+		MathJax.typesetPromise([renderedMath]).catch((err) => console.error(err));
+	    } else {
+		renderLatex(last_render.latex);
+	    }
+	});
 	copyButton.addEventListener('click', () => {
 	    var text = readableOut.textContent;
 	    function done() { document.getElementById('copyStatus').innerHTML = "copy OK"; }
@@ -212,616 +144,24 @@
 	    MathJax.typesetPromise([renderedMath]).catch((err) => console.error(err));
 	}
 
-	var basic_math_func = "sin|cos|log|ln|exp|sqrt|tan|asin|acos|atan|arctan|arcsin|arccos|frac|abs";
-	function p(...x) {console.log(x)}
-	function pp(arr) {
-		for (var a of arr) {
-			console.log('##', a)
-		}
-	}
 	function convertExpressionToLatex(input) {
-	    function do_replace(latex) {
-	      latex = latex.replace(/(?<!\\)[ \t]+/g, " ")
-		.replace(/<->/g, '\\leftrightarrow ')
-		.replace(/<=>/g, '\\Leftrightarrow ')
-		.replace(/->/g, '\\rightarrow ')
-		.replace(/=>/g, '\\Rightarrow ')
-		.replace(/<=/g, '≤')
-		.replace(/>=/g, '≥')
-		.replace(/!=/g, '≠')
-		.replace(/==/g, '\\equiv ')
-		.replace(/"mathbb\s*{\s*([^}]+)\s*}/g, '$1')
-		.replace(/\\(left|right|big)\\\|/g, '‖')   // 要在裸 \| 之前，否则残留 \left 配不上对
-		.replace(/\\\|/g, '‖')
-		// \Big| \bigl( 等尺寸命令是纯排版，剥掉留定界符。[lrm]? 别吞掉 \bigcup \bigoplus（\b 挡住）
-		.replace(/\\[Bb]igg?[lrm]?\b\s*/g, '')
-		// 间距命令 → 普通空格；\! 负间距 → 空串。lookbehind 防止咬掉 \\（换行/矩阵行分隔）的后半
-		.replace(/\\(quad|qquad|enspace|thinspace|medspace|thickspace)\b/g, ' ')
-		.replace(/(?<!\\)\\[,;: ]/g, ' ')
-		.replace(/(?<!\\)\\!/g, '')
-		.replace(/[ \t]{2,}/g, ' ');
-		if (document.getElementById('stripText').checked) {
-			latex = latex.replace(/\\text\s*\{([^{}]*)\}/g, '$1').replace(/[ \t]{2,}/g, ' ');
-		}
-	
-		//var pat = "(alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|omicron|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Alpha|Beta|Gamma|Delta|Epsilon|Zeta|Eta|Theta|Iota|Kappa|Lambda|Mu|Nu|Xi|Omicron|Pi|Rho|Sigma|Tau|Upsilon|Phi|Chi|Psi|Omega|varepsilon|varphi|text|hat|cap|cup|uplus|sqcap|sqcup|vee|wedge|oplus|ominus|otimes|oslash|odot|bigcirc|triangleleft|triangleright|bigtriangledown|bullet|setminus|wr|diamond|bigstar|leq|geq|neq|approx|sim|simeq|equiv|subset|supset|subseteq|supseteq|nsubseteq|nsupseteq|ni|notin|forall|nexists|lor|neg|top|bot|vdash|vDash|models|perp|parallel|nparallel|angle|measuredangle|sphericalangle|triangle|bigtriangleup|infty|partial|square|blacksquare|circ|cdots|ldots|vdots|ddots|aleph|beth|gimel|daleth|hbar|ell|Re|Im|wp|complement|emptyset|varnothing|nabla|surd|triangle|backslash|land|lor|lnot|neg|flat|sharp|natural|clubsuit|diamondsuit|heartsuit|spadesuit|int|sum|prod|sin|cos|log|exp|tan|sqrt|frac|in|exists|times|div|cdot|stackrel)";
-		var pat = "([a-zA-Z]+[ \t]?)";
-		var arr_pat = [ "({\\s*" + pat + "\\s*})", 
-				"(\\\\" + pat + ")\\b", 
-				"(\\\\" + pat + ")_", 
-				"\\\\" + pat + "\\b", 
-				"\\\\" + pat + "_", 
-				"_" + pat + "\\b", 
-				"\\b" + pat + "_",
-				"\\b" + pat + "\\b", 
-				"_" + pat + "\\b", 
-				"\\b" + pat + "_",
-				];
-
-		function replaceFunction(match) {
-			var s = match.replace(/[\{\}\\ ]/g, "")
-			if (m_latex2char[s]) return m_latex2char[s] + (/[ \t]$/.test(match) ? ' ' : '');
-			return match;
-		}
-		// 这些短词是常见变量字母的拼接（in=i·n, xi=x·i, Re(z) 本来就可读…），
-		// 裸写（无反斜杠）时不转换，必须写 \in \xi 才转
-		var m_bare_exclude = {};
-		for (var w of ['in','to','le','ge','ne','xi','Re','Im','mid','top','bot','ast','vee','wp','wr'])
-			m_bare_exclude[w] = 1;
-		for (var reg_pat of arr_pat) {
-			//console.log('vv', reg_pat);
-			var reg = new RegExp(reg_pat, "g");
-			latex = latex.replace(reg, (match, group1) => {
-					if (!match.includes('\\') && m_bare_exclude[group1.replace(/[\{\} ]/g, "")]) return match;
-					const replacement = replaceFunction(group1);
-					return match.replace(group1, replacement);
-					});
-		}
-		// ∂ ∇ Δ δ ¬ √ 是前缀算符，紧跟操作数，中间不该有空格——latex 源里 \partial x 的
-		// 空格只是命令名结束符不是真空格。关系符(≡ ≤ ∈)不在此列，两边空格是对的
-		latex = latex.replace(/([∂∇Δδ¬√∛∜])[ \t]+(?=[A-Za-z0-9Α-ω(])/g, '$1');
-		// \hat{x} → x̂ 等；组合符只能盖单字符，参数更长时保留原样（over/underline 例外，逐字符加线可连成串）
-		latex = latex.replace(/\\(widehat|widetilde|overrightarrow|overleftarrow|overline|underline|mathring|hat|check|tilde|acute|grave|ddot|dot|breve|bar|vec)\b\s*(?:\{([^{}]*)\}|([A-Za-z0-9Ͱ-Ͽ]))/g,
-			function (match, cmd, braced, single) {
-				var arg = (braced !== undefined ? braced : single).trim();
-				var chars = [...arg];
-				if (chars.length == 1) return chars[0] + m_accent[cmd];
-				if ((cmd == 'overline' || cmd == 'underline') && chars.every(c => /[A-Za-z0-9Ͱ-Ͽ]/.test(c))) {
-					return chars.map(c => c + m_accent[cmd]).join('');
-				}
-				return match;
-			});
-		// \mathbb{R} → ℝ 等；\mathbb Z 省略花括号的单字符也认；有转不了的字符则整体保留
-		latex = latex.replace(/\\?\b(mathbb|mathcal|mathscr|mathfrak|mathbf|mathit|mathsf|mathtt|boldsymbol)\b\s*(?:\{([^{}]*)\}|([A-Za-z0-9])\b)/g,
-			function (match, cmd, braced, single) {
-				var r = math_alphabet(cmd, (braced !== undefined ? braced : single).trim());
-				return r === null ? match : r;
-			});
-		// \pmod{p} → (mod p), \bmod → mod
-		latex = latex.replace(/\\pmod\s*\{([^{}]*)\}/g, '(mod $1)').replace(/\\bmod\b/g, 'mod');
-		// 输入里已是 Unicode 根号但还跟着 {} 分组的（多半是上次转换的残留）
-		latex = latex.replace(/([√∛∜])\s*\{([^{}]*)\}/g, function (m, r, arg) {
-			arg = arg.trim();
-			return r + (/^[^\s+\-*/^=<>±×÷⋅∘,|]+$/.test(arg) ? arg : '(' + arg + ')');
-		});
-		// 只剥常见函数名前的反斜杠，不能误伤 \vec \begin 等其他命令。
-		// 用 (?![a-zA-Z]) 而不是 \b：后面紧跟 _ 时（\lim_n）\b 匹配不上
-		latex = latex.replace(/\\(arcsin|arccos|arctan|sinh|cosh|tanh|coth|limsup|liminf|sin|cos|tan|cot|sec|csc|log|ln|exp|lim|max|min|sup|inf|det|gcd|deg|arg|dim|ker|hom|Pr)(?![a-zA-Z])/g, "$1").replace(/\*\*/g, "^");
-		return latex;
-	      }
-	    function convert_one(expr, degrade) {
-		expr = do_replace(expr.trim());
-		const tokens = tokenize(expr, false);
-		const syntaxTree = buildSyntaxTree(tokens, expr, false);
-		var latex = buildLatex(syntaxTree, expr);
-
-		// a_i^j => aᵢ^j；∑∏∫lim 等大算符的界限也转，花括号剥掉再试，转不全整组保留
-		function strip_braces(s) { return s.trim().replace(/^\{([^{}]*)\}$/, '$1').trim(); }
-		latex = latex.replace(/\s*_(\s*[^\^ \t]+\s*)\^(\s*[^\^_ \t\+\-\(\)]+)(\(| |\b|$)/g, function (match, p2, p3, p4) {
-		    var p2_1 = strip_braces(p2);
-		    var p3_1 = strip_braces(p3);
-		    if (p4 == '(') p3_1 = "";
-		    var s = trans(m_sub, p2_1);
-		    var s1 = trans(m_sup, p3_1);
-		    if (s && s1) {
-			return s + s1 + p4;
-		    } else if (s) {
-			return s+"^"+p3 + p4;
-		    } else {
-			return match;
-		    } });
-		latex = latex.replace(/\s*_(\s*[^\^ \t]+\s*)\^/g, function (match, p2) {
-		    var s = trans(m_sub, strip_braces(p2));
-		    if (s) { return s+"^"; } else { return match; } });
-		// 镜像：C^d_i 上标在前下标在后
-		latex = latex.replace(/\s*\^(\s*[^\^_ \t]+\s*)_(\s*[^\^_ \t\+\-\(\)]+)(\(| |\b|$)/g, function (match, p3, p2, p4) {
-		    if (p4 == '(') return match;
-		    var s1 = trans(m_sup, strip_braces(p3));
-		    var s = trans(m_sub, strip_braces(p2));
-		    if (s && s1) {
-			return s1 + s + p4;
-		    } else if (s1) {
-			return s1+"_"+p2 + p4;
-		    } else {
-			return match;
-		    } });
-		latex = latex.replace(/\s*\^(\s*[^\^_ \t]+\s*)_/g, function (match, p3) {
-		    var s1 = trans(m_sup, strip_braces(p3));
-		    if (s1) { return s1+"_"; } else { return match; } });
-		// 兜底（仅裸表达式模式）：没能转成 Unicode 的 ^{...} _{...} 退化为线性形式，消掉花括号。
-		// 先试转里面的简单上下标（^{e_i} → ^(eᵢ)）；单字符/纯数字不加圆括号。
-		// 混合文本模式不退化：这类段落会保留 $ 交给 latex 渲染器，得留着合法 latex
-		if (degrade) latex = latex.replace(/([_^])\{([^{}]*)\}/g, function (m, op, arg) {
-		    arg = arg.trim()
-			.replace(/_([A-Za-z0-9])(?![A-Za-z0-9])/g, function (m2, c) { var s = trans(m_sub, c); return s ? s : m2; })
-			.replace(/\^([A-Za-z0-9])(?![A-Za-z0-9])/g, function (m2, c) { var s = trans(m_sup, c); return s ? s : m2; });
-		    return op + (/^([A-Za-z]|-?[0-9.]+|[^\x00-\x7F])$/.test(arg) ? arg : '(' + arg + ')');
-		});
-		return latex;
+	    var delims = [];
+	    for (var cb of document.querySelectorAll('#delims input[type=checkbox]')) {
+		if (cb.checked && cb.dataset.open) delims.push([cb.dataset.open, cb.dataset.close]);
 	    }
-
-	    var input = input.trim();
-	    // 混合文本：只转启用的定界符对里的片段。
-	    // 行内 $ 按 pandoc 规则识别（紧贴非空白、闭合 $ 后面不是数字），避免把 "$100 and $200" 当公式。
-	    // 片段全转干净（无 \命令 {} ^ _ 残留）才去掉定界符，否则部分转换的结果带定界符保留，交给 latex 渲染。
-	    function re_esc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-	    function build_seg_pat() {
-		var pairs = [];
-		for (var cb of document.querySelectorAll('#delims input[type=checkbox]')) {
-		    if (cb.checked && cb.dataset.open) pairs.push([cb.dataset.open, cb.dataset.close]);
-		}
-		var co = document.getElementById('customOpen').value.trim();
-		var cc = document.getElementById('customClose').value.trim();
-		if (co && cc) pairs.push([co, cc]);
-		pairs.sort((a, b) => b[0].length - a[0].length);   // $$ 必须先于 $ 尝试
-		var parts = pairs.map(([o, c]) =>
-		    o == '$' && c == '$'
-			? '(?<!\\\\)\\$(?=\\S)([^$\\n]+?)(?<=\\S)\\$(?!\\d)'
-			: re_esc(o) + '([\\s\\S]+?)' + re_esc(c));
-		return pairs.length ? { re: new RegExp(parts.join('|'), 'g'), pairs } : null;
-	    }
-	    var sp = build_seg_pat();
-	    if (sp && sp.re.test(input)) {
-		sp.re.lastIndex = 0;
-		var out = input.replace(sp.re, function () {
-		    var match = arguments[0];
-		    var groups = Array.prototype.slice.call(arguments, 1, 1 + sp.pairs.length);
-		    var idx = groups.findIndex(g => g !== undefined);
-		    var r;
-		    try { r = convert_one(groups[idx]); } catch (e) { return match; }
-		    r = r.trim();
-		    if (/[\\{}^_]/.test(r)) {
-			return sp.pairs[idx][0] + r + sp.pairs[idx][1];
-		    }
-		    return r;
-		});
-		readableOut.textContent = out;
-		document.getElementById('copyStatus').innerHTML = "";
-		// 预览：已转干净的是纯文本，残留的 $...$ 段交给 MathJax 渲染
-		renderedMath.textContent = out;
-		MathJax.typesetPromise([renderedMath]).catch((err) => console.error(err));
-		return;
-	    }
-	    var latex = convert_one(input, true);
-	    readableOut.textContent = latex;
-	    renderLatex(latex);
-	}
-
-	function show_err1(input, pos, pos_len, msg, left_pos, left_len) {
-	    const output = document.getElementById('div_err');
-	    output.innerHTML = "错误：" + msg + "<br>"
-	    if (pos === 0 || pos) {
-		function t(s) {return s.replace("<", "&lt;").replace(">", "&gt;");}
-		if (left_pos === 0 || left_pos) {
-			var p1 = t(input.slice(0, left_pos));
-			var p2 = t(input.slice(left_pos, left_pos + left_len));
-			var p3 = t(input.slice(left_pos + left_len, pos));
-			var p4 = t(input.slice(pos, pos+pos_len));
-			var p5 = t(input.slice(pos+pos_len));
-
-			output.innerHTML += `<pre>${p1}<font color=red><b>${p2}</b></font>${p3}<font color=red><b>${p4}</b></font>${p5}</pre>`
-		} else {
-			var p1 = t(input.slice(0, pos));
-			var p2 = t(input.slice(pos, pos+pos_len));
-			var p3 = t(input.slice(pos+pos_len));
-			output.innerHTML += `<pre>${p1}<font color=red><b>${p2}</b></font>${p3}</pre>`
-		}
-	    }
-	}
-	function show_err(input, pos, msg, left_pos) {
-	    const output = document.getElementById('div_err');
-	    output.innerHTML = "错误：" + msg + "<br>"
-	    if (pos === 0 || pos) {
-	    	function t(s) {return s.replace("<", "&lt;").replace(">", "&gt;");}
-	    	if (left_pos === 0 || left_pos) {
-	    		output.innerHTML += "<pre>"
-					+t(input.slice(0, left_pos)) + "<font color=red><b>[左]</b></font>"
-					+t(input.slice(left_pos, pos)) + "<font color=red><b>[和左不匹配]</b></font>"
-					+t(input.slice(pos))+"</pre>"
-		} else {
-			output.innerHTML += "<pre>"+t(input.slice(0, pos)) + "<font color=red><b>[may here]</b></font>" + t(input.slice(pos))+"</pre>"
-		}
-	    }
-	}
-
-	function tokenize(input, do_throw) {
-	    document.getElementById('div_err').innerHTML = '';
-	    const tokenPatterns = [
-		{ type: 'TEXT', regex: /"[^"]*"/ },    // "xxx"
-		{ type: 'BRACKET', regex: /[(){}\[\]]/ },      // () [] {}
-		{ type: 'ESCAPED_BRACE', regex: /\\[{}]/ },    // \{ \}
-		{ type: 'STRING1', regex: /\\[_]/ },	   // "\_"
-		{ type: 'STRING2', regex: /\\[\^]|\\\\/ },    // "\^", "\\"
-		{ type: 'SPACE', regex: /(\\[ ]|\\,|[ \t\n])+/ },    //  space: "\ ", "\,"
-		{ type: 'SPECIAL_LEFT',  regex:  /(\\|\b)(left|big)(\\{|\(|\[)|(\\|\b)left\|/ },    // left(
-		{ type: 'SPECIAL_RIGHT', regex: /(\\|\b)(right|big)(\\}|\)|\])|(\\|\b)right\|/ },   // right)
-		{ type: 'AFTER_HAS_BRACE', regex: /(\b|\\)(frac|sqrt|stackrel|vec|overrightarrow|overline|underline|widetilde|widehat)\b|[\^_]/ }, // 后面紧跟{}block
-		{ type: 'ESCAPE', regex: /[\\]/ },	  // \
-		{ type: 'NUMBER', regex: /-\d+(\.\d+)?\b|\b\d+(\.\d+)?\b/ },  // -2.5
-		{ type: 'STRING', regex: /[a-zA-Z0-9]+/ },    // abc123
-		{ type: 'OTHER', regex: /[^"{}\[\]()\\\^_ \t\n]+/ }
-	    ];
-	    var m_pat = {}
-	    for (var i in tokenPatterns) {
-		m_pat[tokenPatterns[i].type] = tokenPatterns[i].regex;
-	    }
-	    const result = [];
-	    let currentInput = input;
-	
-	    var pos = 0;
-	    var cc = 0;
-	    var last_len = null;
-	    while (currentInput.length > 0) {
-		//console.log('xxx', currentInput.length, currentInput, result.length)
-		cc += 1
-		if ( cc > 1000 || last_len !== null && last_len == currentInput.length) {
-		    if (do_throw) throw new Error('dead?');
-		}
-		let matched = false;
-	
-		for (const { type, regex } of tokenPatterns) {
-		    const match = regex.exec(currentInput);
-	
-		    if (match && match.index === 0) {
-			let value = match[0];
-	
-			if (type === 'OTHER') {
-			    for (var key of ['SPECIAL_LEFT', 'SPECIAL_RIGHT', 'AFTER_HAS_BRACE', 'NUMBER', 'STRING']) {
-				const match1 = m_pat[key].exec(currentInput);
-				if (match1 && match1.index < value.length) {
-				    value = value.slice(0, match1.index);
-				}
-			    }
-			}
-			if (type === 'STRING') {
-			    for (var key of ['SPECIAL_LEFT', 'SPECIAL_RIGHT', 'AFTER_HAS_BRACE']) {
-				const match1 = m_pat[key].exec(currentInput);
-				if (match1 && match1.index < value.length) {
-				    value = value.slice(0, match1.index);
-				}
-			    }
-			}
-			var type1 = type;
-       			if (type == 'STRING1') {type1 = 'STRING';}
-			// console.log('vv', cc, regex, '|', value, value.length, '|')
-			result.push({ type: type1, value, pos });
-			pos += value.length;
-			currentInput = currentInput.slice(value.length);
-			matched = true;
-			break;
-		    }
-		}
-		last_len == currentInput.length;
-	
-		if (!matched) {
-		    // This should not happen if all cases are handled
-		    var msg = `No matching token found at position ${input.length - currentInput.length}`
-		    show_err(input, pos, msg);
-		    throw new Error(msg);
-		}
-	    }
-	
-	    return result;
-	}
-	
-	function buildLatex(node, input) {
-		//p('bbb', node)
-
-		var arr_ret = [];
-		for (var i in node.children) {
-			var child = node.children[i];
-			var s = child.value;
-			if (child.type == 'ESCAPED_BRACE' || child.type == 'BRACKET' || child.type == 'SPECIAL_LEFT') {
-				s = buildLatex(child, input);
-			}
-			//p('push', i, s, '>');
-			arr_ret.push(s)
-		}
-		//console.log(arr_ret)
-
-		var m_add_braces = {};
-		function add_bracket(n, s, j) {
-			if (m_add_braces[j]) return s;
-			if (n.type == 'BRACKET' || n.type == 'SPECIAL_LEFT' || n.type == 'ESCAPED_BRACE') {
-				m_add_braces[j] = 1;
-				if (n.value.includes("(")) return "(" + s + ")";
-				if (n.value.includes("[")) return "[" + s + "]";
-				if (n.value.includes("{")) return "{" + s + "}";
-				if (n.value.includes("|")) return "|" + s + "|";
-			}
-			return s;
-		}
-		function is_func_call(n_arr, j, direction) {
-			if (direction > 0) {
-				if (j+1 <= n_arr.length - 1) {
-					if (n_arr[j].type == 'STRING' && /^(\\)?[a-zA-Z]([a-zA-Z0-9]|\\_)*$/.test(n_arr[j].value) 
-						&& n_arr[j+1].type == 'BRACKET' && n_arr[j+1].value == '(') {
-						return true;
-					}
-				}
-			}
-			if (direction < 0) {
-				if (j-1 >= 0) {
-					if (n_arr[j-1].type == 'STRING' && /^(\\)?[a-zA-Z]([a-zA-Z0-9]|\\_)*$/.test(n_arr[j-1].value) 
-						&& n_arr[j].type == 'BRACKET' && n_arr[j].value == '(') {
-						return true;
-					}
-				}
-			}
-		}
-		for (var j in node.children) {
-			j = parseInt(j);
-			var n = node.children[j]
-			if (n.type == 'STRING') {
-				if (is_func_call(node.children, j, 1)) {
-					arr_ret[j] = arr_ret[j] + "(" + arr_ret[j+1] + ")";
-					arr_ret[j+1] = "";
-					m_add_braces[j] = 1;
-					m_add_braces[j+1] = 1;
-					node.children[j+1].type = 'SPACE';
-				}
-			}
-		}
-
-		// AFTER_HAS_BRACE: 后面的加 {}
-		// console.log(node)
-		// for (var i in node.children) { arr_ret[i] = add_bracket(node.children[i], arr_ret[i], i); }
-		for (var i in node.children) {
-			var child = node.children[i]
-			if (child.type != 'AFTER_HAS_BRACE') continue;
-			var cur_n = child.value.replace("\\", "");
-			if (cur_n != 'frac' && cur_n != 'sqrt' && cur_n != '_' && cur_n != '^') continue;
-
-			var c1 = 2;
-			if (cur_n == '_' || cur_n == '^') {
-				c1 = 1;
-			}
-			function set_null(i1, i2) {
-				for (var k = i1+1; k < i2; ++k) {
-					arr_ret[k] = "";
-				}
-			}
-			function is_last_next_ok(j) {
-				var c = 0;
-				for (var k = j-1; k >= 0; --k) {
-					// last last now:_or^
-					var n = node.children[k];
-					if (n.type == 'SPACE') continue;
-					if (c == 0 && /^([\^_]|\*\*)$/.test(n.value)) {
-						//console.log('aa1', j, k, c, n.value);
-						return false;
-					}
-					if (c == 1 && (/^([\^_]|\*\*)$/.test(n.value))) {
-						//console.log('aa2', k, c, n.value);
-						return false;
-					}
-					c += 1;
-					if (c >= 2) break;
-				}
-				var c = 0;
-				for (var k = j+1; k < node.children.length; ++k) {
-					// now:_or^ next next
-					var n = node.children[k];
-					if (n.type == 'SPACE') continue;
-					if (/^([\^_]|\*\*)$/.test(n.value)) {
-						//console.log('aa3', k, c, n.value);
-						return false;
-					}
-					c += 1;
-					if (c >= 2) break;
-				}
-				return true;
-			}
-			var ii = parseInt(i);
-			if ((cur_n == '_' || cur_n == '^') && !is_last_next_ok(ii)) {
-				continue;
-			}
-
-			var c = 0;
-			var arr_idx = [];
-			for (var j = ii+1; j < node.children.length; ++j) {
-				var n = node.children[j];
-				if (n.type == 'SPACE') continue;
-				if (cur_n == '_') {
-					var s = trans(m_sub, arr_ret[j]);
-					if (s) {
-						arr_ret[j] = s;
-						arr_ret[i] = '';
-						m_add_braces[j] = 1;
-					} else {
-						arr_ret[j] = add_bracket(n, arr_ret[j], j);
-					}
-					m_add_braces[j] = 1;
-					set_null(ii, j);
-				}
-				if (cur_n == '^') {
-					var s = trans(m_sup, arr_ret[j]);
-					if (s) {
-						arr_ret[j] = s;
-						arr_ret[i] = '';
-						m_add_braces[j] = 1;
-					} else {
-						arr_ret[j] = add_bracket(n, arr_ret[j], j);
-					}
-					m_add_braces[j] = 1;
-					set_null(ii, j);
-				}
-				arr_idx.push(j);
-				if (cur_n == 'sqrt' && c == 0 && n.type == 'BRACKET' && n.value == '[') {
-				} else {
-					arr_ret[j] = add_bracket(n, arr_ret[j], j);
-				}
-				c += 1;
-				if (c >= c1) break;
-			}
-			if (cur_n == '_' || cur_n == '^') continue;
-			function trim_bracket(s) {
-				// {} 是 latex 分组、输出中无意义：内容原子的直接剥掉，否则换成 ()
-				s = s.trim();
-				var m = s.match(/^\{([\s\S]*)\}$/);
-				if (m && !/[{}]/.test(m[1])) s = m[1].trim();
-				var s1 = s.replace(/[ \t]/g, "");
-				if (/^-?[^\s+\-*/^=<>±×÷⋅∘,(){}\[\]|]+$/.test(s1) ||
-				    /^[a-zA-Z0-9]+\([^()]*\)$/.test(s1) ||
-				    re_paren_pow.test(s1) || /^\|[^|]*\|$/.test(s1)) {
-					return s;
-				}
-				return "(" + s + ")";
-			}
-			var i1 = arr_idx[0];
-			var i2 = arr_idx[1];
-			if (cur_n == 'sqrt') {
-				var n1 = node.children[i1];
-				var n2 = node.children[i2];
-				if (n1 && n1.type== 'BRACKET' && n1.value == '[') {
-					if (n2) {
-						var sqrt_idx = m_sqrt[arr_ret[i1]];
-						if (sqrt_idx) {
-							[arr_ret[i], arr_ret[i1], arr_ret[i2]] = ["", sqrt_idx, trim_bracket(arr_ret[i2])]
-						} else {
-							[arr_ret[i], arr_ret[i1], arr_ret[i2]] = [trim_bracket(arr_ret[i2]), "^", "(1/"+trim_bracket(arr_ret[i1])+")"]
-						}
-						m_add_braces[i] = 1; m_add_braces[i1] = 1; m_add_braces[i2] = 1;
-						set_null(ii, i1);
-						set_null(i1, i2);
-					} else {
-					}
-				} else {
-					[arr_ret[i], arr_ret[i1]] = [m_sqrt[2], trim_bracket(arr_ret[i1])]
-					m_add_braces[i] = 1; m_add_braces[i1] = 1;
-					set_null(ii, i1);
-				}
-			}
-			if (arr_idx.length == 2 && cur_n == 'frac') {
-				// 外层括号只在相邻有歧义时才加：前贴 ^ _ / 或字母数字(2^frac、frac 连写)，
-				// 后贴字母/数字/括号/命令(a/bc、a/b(x)、a/b^2 都会误读)。有空格或贴着运算符则不加
-				function frac_prev_safe() {
-					for (var k = ii - 1; k >= 0; --k) {
-						if (node.children[k].type == 'SPACE') return true;
-						if (arr_ret[k] === "") continue;
-						return /[=+\-±×÷⋅*,;:(<\[{|∧∨→↔⇒⇔≤≥≠≈≡∈ \t]$/.test(arr_ret[k]);
-					}
-					return true;
-				}
-				function frac_next_safe() {
-					for (var k = i2 + 1; k < node.children.length; ++k) {
-						if (node.children[k].type == 'SPACE') return true;
-						return /^[=+\-±×÷⋅*,;:)\]}>|∧∨→↔⇒⇔≤≥≠≈≡ \t]/.test(node.children[k].value);
-					}
-					return true;
-				}
-				var frac_s = trim_bracket(arr_ret[i1]) + "/" + trim_bracket(arr_ret[i2]);
-				if (!frac_prev_safe() || !frac_next_safe()) frac_s = "(" + frac_s + ")";
-				[arr_ret[i], arr_ret[i1], arr_ret[i2]] = [frac_s, "", ""]
-				m_add_braces[i] = 1; m_add_braces[i1] = 1; m_add_braces[i2] = 1;
-				set_null(ii, i1);
-				set_null(i1, i2);
-			}
-		}
-		//p('vvv', arr_ret)
-		for (var i in node.children) {
-			arr_ret[i] = add_bracket(node.children[i], arr_ret[i], i);
-		}
-		//console.log(node, arr_ret)
-		return arr_ret.join("");
-	}
-
-	function bracket_match(left_b_n, right_b_n) {
-		var left_b = left_b_n.value;
-		var right_b = right_b_n.value;
-		if (left_b_n.type == right_b_n.type || left_b_n.type.includes("SPECIAL") && right_b_n.type.includes("SPECIAL")) {
-			if (left_b.includes("(") && right_b.includes(")")) return true;
-			if (left_b.includes("[") && right_b.includes("]")) return true;
-			if (left_b.includes("{") && right_b.includes("}")) return true;
-			if (left_b.includes("|") && right_b.includes("|")) return true;
-		}
-		return false;
-	}
-
-	function buildSyntaxTree(tokens, input, do_throw) {
-	    // console.log('bbttt')
-	    const root = { type: 'ROOT', children: [] };
-	    const stack = [root];
-	
-	    var left_bracket = ['(', '[', '{'];
-	    var right_bracket = [')', ']', '}'];
-
-	    tokens.forEach(token => {
-		const currentNode = stack[stack.length - 1];
-	
-		if (left_bracket.indexOf(token.value) >=0 || token.value === '\\{' || token.type === 'SPECIAL_LEFT') {
-		    // If it's an opening brace or special left, push a new node onto the stack
-		    const newNode = { type: token.type, value: token.value, pos: token.pos, children: [] };
-		    currentNode.children.push(newNode);
-		    stack.push(newNode);
-		} else if (right_bracket.indexOf(token.value) >=0 || token.value == '\\}' || token.type === 'SPECIAL_RIGHT') {
-		    // For closing braces, check if it matches the top of the stack
-		    if (stack.length == 0) { // no left found
-			var msg = `没发现左括号和  ${token.value} 匹配`
-			show_err1(input, token.pos, token.value.length, msg)
-			if (do_throw) throw new Error(msg);
-		    }
-		    var left_b = stack[stack.length - 1]
-		    if (bracket_match(left_b, token)) {
-			stack.pop();
-		    } else { // not match
-			var msg = `左括号 ${left_b.value} 和右括号 ${token.value} 不匹配`
-			//console.log('aaa', token, left_b, '|', token.pos, msg, left_b.pos)
-			show_err1(input, token.pos, token.value.length, msg, left_b.pos, left_b.value.length)
-			if (do_throw) throw new Error(msg);
-		    }
-		} else {
-		    // For other types, just add them to the current node's children
-		    // merge
-		    if (currentNode.children.length > 0) {
-			var last = currentNode.children[currentNode.children.length-1];
-			// console.log('aaa', last.type, token.type, last)
-			if ((last.type == 'STRING' || last.type == 'ESCAPE') && token.type == 'STRING') {
-				last.value += token.value;
-				last.type = 'STRING';
-				if (currentNode.children.length > 1) {
-					var last_1 = currentNode.children[currentNode.children.length-2];
-					if (last_1.type == 'STRING') {
-						last_1.value += last.value;
-						currentNode.children.pop()
-					}
-				}
-				return;
-			}
-		    }
-		    currentNode.children.push(token);
-		}
+	    var co = document.getElementById('customOpen').value.trim();
+	    var cc = document.getElementById('customClose').value.trim();
+	    if (co && cc) delims.push([co, cc]);
+	    var r = latex2readable(input, {
+		stripText: document.getElementById('stripText').checked,
+		transMatrix: document.getElementById('transMatrix').checked,
+		delims: delims,
 	    });
-	
-	    if (stack.length > 1) { // no right found
-		var left_b = stack[stack.length - 1]
-		var msg = `没发现右括号和  ${left_b.value} 匹配`
-		//console.log(stack)
-		show_err1(input, left_b.pos, left_b.value.length, msg)
-		if (do_throw) throw new Error(msg);
-	    }
-	
-	    return root;
+	    readableOut.textContent = r.text;
+	    document.getElementById('copyStatus').innerHTML = "";
+	    document.getElementById('div_err').innerHTML = r.errors.join('<br>');
+	    renderedMath.innerHTML = "";
+	    last_render = r.mode == 'mixed' ? { mode: 'mixed', text: r.text } : { mode: 'single', latex: r.text };
 	}
 
     </script>

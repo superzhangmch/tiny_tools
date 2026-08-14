@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>随机游走悖论：领先者极少易主</title>
+<style>
+  body { margin: 0; padding: 12px 16px; background: #fff; color: #222;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  h1 { font-size: 18px; margin: 4px 0 8px; }
+  button { padding: 4px 12px; font-size: 13px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  button.on { background: #2b5fb8; color: #fff; border-color: #2b5fb8; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+  .hint { color: #555; font-size: 12.5px; line-height: 1.6; max-width: 1150px; margin-top: 8px; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  canvas { display: block; border: 1px solid #999; }
+  b.k { color: #b03030; }
+  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .hint { display: none !important; }
+</style>
+</head>
+<body>
+<h1>随机游走悖论：公平硬币，不公平的体验</h1>
+<div class="bar">
+  <button class="on" data-t="arc">反正弦定律（领先者极少易主）</button>
+  <button data-t="ruin">赌徒破产</button>
+  <button data-t="polya">回不回得来（Pólya）</button>
+</div>
+<div id="bar-arc" class="bar">
+  每局步数 T: <input type="range" id="aT" min="100" max="5000" value="1000" step="100" style="width:170px"><span class="mono" id="aT2"></span>
+  <button id="aReset">重新累计</button>
+  <span class="mono" id="aStat"></span>
+</div>
+<div id="bar-ruin" class="bar" style="display:none">
+  本金 a: <input type="range" id="ra" min="1" max="50" value="10" style="width:130px"><span class="mono" id="ra2"></span>
+  目标 b: <input type="range" id="rb" min="10" max="100" value="50" style="width:130px"><span class="mono" id="rb2"></span>
+  单局胜率 p: <input type="range" id="rp" min="30" max="70" value="50" style="width:130px"><span class="mono" id="rp2"></span>
+  <button id="rReset">重新累计</button>
+  <span class="mono" id="rStat"></span>
+</div>
+<div id="bar-polya" class="bar" style="display:none">
+  <span class="mono" id="pStat"></span>
+</div>
+<canvas id="cv"></canvas>
+<div class="hint" id="hint-arc">
+  公平硬币下注，画累计输赢曲线。直觉说"输赢各半，领先应该常换手"——错。
+  <b class="k">领先时间占比服从反正弦分布 1/(π√(x(1−x)))</b>：U 形，两头高中间低——
+  "几乎全场领先"和"几乎全场落后"是<b>最常见</b>的结局，"势均力敌"反而最罕见。
+  上半图是样本路径（红 = 领先段），下半图是领先占比的实测直方图 vs 理论 U 曲线。
+  读数里对比两个实测概率：占比 &gt; 0.9 vs 占比 ∈ [0.45, 0.55]——前者约是后者的 3 倍。
+  含义：运气游戏里"某人一直赢"完全不需要他有任何优势。
+</div>
+<div class="hint" id="hint-ruin" style="display:none">
+  本金 a，每局 ±1，到 0 破产、到 b 收手。理论：公平时 P(破产) = 1 − a/b；有偏时 P(破产) = 1 − (1−r^a)/(1−r^b)，r = q/p。
+  实测频率与公式对照（持续累计）。<b class="k">看点</b>：p = 0.49 只差 1%，把 b 拉大——破产率飙向 1：
+  微小劣势 + 长期玩 = 必然破产（赌场的全部秘密）；公平游戏里想翻倍 (b=2a) 也有一半概率先破产。
+</div>
+<div class="hint" id="hint-polya" style="display:none">
+  <b>Pólya 定理（1921）</b>：简单随机游走，1 维和 2 维<b>必定</b>（概率 1）回到原点，3 维只有约 <b>34%</b> 的概率回得来。
+  "醉汉总能回家，醉鸟可能永远迷路。" 图为三条实测曲线：已回到原点的游走比例 vs 步数（对数轴）——
+  1D/2D 缓慢爬向 1（2D 慢得多，~1/log n），3D 早早封顶在 0.34 附近（理论值 0.3405）。
+  每维 3000 个游走者在后台同时走，比例全部实测。
+</div>
+
+<script>
+'use strict';
+// ===== 核心（无 DOM）=====
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// 一局 T 步公平游走的领先时间占比 (S_k>0, 或 S_k=0 且上一步>0 记为领先)
+function leadFraction(T, rng, outPath) {
+  let s = 0, lead = 0;
+  for (let k = 1; k <= T; k++) {
+    const prev = s;
+    s += rng() < 0.5 ? -1 : 1;
+    if (s > 0 || (s === 0 && prev > 0)) lead++;
+    if (outPath) outPath.push(s);
+  }
+  return lead / T;
+}
+const arcsineCDF = x => x <= 0 ? 0 : x >= 1 ? 1 : 2 / Math.PI * Math.asin(Math.sqrt(x));
+const arcsineDen = x => 1 / (Math.PI * Math.sqrt(Math.max(x * (1 - x), 1e-12)));
+// 赌徒破产: 理论 P(破产)
+function ruinTheory(a, b, p) {
+  if (Math.abs(p - 0.5) < 1e-12) return 1 - a / b;
+  const r = (1 - p) / p;
+  return 1 - (1 - Math.pow(r, a)) / (1 - Math.pow(r, b));
+}
+function ruinSim(a, b, p, rng, cap, outPath) {
+  let x = a;
+  for (let k = 0; k < cap; k++) {
+    x += rng() < p ? 1 : -1;
+    if (outPath) outPath.push(x);
+    if (x === 0) return 1;
+    if (x === b) return 0;
+  }
+  return -1;                                   // 超时(罕见), 弃计
+}
+// d 维简单随机游走走一步(每维 ±1 等概率选一维)
+function stepDim(pos, d, rng) {
+  const axis = Math.floor(rng() * d);
+  pos[axis] += rng() < 0.5 ? -1 : 1;
+}
+const atOrigin = pos => pos.every(v => v === 0);
+// ===== 核心结束 =====
+
+const cv = document.getElementById('cv');
+const W = Math.min(1400, window.innerWidth - 36), H = 540;
+cv.width = W; cv.height = H;
+const g = cv.getContext('2d');
+let TAB = 'arc';
+const rng = mulberry32(88);
+const $ = id => document.getElementById(id);
+
+// ---------- 反正弦 ----------
+const ABINS = 60;
+let aHist = new Float64Array(ABINS), aM = 0, aHi9 = 0, aMid = 0;
+let showPaths = [];
+function arcReset() { aHist.fill(0); aM = 0; aHi9 = 0; aMid = 0; showPaths = []; }
+function arcFrame() {
+  const T = +$('aT').value;
+  $('aT2').textContent = 'T=' + T;
+  const batch = Math.max(20, Math.floor(60000 / T));
+  for (let i = 0; i < batch; i++) {
+    const keep = showPaths.length < 10 && i < 2;
+    const path = keep ? [] : null;
+    const f = leadFraction(T, rng, path);
+    if (keep) showPaths.push(path);
+    aHist[Math.min(ABINS - 1, Math.floor(f * ABINS))]++;
+    aM++;
+    if (f > 0.9) aHi9++;
+    if (f >= 0.45 && f <= 0.55) aMid++;
+  }
+  // 画
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  const PH = 240;                              // 上: 路径
+  g.strokeStyle = '#e3e3e3';
+  g.beginPath(); g.moveTo(0, PH / 2); g.lineTo(W, PH / 2); g.stroke();
+  const T2 = +$('aT').value;
+  let ymax = 1;
+  for (const p of showPaths) for (const v of p) ymax = Math.max(ymax, Math.abs(v));
+  for (const p of showPaths) {
+    g.lineWidth = 1;
+    for (let k = 1; k < p.length; k++) {
+      g.strokeStyle = p[k] > 0 || (p[k] === 0 && p[k - 1] > 0) ? 'rgba(192,57,43,0.65)' : 'rgba(31,58,110,0.4)';
+      g.beginPath();
+      g.moveTo((k - 1) / T2 * W, PH / 2 - p[k - 1] / ymax * (PH / 2 - 8));
+      g.lineTo(k / T2 * W, PH / 2 - p[k] / ymax * (PH / 2 - 8));
+      g.stroke();
+    }
+  }
+  g.fillStyle = '#888'; g.font = '12px Menlo';
+  g.fillText('样本路径(红 = 领先段) — 注意大多数路径要么大片红要么大片蓝, 很少红蓝各半', 10, 16);
+  // 下: 直方图
+  const HY0 = PH + 20, HH2 = H - HY0 - 26;
+  let mx = 0;
+  for (let i = 0; i < ABINS; i++) mx = Math.max(mx, aHist[i]);
+  // 理论曲线每格期望
+  const theo = i => aM * (arcsineCDF((i + 1) / ABINS) - arcsineCDF(i / ABINS));
+  for (let i = 0; i < ABINS; i++) mx = Math.max(mx, theo(i));
+  g.fillStyle = 'rgba(31,58,110,0.55)';
+  for (let i = 0; i < ABINS; i++) {
+    const h = aHist[i] / (mx || 1) * HH2;
+    g.fillRect(i / ABINS * W + 1, HY0 + HH2 - h, W / ABINS - 2, h);
+  }
+  g.strokeStyle = '#c0392b'; g.lineWidth = 2; g.beginPath();
+  for (let i = 0; i < ABINS; i++) {
+    const x = (i + 0.5) / ABINS * W, y = HY0 + HH2 - theo(i) / (mx || 1) * HH2;
+    i ? g.lineTo(x, y) : g.moveTo(x, y);
+  }
+  g.stroke();
+  g.fillStyle = '#888';
+  g.fillText('领先时间占比 0 → 1 的直方图; 红线 = 反正弦理论', 10, HY0 + 14);
+  g.fillText('0', 4, H - 8); g.fillText('0.5', W / 2 - 10, H - 8); g.fillText('1', W - 14, H - 8);
+  const p9t = 1 - arcsineCDF(0.9), pmt = arcsineCDF(0.55) - arcsineCDF(0.45);
+  $('aStat').textContent = `M = ${aM.toLocaleString()} 局　P(占比>0.9) 实测 ${aM ? (aHi9 / aM).toFixed(3) : '—'} / 理论 ${p9t.toFixed(3)}`
+    + `　P(0.45~0.55) 实测 ${aM ? (aMid / aM).toFixed(3) : '—'} / 理论 ${pmt.toFixed(3)}`;
+}
+
+// ---------- 赌徒破产 ----------
+let rGames = 0, rRuin = 0, rPaths = [];
+function ruinReset() { rGames = 0; rRuin = 0; rPaths = []; }
+function ruinFrame() {
+  const a = +$('ra').value, b = Math.max(+$('rb').value, a + 1), p = +$('rp').value / 100;
+  $('ra2').textContent = 'a=' + a; $('rb2').textContent = 'b=' + b; $('rp2').textContent = 'p=' + p.toFixed(2);
+  for (let i = 0; i < 400; i++) {
+    const keep = rPaths.length < 8 && i < 1;
+    const path = keep ? [a] : null;
+    const r = ruinSim(a, b, p, rng, 1e6, path);
+    if (keep) rPaths.push({ path, r });
+    if (r >= 0) { rGames++; rRuin += r; }
+  }
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  // 参照线
+  const Y = v => H - 20 - v / b * (H - 50);
+  g.strokeStyle = '#e3e3e3';
+  for (const v of [0, a, b]) { g.beginPath(); g.moveTo(0, Y(v)); g.lineTo(W, Y(v)); g.stroke(); }
+  g.fillStyle = '#888'; g.font = '12px Menlo';
+  g.fillText('0 破产', 6, Y(0) - 4); g.fillText('a=' + a, 6, Y(a) - 4); g.fillText('b=' + b + ' 收手', 6, Y(b) + 14);
+  const Lmax = Math.max(...rPaths.map(q => q.path.length), 50);
+  for (const { path, r } of rPaths) {
+    g.strokeStyle = r === 1 ? 'rgba(192,57,43,0.8)' : 'rgba(39,113,61,0.8)';
+    g.lineWidth = 1.2; g.beginPath();
+    for (let k = 0; k < path.length; k++) {
+      const x = k / Lmax * W, y = Y(path[k]);
+      k ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.stroke();
+  }
+  const th = ruinTheory(a, b, p);
+  $('rStat').textContent = `已模拟 ${rGames.toLocaleString()} 局　实测破产率 = ${rGames ? (rRuin / rGames).toFixed(4) : '—'}`
+    + `　理论 = ${th.toFixed(4)}　(红 = 破产样本, 绿 = 达标样本)`;
+}
+
+// ---------- Pólya ----------
+const PWALKERS = 3000, PMAX = 30000;
+const CHK = [];
+for (let v = 10; v <= PMAX; v = Math.ceil(v * 1.35)) CHK.push(v);
+let pState = null;
+function polyaReset() {
+  pState = [1, 2, 3].map(d => ({
+    d,
+    pos: Array.from({ length: PWALKERS }, () => new Array(d).fill(0)),
+    ret: new Uint8Array(PWALKERS),
+    steps: 0,
+    curve: [],
+  }));
+}
+function polyaFrame() {
+  const per = 120;                             // 每帧每维走 120 步
+  for (const st of pState) {
+    if (st.steps >= PMAX) continue;
+    for (let s = 0; s < per; s++) {
+      st.steps++;
+      for (let i = 0; i < PWALKERS; i++) {
+        if (st.ret[i]) continue;
+        stepDim(st.pos[i], st.d, rng);
+        if (atOrigin(st.pos[i])) st.ret[i] = 1;
+      }
+      if (CHK.includes(st.steps)) {
+        let c = 0;
+        for (let i = 0; i < PWALKERS; i++) c += st.ret[i];
+        st.curve.push([st.steps, c / PWALKERS]);
+      }
+    }
+  }
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  const X = n => Math.log(n / 10) / Math.log(PMAX / 10) * (W - 70) + 50;
+  const Y = f => H - 30 - f * (H - 70);
+  g.strokeStyle = '#e3e3e3'; g.fillStyle = '#888'; g.font = '12px Menlo';
+  for (const f of [0, 0.2, 0.34, 0.5, 0.8, 1]) {
+    g.beginPath(); g.moveTo(50, Y(f)); g.lineTo(W, Y(f)); g.stroke();
+    g.fillText(f.toFixed(2), 8, Y(f) + 4);
+  }
+  for (const n of [10, 100, 1000, 10000, 30000]) {
+    g.beginPath(); g.moveTo(X(n), Y(0)); g.lineTo(X(n), Y(1)); g.stroke();
+    g.fillText(n >= 1000 ? n / 1000 + 'k' : n, X(n) - 10, H - 10);
+  }
+  g.strokeStyle = '#c0392b'; g.setLineDash([6, 4]);
+  g.beginPath(); g.moveTo(50, Y(0.3405)); g.lineTo(W, Y(0.3405)); g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = '#c0392b'; g.fillText('3D 理论极限 0.3405', W - 190, Y(0.3405) - 6);
+  const COLS = { 1: '#1f3a6e', 2: '#27713d', 3: '#c0392b' };
+  const stat = [];
+  for (const st of pState) {
+    g.strokeStyle = COLS[st.d]; g.lineWidth = 2; g.beginPath();
+    st.curve.forEach(([n, f], k) => { k ? g.lineTo(X(n), Y(f)) : g.moveTo(X(n), Y(f)); });
+    g.stroke();
+    let c = 0;
+    for (let i = 0; i < PWALKERS; i++) c += st.ret[i];
+    stat.push(`${st.d}D: ${(c / PWALKERS).toFixed(3)}`);
+    g.fillStyle = COLS[st.d];
+    const last = st.curve[st.curve.length - 1];
+    if (last) g.fillText(st.d + 'D', X(last[0]) + 6, Y(last[1]));
+  }
+  $('pStat').textContent = `已回到原点的比例(${PWALKERS} 个游走者, 实测) — ` + stat.join('　')
+    + `　步数 ${Math.min(...pState.map(s => s.steps)).toLocaleString()} / ${PMAX.toLocaleString()}`;
+}
+
+// ---------- 调度 ----------
+document.querySelectorAll('button[data-t]').forEach(b => b.addEventListener('click', () => {
+  TAB = b.dataset.t;
+  document.querySelectorAll('button[data-t]').forEach(x => x.classList.toggle('on', x === b));
+  for (const t of ['arc', 'ruin', 'polya']) {
+    $('bar-' + t).style.display = t === TAB ? 'flex' : 'none';
+    $('hint-' + t).style.display = t === TAB ? 'block' : 'none';
+  }
+}));
+$('aReset').addEventListener('click', arcReset);
+$('aT').addEventListener('input', arcReset);
+$('rReset').addEventListener('click', ruinReset);
+for (const id of ['ra', 'rb', 'rp']) $(id).addEventListener('input', ruinReset);
+arcReset(); ruinReset(); polyaReset();
+(function loop() {
+  if (TAB === 'arc') arcFrame();
+  else if (TAB === 'ruin') ruinFrame();
+  else polyaFrame();
+  requestAnimationFrame(loop);
+})();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>

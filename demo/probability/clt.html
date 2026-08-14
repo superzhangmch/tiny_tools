@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>中心极限定理：手绘一个分布，看均值被揉成正态</title>
+<style>
+  body { margin: 0; padding: 12px 16px; background: #fff; color: #222;
+         font-family: Arial, "PingFang SC", sans-serif; }
+  h1 { font-size: 18px; margin: 4px 0 8px; }
+  button { padding: 4px 12px; font-size: 13px; cursor: pointer; background: #f2f3f5; color: #222;
+    border: 1px solid #bbb; border-radius: 3px; }
+  button:hover { background: #e2e6ee; }
+  button.on { background: #2b5fb8; color: #fff; border-color: #2b5fb8; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+  .hint { color: #555; font-size: 12.5px; line-height: 1.6; max-width: 1150px; margin-top: 8px; }
+  .mono { font-family: Menlo, Consolas, monospace; }
+  canvas { display: block; border: 1px solid #999; touch-action: none; }
+  .cap { font-size: 12px; color: #555; margin: 2px 0 8px; }
+  b.k { color: #b03030; }
+  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .hint { display: none !important; }
+</style>
+</head>
+<body>
+<h1>中心极限定理：手绘一个分布，看 n 个的均值被揉成正态</h1>
+<div class="bar">
+  预设:
+  <button data-p="uniform">均匀</button>
+  <button data-p="bimodal">双峰</button>
+  <button data-p="decay">衰减</button>
+  <button data-p="saw">锯齿</button>
+  <button data-p="cauchy">柯西（重尾反例）</button>
+  <button id="clearD">清空重画</button>
+  n = <input type="range" id="ns" min="0" max="12" value="0" style="width:200px"><span class="mono" id="ns2"></span>
+  <label><input type="checkbox" id="std" checked> 标准化视图 (x̄−μ)/(σ/√n)</label>
+</div>
+<div class="bar mono" id="stat"></div>
+<canvas id="dcv" width="1100" height="170"></canvas>
+<div class="cap">母分布 f(x)（<b>在这里拖动手绘</b>，画什么形状都行；柯西预设为解析分布，重尾在画布外才是重点，不可手绘）</div>
+<canvas id="hcv" width="1100" height="360"></canvas>
+<div class="cap">n 个独立样本的<b>均值</b>的直方图（持续累计中）；红曲线 = 理论正态 N(μ, σ²/n)（由母分布的实测矩算出，不是拟合直方图）；柯西时红曲线 = 柯西密度本身</div>
+<div class="hint">
+  <b>定理</b>：只要母分布方差有限，x̄ₙ = (X₁+…+Xₙ)/n 标准化后 → N(0,1)，<b>与母分布形状无关</b>。
+  拉 n：n=1 是你画的原样；n=2 开始平滑（卷积）；n≈30 基本认不出出身。实测偏度按 1/√n、超额峰度按 1/n 衰减（读数在上方，可对照）。
+  <b class="k">反例</b>：柯西分布方差无穷，n 个柯西的均值<b>仍是同一个柯西</b>——直方图随 n 纹丝不动，CLT 的"方差有限"前提不是套话。
+  诚实声明：直方图、偏度、峰度、视野外占比全部来自实际采样计数；正态曲线的 μ、σ² 来自你画的密度的精确积分（分段常数密度的解析矩），不是对直方图的拟合。
+</div>
+
+<script>
+'use strict';
+// ===== 核心（无 DOM）=====
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// 手绘密度 f[K] (分段常数, 定义在 [0,1]) → 精确矩 + 逆 CDF 采样器
+function buildSampler(f) {
+  const K = f.length, dx = 1 / K;
+  let tot = 0;
+  for (let i = 0; i < K; i++) tot += f[i];
+  if (!(tot > 0)) return null;
+  const p = Array.from(f, v => v / tot);            // 每格概率
+  let mu = 0, ex2 = 0;
+  for (let i = 0; i < K; i++) {
+    const xc = (i + 0.5) * dx;
+    mu += p[i] * xc;
+    ex2 += p[i] * (xc * xc + dx * dx / 12);         // 格内均匀: E[x²] 含 Δ²/12
+  }
+  const sigma2 = ex2 - mu * mu;
+  const cdf = new Float64Array(K + 1);
+  for (let i = 0; i < K; i++) cdf[i + 1] = cdf[i] + p[i];
+  cdf[K] = 1;
+  const sample = rng => {
+    const u = rng();
+    let lo = 0, hi = K;                             // cdf[lo] <= u < cdf[hi], 二分
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (cdf[mid] <= u) lo = mid; else hi = mid;
+    }
+    const w = cdf[lo + 1] - cdf[lo];
+    return (lo + (w > 0 ? (u - cdf[lo]) / w : 0.5)) * dx;   // 格内均匀
+  };
+  return { mu, sigma2, sample };
+}
+const cauchySample = rng => Math.tan(Math.PI * (rng() - 0.5));
+function meanOf(sampleFn, n, rng) {
+  let s = 0;
+  for (let i = 0; i < n; i++) s += sampleFn(rng);
+  return s / n;
+}
+// 流式矩: 收 s1..s4, 出 偏度/超额峰度
+function makeMoments() {
+  let M = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0;
+  return {
+    add(v) { M++; s1 += v; s2 += v * v; s3 += v * v * v; s4 += v * v * v * v; },
+    stats() {
+      if (M < 8) return null;
+      const m = s1 / M, e2 = s2 / M, e3 = s3 / M, e4 = s4 / M;
+      const v = e2 - m * m;
+      if (v <= 0) return null;
+      const c3 = e3 - 3 * m * e2 + 2 * m ** 3;
+      const c4 = e4 - 4 * m * e3 + 6 * m * m * e2 - 3 * m ** 4;
+      return { M, mean: m, variance: v, skew: c3 / Math.pow(v, 1.5), exkurt: c4 / (v * v) - 3 };
+    },
+  };
+}
+// ===== 核心结束 =====
+
+const K = 256;
+let fvals = new Float64Array(K);
+let useCauchy = false;
+let sampler = null;
+const NS = [1, 2, 3, 4, 5, 8, 12, 20, 30, 50, 100, 300, 1000];
+const rng = mulberry32(20260812);
+
+const dcv = document.getElementById('dcv'), gD = dcv.getContext('2d');
+const hcv = document.getElementById('hcv'), gH = hcv.getContext('2d');
+const DW = dcv.width, DH = dcv.height, HW = hcv.width, HH = hcv.height;
+const BINS = 121;
+let hist = new Float64Array(BINS), outLo = 0, outHi = 0;
+let mom = makeMoments();
+const MMAX = 300000;
+
+// --- 手绘母分布 ---
+let drawing = false, lastX = null;
+dcv.addEventListener('pointerdown', e => {
+  if (useCauchy) return;
+  drawing = true; lastX = null; dcv.setPointerCapture(e.pointerId); dpaint(e);
+});
+dcv.addEventListener('pointermove', e => { if (drawing) dpaint(e); });
+dcv.addEventListener('pointerup', () => { drawing = false; lastX = null; rebuild(); });
+function dpaint(e) {
+  const r = dcv.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  const i = Math.max(0, Math.min(K - 1, Math.floor(x * K)));
+  const h = Math.max(0, Math.min(1, 1 - y));
+  if (lastX !== null && Math.abs(i - lastX[0]) > 1) {       // 两次事件间线性补齐
+    const [i0, h0] = lastX, d = i - i0, sgn = Math.sign(d);
+    for (let k = 1; k <= Math.abs(d); k++)
+      fvals[i0 + sgn * k] = h0 + (h - h0) * k / Math.abs(d);
+  } else fvals[i] = h;
+  lastX = [i, h];
+  drawDensity();
+}
+
+// --- 预设 ---
+const PRESETS = {
+  uniform: () => fvals.fill(0.7),
+  bimodal: () => {
+    for (let i = 0; i < K; i++) {
+      const x = (i + 0.5) / K;
+      fvals[i] = Math.exp(-(((x - 0.22) / 0.07) ** 2)) + 0.55 * Math.exp(-(((x - 0.74) / 0.10) ** 2));
+    }
+  },
+  decay: () => { for (let i = 0; i < K; i++) fvals[i] = Math.exp(-4.5 * (i + 0.5) / K); },
+  saw: () => { for (let i = 0; i < K; i++) fvals[i] = ((i * 5 / K) % 1) * (1 - 0.5 * i / K); },
+  cauchy: null,
+};
+document.body.addEventListener('click', e => {
+  const p = e.target.dataset && e.target.dataset.p;
+  if (!p) return;
+  document.querySelectorAll('button[data-p]').forEach(b => b.classList.toggle('on', b === e.target));
+  if (p === 'cauchy') { useCauchy = true; }
+  else { useCauchy = false; fvals.fill(0); PRESETS[p](); }
+  rebuild();
+});
+document.getElementById('clearD').addEventListener('click', () => {
+  useCauchy = false; fvals.fill(0); rebuild();
+});
+document.getElementById('ns').addEventListener('input', rebuild);
+document.getElementById('std').addEventListener('change', rebuild);
+
+function drawDensity() {
+  gD.fillStyle = '#fff'; gD.fillRect(0, 0, DW, DH);
+  gD.strokeStyle = '#e3e3e3';
+  gD.beginPath(); gD.moveTo(0, DH - 1); gD.lineTo(DW, DH - 1); gD.stroke();
+  if (useCauchy) {
+    gD.strokeStyle = '#1f3a6e'; gD.lineWidth = 2; gD.beginPath();
+    for (let px = 0; px <= DW; px++) {
+      const x = -8 + 16 * px / DW;
+      const y = DH - (1 / (Math.PI * (1 + x * x))) / (1 / Math.PI) * (DH - 24) - 4;
+      px ? gD.lineTo(px, y) : gD.moveTo(px, y);
+    }
+    gD.stroke();
+    gD.fillStyle = '#888'; gD.font = '12px Menlo';
+    gD.fillText('标准柯西 1/(π(1+x²)), 画布只显示 [-8, 8] —— 两侧尾巴一直延伸到 ±∞ (方差发散的根源)', 14, 18);
+  } else {
+    gD.fillStyle = 'rgba(31,58,110,0.25)'; gD.strokeStyle = '#1f3a6e'; gD.lineWidth = 1.6;
+    gD.beginPath(); gD.moveTo(0, DH);
+    for (let i = 0; i < K; i++) gD.lineTo((i + 0.5) / K * DW, DH - fvals[i] * (DH - 14));
+    gD.lineTo(DW, DH); gD.closePath(); gD.fill(); gD.stroke();
+  }
+}
+
+// --- 累计与直方图 ---
+let histLo = 0, histHi = 1;
+function rebuild() {
+  sampler = useCauchy ? { mu: NaN, sigma2: Infinity, sample: cauchySample } : buildSampler(fvals);
+  hist.fill(0); outLo = 0; outHi = 0; mom = makeMoments();
+  const n = NS[+document.getElementById('ns').value];
+  const std = document.getElementById('std').checked && !useCauchy && sampler;
+  if (useCauchy) { histLo = -8; histHi = 8; }
+  else if (sampler) {
+    if (std) { histLo = -4.5; histHi = 4.5; }
+    else {
+      const s = Math.sqrt(sampler.sigma2 / n);
+      histLo = sampler.mu - 4.5 * s; histHi = sampler.mu + 4.5 * s;
+    }
+  }
+  drawDensity();
+  drawHist();
+}
+function accumulate() {
+  if (!sampler) return;
+  const n = NS[+document.getElementById('ns').value];
+  const stdOn = document.getElementById('std').checked && !useCauchy;
+  const cur = mom.stats();
+  if (cur && cur.M >= MMAX) return;
+  const batch = Math.max(60, Math.min(4000, Math.floor(60000 / n)));
+  const sd = useCauchy ? 1 : Math.sqrt(sampler.sigma2 / n);
+  for (let b = 0; b < batch; b++) {
+    let v = meanOf(sampler.sample, n, rng);
+    if (stdOn) v = (v - sampler.mu) / sd;
+    mom.add(v);
+    if (v < histLo) outLo++;
+    else if (v >= histHi) outHi++;
+    else hist[Math.floor((v - histLo) / (histHi - histLo) * BINS)]++;
+  }
+}
+function drawHist() {
+  gH.fillStyle = '#fff'; gH.fillRect(0, 0, HW, HH);
+  const s = mom.stats();
+  const M = s ? s.M : 0;
+  let mx = 0;
+  for (let i = 0; i < BINS; i++) if (hist[i] > mx) mx = hist[i];
+  // 理论曲线值(每格期望计数)
+  const n = NS[+document.getElementById('ns').value];
+  const stdOn = document.getElementById('std').checked && !useCauchy;
+  const binw = (histHi - histLo) / BINS;
+  const theo = px => {
+    const x = histLo + (histHi - histLo) * px / HW;
+    if (useCauchy) return M * binw / (Math.PI * (1 + x * x));       // 均值仍是标准柯西
+    if (!sampler) return 0;
+    const mu = stdOn ? 0 : sampler.mu;
+    const sd = stdOn ? 1 : Math.sqrt(sampler.sigma2 / n);
+    return M * binw * Math.exp(-(((x - mu) / sd) ** 2) / 2) / (sd * Math.sqrt(2 * Math.PI));
+  };
+  let tmx = 0;
+  for (let px = 0; px <= HW; px += 8) tmx = Math.max(tmx, theo(px));
+  const top = Math.max(mx, tmx) * 1.08 || 1;
+  // 直方图
+  gH.fillStyle = 'rgba(31,58,110,0.55)';
+  const bw = HW / BINS;
+  for (let i = 0; i < BINS; i++)
+    if (hist[i] > 0) {
+      const h = hist[i] / top * (HH - 10);
+      gH.fillRect(i * bw + 0.5, HH - h, bw - 1, h);
+    }
+  // 理论曲线
+  if (M > 0) {
+    gH.strokeStyle = '#c0392b'; gH.lineWidth = 1.8; gH.beginPath();
+    for (let px = 0; px <= HW; px++) {
+      const y = HH - theo(px) / top * (HH - 10);
+      px ? gH.lineTo(px, y) : gH.moveTo(px, y);
+    }
+    gH.stroke();
+  }
+  // 横轴刻度
+  gH.fillStyle = '#888'; gH.font = '11px Menlo';
+  for (let t = 0; t <= 6; t++) {
+    const x = histLo + (histHi - histLo) * t / 6;
+    gH.fillText(x.toPrecision(3), t / 6 * (HW - 44) + 4, HH - 6);
+  }
+  // 读数
+  const nShow = NS[+document.getElementById('ns').value];
+  document.getElementById('ns2').textContent = 'n=' + nShow;
+  let line = useCauchy
+    ? `母分布: 柯西, μ 不存在, σ² = ∞　n = ${nShow}`
+    : (sampler ? `母分布实测矩: μ = ${sampler.mu.toFixed(4)}, σ² = ${sampler.sigma2.toFixed(5)}　n = ${nShow}` : '画布是空的, 先画个密度');
+  if (s) {
+    line += `　已累计 M = ${s.M.toLocaleString()}　实测偏度 = ${s.skew.toFixed(3)}　实测超额峰度 = ${s.exkurt.toFixed(3)}`;
+    const outP = (outLo + outHi) / s.M;
+    if (outP > 0.0005) line += `　视野外 ${(100 * outP).toFixed(1)}%`;
+  }
+  document.getElementById('stat').textContent = line;
+}
+function loop() {
+  accumulate();
+  drawHist();
+  requestAnimationFrame(loop);
+}
+document.querySelector('button[data-p="bimodal"]').classList.add('on');
+PRESETS.bimodal();
+rebuild();
+loop();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>
