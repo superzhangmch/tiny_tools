@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terrell–Penrose 效应：光子级物理模拟</title>
+<style>
+:root{
+  --surface:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --base:#c3c2b7; --s1:#2a78d6; --s2:#eb6834; --down:#d03b3b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--page);color:var(--ink);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+#app{display:flex;flex-direction:column;height:100%}
+#toolbar{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding:6px 10px;
+  background:var(--surface);border-bottom:1px solid var(--grid);font-size:13px}
+button{font:12px system-ui;padding:3px 9px;border:1px solid var(--base);border-radius:5px;
+  background:var(--surface);color:var(--ink);cursor:pointer}
+button:hover{background:#f0efec}
+#toolbar label{color:var(--ink2)}
+input[type=range]{vertical-align:middle}
+#main{flex:1;display:flex;min-height:0}
+#left{flex:1;display:flex;flex-direction:column;min-width:0;padding:8px;gap:8px;overflow-y:auto}
+.vrow{display:flex;flex-direction:column;gap:8px}
+.vbox{background:var(--surface);border:1px solid var(--grid);border-radius:10px;padding:6px 8px}
+.vbox .vt{font-size:12.5px;color:var(--ink2);margin-bottom:3px}
+.vbox .vt b{color:var(--ink)}
+canvas{display:block;background:#0d0f14;border-radius:6px;width:100%}
+#side{width:330px;overflow-y:auto;background:var(--surface);border-left:1px solid var(--grid);
+  padding:8px 10px;flex-shrink:0;font-size:13px}
+#side details{margin-bottom:8px;border:1px solid var(--grid);border-radius:8px;padding:6px 9px}
+#side summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink2)}
+#meas table{border-collapse:collapse;width:100%;font-size:12.5px;font-variant-numeric:tabular-nums}
+#meas td{padding:2px 4px;border-bottom:1px dashed var(--grid);color:var(--ink2)}
+#meas td:last-child{text-align:right;color:var(--ink)}
+#tips{font-size:12px;color:var(--ink2)} #tips li{margin:4px 0}
+.hl{color:var(--s2);font-weight:600}
+@media (max-width:860px){#main{flex-direction:column}#side{width:100%;border-left:none;border-top:1px solid var(--grid)}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <button id="bPause">⏸ 暂停</button>
+    <button id="bRestart">↺ 重新飞一遍</button>
+    <label>时间线 <input id="rTime" type="range" min="0" max="1" step="0.002" value="0" style="width:170px">
+      <span id="tTime" style="font-variant-numeric:tabular-nums">0.0s</span></label>
+    <label>β = v/c <input id="rBeta" type="range" min="0" max="0.95" step="0.05" value="0.9" style="width:110px">
+      <b id="tBeta">0.90</b></label>
+    <label>γ = <b id="tGamma">2.29</b></label>
+    <label>物体 <select id="selScene">
+      <option value="cube" selected>立方体</option>
+      <option value="sphere">球（Penrose 圆轮廓）</option>
+      <option value="row">三个立方体</option>
+      <option value="plate">平面板（无厚度→旋转消失）</option>
+    </select></label>
+    <label>着色 <select id="selColor">
+      <option value="face" selected>按表面</option>
+      <option value="age">按光龄（光子飞了多久）</option>
+    </select></label>
+    <label>速度 <select id="selSpeed"><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option></select>×</label>
+  </div>
+  <div id="main">
+    <div id="left">
+      <div class="vrow">
+        <div class="vbox"><div class="vt"><b>对照视图</b>
+          <select id="selLeft" style="float:right;font-size:12px">
+            <option value="naive" selected>教科书天真：收缩,无光程延迟</option>
+            <option value="newton">牛顿常识：不收缩,无延迟</option>
+            <option value="newtonphoto">牛顿照片：不收缩,但光仍以 c 飞</option>
+          </select><br><span id="leftDesc">即时投影 → 只会看到<span style="color:var(--down)">压扁 1/γ</span>，但这不是相机拍到的</span></div>
+          <canvas id="cNaive" width="900" height="150"></canvas></div>
+        <div class="vbox"><div class="vt"><b>相机真正拍到的</b>
+          <select id="selPhoto" style="float:right;font-size:12px">
+            <option value="sim" selected>真模拟：光子粒子(涌现)</option>
+            <option value="formula">公式：解析延迟解(不发光子)</option>
+            <option value="both">叠加对比(公式=白框)</option>
+          </select><br>同时到达针孔的光子成像 → 旋转是<span class="hl">涌现</span>的</div>
+          <canvas id="cPhoto" width="900" height="150"></canvas></div>
+      </div>
+      <div class="vbox"><div class="vt"><b>上帝视角（俯视实验室系）</b>：物体真的是压扁的在飞；点 = 飞行中的光子（颜色 = 出发早晚）；
+        照片 = 同一瞬间抵达底部相机的那批光子</div>
+        <canvas id="cGod" width="900" height="170"></canvas></div>
+    </div>
+    <div id="side">
+      <details open><summary>涌现测量（从光子统计,非公式）</summary><div id="meas"></div></details>
+      <details open><summary>这为什么是"物理模拟"</summary><ul id="tips">
+        <li>整个程序只注入两条物理：① <b>光子沿直线以 c 飞</b>（每个光子是真实粒子,从表面某点某时刻出发）；② 物体世界线：实验室系中匀速 v、沿运动方向收缩 1/γ（输入的事实,非结论）。</li>
+        <li>相机 = 针孔 + 快门：<b>同一瞬间到达针孔的光子构成一张照片</b>,按入射方向落到像素。没有旋转公式、没有光行差公式、没有任何投影修正。</li>
+        <li>右图的旋转从哪来？远端的光要多飞一段路,必须<b>更早出发</b>——照片是"不同时刻的物体"拼成的马赛克。切到"按光龄"着色能直接看到这张照片的时间拼缝。</li>
+        <li><b>立方体</b>：天真图里它是压扁的薄片；照片里它转了过去——本不该看见的<b>尾面</b>（青色）出现了,顶面被剪切成旋转的样子。</li>
+        <li><b>球（Penrose）</b>：天真图是 1/γ 的椭圆；照片轮廓始终是<b>正圆</b>——收缩与光程延迟精确合谋,把球"转"了一下,而球怎么转轮廓都是圆。右侧测量面板给出从光子云实测的宽高比。</li>
+        <li><b>牛顿照片</b>（左图第三档）：把收缩关掉、只留光程延迟——伽利略宇宙的相机会把方块拍成剪切/拉伸的怪相。对比右图可见 Terrell 旋转的本质：<b>洛伦兹收缩恰好抵消延迟造成的畸变</b>，把"怪相"修成"看起来刚性的旋转"。</li>
+        <li>近似说明：可见性按发射时刻做背面剔除（凸体精确）；未模拟飞行途中被物体后续位置遮挡（v&lt;c 时影响极小）；未做多普勒变色/亮度聚束（那需要波动模拟,超出光子直线飞行的范围）。</li>
+      </ul></details>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== 核心（无 DOM）====================
+'use strict';
+// 唯一注入的物理:
+//   1. 光子沿直线以 c 飞行: 到达时刻 = 发出时刻 + 距离/c
+//   2. 物体世界线: 实验室系匀速 v, 沿运动方向收缩 1/γ
+// 相机 = 针孔: 同一瞬间到达的光子按入射方向成像。旋转/圆轮廓均为涌现结果。
+
+const TCFG={ c:300, D:290, L:78, R:52, PATH:720, EMIT_DT:0.035, F:330 };
+// c: 光速(单位/秒)  D: 物体到相机距离  L: 立方体边长  R: 球半径
+// PATH: 半程  EMIT_DT: 每隔多久发一波光子  F: 针孔焦距(像素)
+
+function buildPatches(scene){
+  const P=[];
+  const cube=(cx,cy,cz,L,tag)=>{
+    const n=11,h=L/2,S=L/n;
+    // 6 个面: faceId: +x 迎面(领先) / -x 尾面 / -z 朝相机(前) / +z 背 / ±y 上下
+    const faces=[
+      {id:'+x',n:[1,0,0], f:(a,b)=>[ h,-h+S*(a+.5),-h+S*(b+.5)]},
+      {id:'-x',n:[-1,0,0],f:(a,b)=>[-h,-h+S*(a+.5),-h+S*(b+.5)]},
+      {id:'-z',n:[0,0,-1],f:(a,b)=>[-h+S*(a+.5),-h+S*(b+.5),-h]},
+      {id:'+z',n:[0,0,1], f:(a,b)=>[-h+S*(a+.5),-h+S*(b+.5), h]},
+      {id:'-y',n:[0,-1,0],f:(a,b)=>[-h+S*(a+.5),-h,-h+S*(b+.5)]},
+      {id:'+y',n:[0,1,0], f:(a,b)=>[-h+S*(a+.5), h,-h+S*(b+.5)]},
+    ];
+    for(const fc of faces)for(let a=0;a<n;a++)for(let b=0;b<n;b++){
+      const [x,y,z]=fc.f(a,b);
+      P.push({rx:x+cx,ry:y+cy,rz:z+cz,nx:fc.n[0],ny:fc.n[1],nz:fc.n[2],face:fc.id,tag,
+        chk:(a+b)%2});
+    }
+  };
+  if(scene==='cube')cube(0,0,0,TCFG.L,0);
+  else if(scene==='row'){const g=TCFG.L*2.4;cube(-g,0,0,TCFG.L*0.85,0);cube(0,0,0,TCFG.L*0.85,1);cube(g,0,0,TCFG.L*0.85,2);}
+  else if(scene==='plate'){ // 无厚度平面板: 只有一张朝向相机的脸 → Terrell 旋转消失
+    const n=13,L=TCFG.L*1.15,S=L/n,h=L/2;
+    for(let a=0;a<n;a++)for(let b=0;b<n;b++)
+      P.push({rx:-h+S*(a+.5),ry:-h+S*(b+.5),rz:0,nx:0,ny:0,nz:-1,face:'-z',tag:0,chk:(a+b)%2});
+  }
+  else{ // 球: 经纬网格
+    const R=TCFG.R,NLA=15,NLO=30;
+    for(let i=0;i<NLA;i++)for(let j=0;j<NLO;j++){
+      const th=Math.PI*(i+.5)/NLA, ph=2*Math.PI*(j+.5)/NLO;
+      const x=R*Math.sin(th)*Math.cos(ph),y=R*Math.cos(th),z=R*Math.sin(th)*Math.sin(ph);
+      P.push({rx:x,ry:y,rz:z,nx:x/R,ny:y/R,nz:z/R,face:'球',tag:0,
+        chk:(Math.floor(i/2)+Math.floor(j/3))%2});
+    }
+  }
+  return P;
+}
+
+class TerrellSim{
+  constructor(beta,scene){
+    this.beta=beta;this.scene=scene;
+    this.gamma=1/Math.sqrt(1-beta*beta);
+    this.v=beta*TCFG.c;
+    this.patches=buildPatches(scene);
+    this.t=0;this.x0=-TCFG.PATH;
+    this.photons=[];        // 飞行中 {te,px,py,pz,ux,uy,uz,ta,face,chk,tag,dist}
+    this.arrived=[];        // 近期到达 {ta,te,sx,sy,face,chk,tag,dist}
+    this.emitAcc=0;this.done=false;
+    this.maxT=this.v>0?(2*TCFG.PATH/this.v+2.5):Infinity;   // β=0 时永不结束(静止展示)
+  }
+  centerX(t){return this.x0+this.v*t;}
+  // 实验室系中 patch 的位置: 沿 x 收缩 1/γ
+  labPos(p,t){const cx=this.centerX(t);
+    return [cx+p.rx/this.gamma, p.ry, TCFG.D+p.rz];}
+  // 收缩曲面的法向变换: n' ∝ (γ·nx, ny, nz)
+  labNormal(p,g){g=g||this.gamma;const x=p.nx*g,y=p.ny,z=p.nz;
+    const L=Math.hypot(x,y,z);return [x/L,y/L,z/L];}
+  // 可见性(凸体下精确): 光子相对"运动中的物体"的速度在外法向分量 ≥ 0 才能逃逸。
+  // 静态背面剔除在高 β 下是错的——物体会让开/追上光子, 这正是"看见背面"的来源。
+  canEscape(p,ux,uy,uz){
+    const [nx,ny,nz]=this.labNormal(p);
+    return nx*(TCFG.c*ux-this.v)+ny*TCFG.c*uy+nz*TCFG.c*uz>0;
+  }
+  emitWave(te){
+    for(const p of this.patches){
+      const [x,y,z]=this.labPos(p,te);
+      const d=Math.hypot(x,y,z);
+      const ux=-x/d,uy=-y/d,uz=-z/d;      // 朝针孔(原点)方向
+      if(!this.canEscape(p,ux,uy,uz))continue;
+      this.photons.push({te,px:x,py:y,pz:z,ux,uy,uz,
+        ta:te+d/TCFG.c,face:p.face,chk:p.chk,tag:p.tag,dist:d});
+    }
+  }
+  step(dt){
+    if(this.done)return;
+    let rem=dt;
+    while(rem>0){
+      const h=Math.min(rem,TCFG.EMIT_DT-this.emitAcc);
+      this.t+=h;this.emitAcc+=h;rem-=h;
+      if(this.emitAcc>=TCFG.EMIT_DT-1e-9){this.emitAcc=0;this.emitWave(this.t);}
+    }
+    // 到达检测(光子直线飞行, 到达即成像)
+    const keep=[];
+    for(const ph of this.photons){
+      if(ph.ta<=this.t){
+        if(ph.pz>40)this.arrived.push({ta:ph.ta,te:ph.te,face:ph.face,chk:ph.chk,tag:ph.tag,dist:ph.dist,
+          sx:TCFG.F*ph.px/ph.pz, sy:TCFG.F*ph.py/ph.pz});
+      }else keep.push(ph);
+    }
+    this.photons=keep;
+    // 照片 = 最近约 1.5 个发射周期内到达的光子(一整波)
+    const win=TCFG.EMIT_DT*1.6;
+    this.arrived=this.arrived.filter(a=>a.ta>this.t-win);
+    if(this.t>this.maxT||(this.centerX(this.t)>TCFG.PATH&&this.photons.length===0))this.done=true;
+  }
+  // ---- 统一投影器: 收缩因子 g 与 是否计光程延迟 可组合 ----
+  //   g=γ, delay=true  → 公式解析解(严格相对论照片, retarded time 闭式解)
+  //   g=γ, delay=false → 教科书天真(收缩,无延迟)
+  //   g=1, delay=false → 牛顿常识(不收缩,无延迟)
+  //   g=1, delay=true  → 牛顿世界的照片(不收缩,但光仍以 c 飞——伽利略宇宙)
+  _project(g,delay){
+    const T=this.t,c=TCFG.c,v=this.v,out=[];
+    for(const p of this.patches){
+      const X0=this.x0+p.rx/g, y=p.ry, z=TCFG.D+p.rz;
+      let te,x;
+      if(delay){ // |p(t_e)| = c(T-t_e) → 对 t_e 的二次方程
+        const A=v*v-c*c, B=2*(X0*v+c*c*T), C=X0*X0+y*y+z*z-c*c*T*T;
+        const disc=B*B-4*A*C; if(disc<0)continue;
+        const sq=Math.sqrt(disc);
+        te=null;
+        for(const r of [(-B+sq)/(2*A),(-B-sq)/(2*A)])
+          if(r<T&&r>=0&&(te===null||r>te))te=r;   // 取最近的一次有效发射
+        if(te===null)continue;
+        x=X0+v*te;
+      }else{te=T;x=X0+v*T;}
+      const d=Math.hypot(x,y,z);
+      const [nx,ny,nz]=this.labNormal(p,g);
+      // 有延迟 → 逃逸判据(相对速度); 无延迟的想象图 → 静态背面剔除
+      const vis=delay? nx*(c*(-x/d)-v)+ny*c*(-y/d)+nz*c*(-z/d)>0
+                     : nx*(-x)+ny*(-y)+nz*(-z)>0;
+      if(!vis)continue;
+      if(z>40)out.push({sx:TCFG.F*x/z,sy:TCFG.F*y/z,face:p.face,chk:p.chk,tag:p.tag,dist:d,te});
+    }
+    return out;
+  }
+  formulaPoints(){return this._project(this.gamma,true);}
+  newtonPoints(){return this._project(1,false);}
+  newtonPhotoPoints(){return this._project(1,true);}
+  // 天真视图: 收缩 + 无光程延迟的即时投影
+  naivePoints(){return this._project(this.gamma,false);}
+  // 从光子云实测(不用公式): 包围盒宽高比 / 尾面光子占比 / 视中心偏移
+  measure(pts){
+    if(pts.length<8)return null;
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9,rear=0;
+    for(const a of pts){
+      if(a.sx<x0)x0=a.sx;if(a.sx>x1)x1=a.sx;
+      if(a.sy<y0)y0=a.sy;if(a.sy>y1)y1=a.sy;
+      if(a.face==='-x')rear++;
+    }
+    return {w:x1-x0,h:y1-y0,aspect:(x1-x0)/Math.max(y1-y0,1e-9),
+      cx:(x0+x1)/2,rearFrac:rear/pts.length,n:pts.length};
+  }
+}
+// ==================== 核心结束 ====================
+
+// ==================== UI / 渲染 ====================
+const FACE_COL={'+x':'#eb6834','-x':'#1baf7a','-z':'#2a78d6','+z':'#4a3aa7','-y':'#eda100','+y':'#e87ba4','球':'#2a78d6'};
+const $=id=>document.getElementById(id);
+let sim,paused=false,playSpeed=1,colorMode='face';
+
+function newSim(){sim=new TerrellSim(+$('rBeta').value,$('selScene').value);}
+function ageColor(age,maxAge){ // 光龄: 新(蓝) → 老(红)
+  const u=Math.min(Math.max(age/maxAge,0),1);
+  return `hsl(${(1-u)*220},85%,60%)`;
+}
+function faceColor(a){
+  if(colorMode==='age')return ageColor(sim.t-a.te,(TCFG.D+TCFG.PATH*0.35)/TCFG.c);
+  let c=FACE_COL[a.face]||'#ccc';
+  if(a.face==='球')c=a.chk?'#2a78d6':'#cde2fb';
+  else if(a.chk===0)c=shade(c,-18);
+  if(sim.scene==='row'&&a.tag===1)c=shade(c,25);
+  return c;
+}
+function shade(hex,amt){
+  const n=parseInt(hex.slice(1),16);
+  const f=v=>Math.min(255,Math.max(0,v+amt));
+  return `rgb(${f(n>>16)},${f(n>>8&255)},${f(n&255)})`;
+}
+function drawImage(cv,pts,overlay){
+  const g=cv.getContext('2d'),W=cv.width,H=cv.height;
+  g.fillStyle='#0d0f14';g.fillRect(0,0,W,H);
+  // 地平参考网格
+  g.strokeStyle='rgba(255,255,255,.07)';g.lineWidth=1;
+  for(let x=0;x<W;x+=42){g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();}
+  g.beginPath();g.moveTo(0,H/2);g.lineTo(W,H/2);g.stroke();
+  // 远的先画,近的盖上(近似深度序)
+  const sorted=pts.slice().sort((a,b)=>b.dist-a.dist);
+  const sz=sim.scene==='sphere'?5:6;
+  for(const a of sorted){
+    const x=W/2+a.sx,y=H/2+a.sy;
+    if(x<-8||x>W+8||y<-8||y>H+8)continue;
+    g.fillStyle=faceColor(a);
+    g.fillRect(x-sz/2,y-sz/2,sz,sz);
+  }
+  if(overlay){ // 公式解析解描边, 用于和光子云对比
+    g.strokeStyle='rgba(255,255,255,.75)';g.lineWidth=1;
+    for(let i=0;i<overlay.length;i+=2){
+      const a=overlay[i],x=W/2+a.sx,y=H/2+a.sy;
+      if(x<-8||x>W+8||y<-8||y>H+8)continue;
+      g.strokeRect(x-3.5,y-3.5,7,7);
+    }
+  }
+  // 画面内没有任何点时给出提示(物体实际/视位置在视野外)
+  let vis=0;
+  for(const a of pts){const x=W/2+a.sx,y=H/2+a.sy;
+    if(x>=0&&x<=W&&y>=0&&y<=H){vis=1;break;}}
+  if(!vis){g.fillStyle='rgba(255,255,255,.45)';g.font='13px system-ui';g.textAlign='center';
+    g.fillText(pts.length?'物体在此视野外(已飞远/未进入) →':'（等待光子到达…）',W/2,H/2);}
+}
+function drawGod(){
+  const cv=$('cGod'),g=cv.getContext('2d'),W=cv.width,H=cv.height;
+  g.fillStyle='#0d0f14';g.fillRect(0,0,W,H);
+  const X=x=>W/2+x*(W/(2*TCFG.PATH*1.06));
+  const Z=z=>H-24-(z/(TCFG.D+TCFG.L))* (H-46);
+  // 相机
+  g.fillStyle='#fff';g.font='14px system-ui';g.textAlign='center';
+  g.fillText('📷',X(0),H-6);
+  // 物体(俯视: x-z 平面, 真实的收缩形状)
+  const cx=sim.centerX(sim.t);
+  g.strokeStyle='#c3c2b7';g.lineWidth=1.5;
+  if(sim.scene==='sphere'){
+    g.beginPath();g.ellipse(X(cx),Z(TCFG.D),(TCFG.R/sim.gamma)*(W/(2*TCFG.PATH*1.06)),
+      TCFG.R*((H-46)/(TCFG.D+TCFG.L)),0,0,7);g.stroke();
+  }else if(sim.scene==='plate'){
+    const w=(TCFG.L*1.15/sim.gamma)*(W/(2*TCFG.PATH*1.06));
+    g.beginPath();g.moveTo(X(cx)-w/2,Z(TCFG.D));g.lineTo(X(cx)+w/2,Z(TCFG.D));g.stroke();
+  }else{
+    const tags=sim.scene==='row'?[-TCFG.L*2.4,0,TCFG.L*2.4]:[0];
+    const L=sim.scene==='row'?TCFG.L*0.85:TCFG.L;
+    for(const off of tags){
+      const w=(L/sim.gamma)*(W/(2*TCFG.PATH*1.06)),d=L*((H-46)/(TCFG.D+TCFG.L));
+      g.strokeRect(X(cx+off/1)-w/2,Z(TCFG.D)-d/2,w,d);
+    }
+  }
+  g.fillStyle='#898781';g.font='11px system-ui';
+  g.fillText(`实际位置(压扁 1/γ=${(1/sim.gamma).toFixed(2)})`,X(cx),Z(TCFG.D)-TCFG.L*((H-46)/(TCFG.D+TCFG.L))/2-6);
+  // 飞行中的光子
+  const maxAge=(TCFG.D+TCFG.PATH*0.35)/TCFG.c;
+  const stride=Math.max(1,Math.floor(sim.photons.length/2600));
+  for(let i=0;i<sim.photons.length;i+=stride){
+    const ph=sim.photons[i],dt=sim.t-ph.te;
+    const x=ph.px+ph.ux*TCFG.c*dt, z=ph.pz+ph.uz*TCFG.c*dt;
+    g.fillStyle=ageColor(dt,maxAge);
+    g.fillRect(X(x)-1,Z(z)-1,2,2);
+  }
+  // 视线: 相机 → 视位置(刚到达光子的平均发射点) vs 实际位置
+  const m=sim.measure(sim.arrived);
+  if(m){
+    g.strokeStyle='rgba(42,120,214,.8)';g.lineWidth=1.5;g.setLineDash([5,4]);
+    g.beginPath();g.moveTo(X(0),H-24);
+    g.lineTo(X(m.cx/TCFG.F*TCFG.D),Z(TCFG.D));g.stroke();g.setLineDash([]);
+    g.fillStyle='#2a78d6';
+    g.fillText('看到的位置(旧光)',X(m.cx/TCFG.F*TCFG.D),Z(TCFG.D)+16);
+  }
+}
+function renderMeas(){
+  const m=sim.measure(sim.arrived),n=sim.measure(sim.naivePoints());
+  const f=sim.measure(sim.formulaPoints());
+  const rows=[];
+  rows.push(['β / γ',`${sim.beta.toFixed(2)} / ${sim.gamma.toFixed(2)}`]);
+  rows.push(['理论收缩 1/γ',(1/sim.gamma).toFixed(3)]);
+  if(sim.scene==='sphere'){
+    rows.push(['天真视图轮廓 宽/高',n?n.aspect.toFixed(3):'—']);
+    rows.push(['照片 宽/高：光子实测',m?`<b>${m.aspect.toFixed(3)}</b>`:'—']);
+    rows.push(['照片 宽/高：公式解析解',f?f.aspect.toFixed(3):'—']);
+    rows.push(['Penrose 预言','1.000(正圆)']);
+  }else{
+    rows.push(['天真视图横向宽度',n?n.w.toFixed(0)+' px':'—']);
+    rows.push(['照片横向宽度：光子实测',m?`<b>${m.w.toFixed(0)} px</b>`:'—']);
+    rows.push(['照片横向宽度：公式解析解',f?f.w.toFixed(0)+' px':'—']);
+    rows.push(['模拟 − 公式 宽度差',m&&f?Math.abs(m.w-f.w).toFixed(1)+' px':'—']);
+    rows.push(['照片中尾面(青)光子占比',m?`<b>${(m.rearFrac*100).toFixed(1)}%</b>`:'—']);
+  }
+  rows.push(['照片光子数',m?m.n:'0']);
+  rows.push(['飞行中光子数',sim.photons.length]);
+  $('meas').innerHTML='<table>'+rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('')+'</table>';
+}
+
+// 时间轴拖动: 向前=快进模拟; 向后=从头重建并推进到目标时刻(确定性,毫秒级)
+let scrubbing=false;
+function scrubDur(){return isFinite(sim.maxT)?sim.maxT:10;}
+function seekTo(tt){
+  if(tt<sim.t){const s=new TerrellSim(sim.beta,sim.scene);s.step(tt);sim=s;}
+  else sim.step(tt-sim.t);
+}
+$('rTime').addEventListener('input',e=>{scrubbing=true;seekTo(+e.target.value*scrubDur());});
+$('rTime').addEventListener('change',()=>{scrubbing=false;});
+
+let lastWall=performance.now(),uiT=0;
+function frame(tw){
+  const dt=Math.min(tw-lastWall,80)/1000;lastWall=tw;
+  if(!paused&&!scrubbing){
+    sim.step(dt*playSpeed);
+    if(sim.done)newSim();       // 自动循环再飞一遍
+  }
+  if(!scrubbing)$('rTime').value=Math.min(sim.t/scrubDur(),1);
+  $('tTime').textContent=sim.t.toFixed(1)+'s / '+(isFinite(sim.maxT)?sim.maxT.toFixed(1):'∞')+'s';
+  const lm=$('selLeft').value;
+  drawImage($('cNaive'),lm==='naive'?sim.naivePoints():lm==='newton'?sim.newtonPoints():sim.newtonPhotoPoints());
+  const pm=$('selPhoto').value;
+  if(pm==='sim')drawImage($('cPhoto'),sim.arrived);
+  else if(pm==='formula')drawImage($('cPhoto'),sim.formulaPoints());
+  else drawImage($('cPhoto'),sim.arrived,sim.formulaPoints());
+  drawGod();
+  uiT+=dt;if(uiT>0.3){uiT=0;renderMeas();}
+  requestAnimationFrame(frame);
+}
+$('bPause').onclick=()=>{paused=!paused;$('bPause').textContent=paused?'▶ 继续':'⏸ 暂停';};
+$('rBeta').oninput=e=>{
+  $('tBeta').textContent=(+e.target.value).toFixed(2);
+  $('tGamma').textContent=(1/Math.sqrt(1-e.target.value**2)).toFixed(2);
+  newSim();
+};
+$('selScene').onchange=newSim;
+$('selLeft').onchange=e=>{
+  $('leftDesc').innerHTML={
+    naive:'即时投影 → 只会看到<span style="color:var(--down)">压扁 1/γ</span>，但这不是相机拍到的',
+    newton:'无任何相对论、无光程延迟的常识画面（基准）',
+    newtonphoto:'伽利略宇宙的相机：纯光程延迟把物体拍成<b>剪切/拉伸的怪相</b>——对比右图：洛伦兹收缩恰好把怪相修成刚性旋转',
+  }[e.target.value];
+};
+$('selColor').onchange=e=>colorMode=e.target.value;
+$('selSpeed').onchange=e=>playSpeed=+e.target.value;
+$('bRestart').onclick=newSim;
+newSim();requestAnimationFrame(frame);
+</script>
+</body>
+</html>
