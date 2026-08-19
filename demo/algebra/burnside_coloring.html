@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burnside 引理 · 正 n 边形顶点 k 染色计数</title>
+<style>
+  :root { --bg:#04050b; --panel:#111726; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5;
+    --accent:#3ad0c4; --warn:#ffd27f; --bad:#ff7a86; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  #wrap { max-width:1060px; margin:0 auto; padding:16px 14px 40px; }
+  h1 { font-size:19px; margin:2px 0 4px; }
+  .sub { font-size:12.5px; color:var(--dim); line-height:1.65; margin:0 0 12px; }
+  .sub b { color:var(--accent); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:13px 15px; margin-bottom:14px; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; }
+  .row > .card { flex:1 1 380px; margin-bottom:0; }
+  .ctl { display:flex; gap:18px; flex-wrap:wrap; align-items:center; font-size:12.5px; }
+  .ctl label { color:var(--dim); }
+  .ctl .val { color:var(--accent); font-weight:700; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:120px; accent-color:var(--accent); vertical-align:middle; }
+  button { background:#1b2536; color:var(--txt); border:1px solid var(--line);
+    padding:5px 10px; border-radius:8px; font-size:12px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#03110f; border-color:var(--accent); font-weight:600; }
+  h2 { font-size:13.5px; margin:0 0 8px; color:var(--txt); }
+  h2 small { color:var(--dim); font-weight:400; }
+  #cv { display:block; width:100%; max-width:430px; margin:0 auto; touch-action:manipulation; cursor:pointer; }
+  #orbitCv { display:block; width:100%; }
+  .obTxt { font-size:12px; color:var(--dim); line-height:1.7; margin-top:6px; }
+  .obTxt b { color:var(--warn); }
+  #tblWrap { max-height:430px; overflow:auto; }
+  table { border-collapse:collapse; width:100%; font-size:12px; font-variant-numeric:tabular-nums; }
+  th,td { border-bottom:1px solid var(--line); padding:4px 6px; text-align:center; }
+  th { color:var(--dim); font-weight:600; position:sticky; top:0; background:var(--panel); }
+  td.name { font-weight:600; }
+  td .mini { vertical-align:middle; }
+  .fx1 { color:var(--accent); font-weight:700; }
+  .fx0 { color:#5a6a85; }
+  #formula { font-size:13px; line-height:1.9; margin-top:10px; border-top:1px solid var(--line); padding-top:9px; }
+  #formula .big { font-size:16px; color:var(--warn); font-weight:700; }
+  .hint { font-size:11.5px; color:var(--dim); line-height:1.7; margin-top:10px; border-top:1px solid var(--line); padding-top:8px; }
+  tr.playing td { background:#1a2f3a; }
+  tr.stab td { background:#0d2b26; border-bottom-color:#1d5a50; }
+  tr.stab td.name { color:var(--accent); }
+  tr.stab td:first-child { box-shadow:inset 3px 0 0 var(--accent); }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>Burnside 引理：正 n 边形顶点染色，转一转算重复</h1>
+  <p class="sub">给正 n 边形的顶点涂 k 种颜色，<b>旋转后相同的算同一种</b>，一共有多少种？
+    Burnside 引理说：<b>等价类个数 = 每个群元素"固定的染色数"的平均值</b>，
+    N = (1/|G|) Σ<sub>g</sub> |Fix(g)|。对旋转群 Cₙ 即 N = (1/n) Σ<sub>j</sub> k<sup>gcd(j,n)</sup>。
+    点击左边的顶点改颜色，点表格每行的 ▶ 看这个对称操作如何作用、是否固定当前染色。</p>
+
+  <div class="card ctl" id="ctlBar">
+    <span><label>顶点数 n = </label><span class="val" id="nV"></span>
+      <input type="range" id="nS" min="3" max="12" step="1" value="12"></span>
+    <span><label>颜色数 k = </label><span class="val" id="kV"></span>
+      <input type="range" id="kS" min="2" max="6" step="1" value="2"></span>
+    <span><label>对称群：</label>
+      <button id="gC" class="on">Cₙ 只旋转</button>
+      <button id="gD">Dₙ 旋转+翻转</button></span>
+    <span><button id="rnd">🎲 随机染色</button>
+      <button id="mono">■ 全部同色</button></span>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <h2>当前染色 <small>（点顶点换色；外圈细环 = 原始位置参照）</small></h2>
+      <canvas id="cv"></canvas>
+      <h2 style="margin-top:10px">当前染色的轨道 <small>（转/翻能变出的所有样子）</small></h2>
+      <canvas id="orbitCv" height="70"></canvas>
+      <div class="obTxt" id="obTxt"></div>
+    </div>
+
+    <div class="card">
+      <h2>逐个群元素数 |Fix(g)| <small>（循环图：同色点 = 同一循环 ⇒ 必须涂同色；<span style="color:var(--accent)">绿框行</span> = 当前染色的稳定子群）</small></h2>
+      <div id="tblWrap"><table id="tbl"></table></div>
+      <div id="formula"></div>
+      <div class="hint">直觉：为什么是"平均不动点数"？把全部 kⁿ 个染色摆开，群把它们搅成一个个轨道；
+        轨道-稳定子定理说每条轨道贡献的 Σ|Fix| 恰好是 |G|（轨道大小 × 稳定子大小 = |G|），
+        所以 Σ<sub>g</sub>|Fix(g)| = |G| × 轨道数，除以 |G| 就是答案。</div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ---------------- 状态 ---------------- */
+let n=12, k=2, dihedral=false;
+let col=Array.from({length:n},(_,i)=>i%2);   // 每个顶点的颜色编号
+const PAL=['#ff5f6b','#4fa8ff','#ffd23a','#59d96c','#c58bff','#ff9b4f'];
+const gcd=(a,b)=>b?gcd(b,a%b):a;
+
+/* 群元素：perm[v] = 顶点 v 被送到的槽位 */
+function buildGroup(){
+  const els=[];
+  for(let j=0;j<n;j++){
+    const perm=Array.from({length:n},(_,v)=>(v+j)%n);
+    els.push({type:'rot',j,perm,name:j===0?'e':(j===1?'r':`r${sup(j)}`),
+      desc:j===0?'不动':`转 ${j}·(360°/${n}) = ${Math.round(j*360/n)}°`});
+  }
+  if(dihedral) for(let i=0;i<n;i++){
+    const perm=Array.from({length:n},(_,v)=>((i-v)%n+n)%n);
+    els.push({type:'ref',i,perm,name:`f${sub(i)}`,desc:'翻转(镜像)'});
+  }
+  els.forEach(e=>{
+    e.cycles=cycleIds(e.perm);
+    e.c=Math.max(...e.cycles)+1;
+    e.fix=Math.pow(k,e.c);
+  });
+  return els;
+}
+function cyclesOf(perm){             // 按遍历顺序列出各循环
+  const seen=new Array(perm.length).fill(false), out=[];
+  for(let v=0;v<perm.length;v++) if(!seen[v]){
+    const c=[]; let u=v; while(!seen[u]){seen[u]=true;c.push(u);u=perm[u];}
+    out.push(c);
+  }
+  return out;
+}
+function cycleIds(perm){
+  const id=new Array(perm.length).fill(-1); let c=0;
+  for(let v=0;v<perm.length;v++) if(id[v]<0){
+    let u=v; while(id[u]<0){ id[u]=c; u=perm[u]; } c++;
+  }
+  return id;
+}
+const SUP='⁰¹²³⁴⁵⁶⁷⁸⁹', SUB='₀₁₂₃₄₅₆₇₈₉';
+const sup=x=>String(x).split('').map(d=>SUP[+d]).join('');
+const sub=x=>String(x).split('').map(d=>SUB[+d]).join('');
+function applyPerm(perm,cols){ const r=new Array(n); for(let v=0;v<n;v++) r[perm[v]]=cols[v]; return r; }
+const eq=(a,b)=>a.every((x,i)=>x===b[i]);
+
+let G=buildGroup();
+let cycShowIdx=-1;                   // 正在画循环多边形的元素下标(-1=关)
+
+/* ---------------- 主画布 ---------------- */
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+let animEl=null, animT=0, animPhase='idle', animOK=false;   // 播放某个群元素
+const dpr=Math.min(devicePixelRatio||1,2);
+
+function vpos(v,R,cx,cy,extraAng){       // 顶点 v 的静止位置(可加整体转角)
+  const a=-Math.PI/2+2*Math.PI*v/n+(extraAng||0);
+  return [cx+R*Math.cos(a),cy+R*Math.sin(a)];
+}
+function drawMain(){
+  const W=cv.clientWidth||420, Hh=Math.min(W,430);
+  if(cv.width!==W*dpr||cv.height!==Hh*dpr){ cv.width=W*dpr; cv.height=Hh*dpr; }
+  cv.style.height=Hh+'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,Hh);
+  const cx=W/2, cy=Hh/2, R=Math.min(W,Hh)*0.335, rr=Math.max(11,Math.min(19,R*0.16));
+
+  // 外圈参照环:原始槽位颜色
+  for(let s=0;s<n;s++){
+    const a0=-Math.PI/2+2*Math.PI*(s-0.32)/n, a1=-Math.PI/2+2*Math.PI*(s+0.32)/n;
+    ctx.beginPath(); ctx.arc(cx,cy,R+rr+11,a0,a1);
+    ctx.strokeStyle=PAL[col[s]]; ctx.lineWidth=5; ctx.stroke();
+  }
+  // 对称轴(播放翻转时)
+  if(animEl&&animEl.type==='ref'&&animPhase!=='idle'){
+    const th=-Math.PI/2+Math.PI*animEl.i/n;
+    ctx.beginPath();
+    ctx.moveTo(cx+Math.cos(th)*(R+34),cy+Math.sin(th)*(R+34));
+    ctx.lineTo(cx-Math.cos(th)*(R+34),cy-Math.sin(th)*(R+34));
+    ctx.strokeStyle='#ffd27f'; ctx.lineWidth=1.5; ctx.setLineDash([6,5]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // 多边形骨架
+  ctx.beginPath();
+  for(let v=0;v<=n;v++){ const [x,y]=vpos(v%n,R,cx,cy); v?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.strokeStyle='#2b3a55'; ctx.lineWidth=2; ctx.stroke();
+
+  // 选中元素的循环多边形(在 g 作用下整体位置不变的顶点集)
+  if(cycShowIdx>=0&&cycShowIdx<G.length){
+    const el=G[cycShowIdx], cycles=cyclesOf(el.perm);
+    cycles.forEach((cyc,ci)=>{
+      const color=`hsl(${ci*360/cycles.length+15} 75% 62%)`;
+      if(cyc.length===1){
+        const [x,y]=vpos(cyc[0],R,cx,cy);
+        ctx.beginPath(); ctx.arc(x,y,rr+6,0,7);
+        ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+      }else{
+        ctx.beginPath();
+        cyc.forEach((v,idx)=>{ const [x,y]=vpos(v,R,cx,cy); idx?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+        ctx.closePath();
+        if(cyc.length>2){ ctx.fillStyle=color.replace(')',' / 0.10)'); ctx.fill(); }
+        ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.stroke();
+      }
+    });
+    const lens={}; cycles.forEach(c=>lens[c.length]=(lens[c.length]||0)+1);
+    const desc=Object.entries(lens).sort((a,b)=>b[0]-a[0])
+      .map(([L,m])=>L==='1'?`${m} 个不动点`:(L==='2'?`${m} 条对换弦`:`${m} 个 ${L} 边形`)).join(' + ');
+    ctx.fillStyle='#c9d4e8'; ctx.font='bold 12.5px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(`${el.name} 的循环多边形：${desc}（每个整体转回自身 ⇒ 各自必须同色）`,cx,34);
+  }
+
+  // 顶点圆盘(可能在动画中)
+  const e=easeInOut(Math.min(1,animT));
+  for(let v=0;v<n;v++){
+    let x,y;
+    if(animEl&&animPhase!=='idle'){
+      if(animEl.type==='rot'){
+        [x,y]=vpos(v,R,cx,cy,2*Math.PI*animEl.j/n*e);
+      }else{
+        const [x0,y0]=vpos(v,R,cx,cy), [x1,y1]=vpos(animEl.perm[v],R,cx,cy);
+        x=x0+(x1-x0)*e; y=y0+(y1-y0)*e;
+      }
+    }else [x,y]=vpos(v,R,cx,cy);
+    ctx.beginPath(); ctx.arc(x,y,rr,0,7);
+    ctx.fillStyle=PAL[col[v]]; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle='#04050b'; ctx.stroke();
+    ctx.fillStyle='#04050b'; ctx.font=`bold ${rr}px sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(v+1,x,y+0.5);
+    if(v===0){                        // 突出 1 号顶点,方便盯着它被转到哪
+      ctx.beginPath(); ctx.arc(x,y,rr+4,0,7);
+      ctx.strokeStyle='#3ad0c4'; ctx.lineWidth=3.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x,y,rr+8.5,0,7);
+      ctx.strokeStyle='#3ad0c455'; ctx.lineWidth=2; ctx.stroke();
+    }
+  }
+  // 结果徽章
+  if(animEl&&animPhase==='hold'){
+    ctx.font='bold 15px sans-serif'; ctx.textAlign='center';
+    ctx.fillStyle=animOK?'#3ad0c4':'#ff7a86';
+    ctx.fillText(animOK?`✓ ${animEl.name} 固定这个染色(与参照环一致)`:`✗ ${animEl.name} 改变了这个染色`,cx,Hh-14);
+  }
+  ctx.fillStyle='#8a99b5'; ctx.font='12px sans-serif'; ctx.textAlign='center';
+  ctx.fillText(`n=${n}, k=${k}, 群=${dihedral?'D':'C'}${sub(n)} (|G|=${G.length})`,cx,16);
+}
+const easeInOut=t=>t<0.5?2*t*t:1-((-2*t+2)**2)/2;
+
+function playEl(el){
+  animEl=el; animT=0; animPhase='run';
+  animOK=eq(applyPerm(el.perm,col),col);
+  [...tbl.rows].forEach(r=>r.classList.remove('playing'));
+  const tr=document.getElementById('row'+G.indexOf(el)); if(tr) tr.classList.add('playing');
+}
+let lastTs=0;
+function loop(ts){
+  const dt=Math.min(50,ts-lastTs); lastTs=ts;
+  if(animEl){
+    if(animPhase==='run'){ animT+=dt/900; if(animT>=1){ animT=1; animPhase='hold'; holdT=0; } }
+    else if(animPhase==='hold'){ holdT+=dt; if(holdT>1100){ animEl=null; animPhase='idle';
+      [...tbl.rows].forEach(r=>r.classList.remove('playing')); } }
+  }
+  drawMain();
+  requestAnimationFrame(loop);
+}
+let holdT=0;
+
+cv.addEventListener('click',ev=>{
+  const r=cv.getBoundingClientRect();
+  const W=cv.clientWidth, Hh=parseFloat(cv.style.height)||W;
+  const mx=ev.clientX-r.left, my=ev.clientY-r.top;
+  const cx=W/2, cy=Hh/2, R=Math.min(W,Hh)*0.335;
+  for(let v=0;v<n;v++){
+    const [x,y]=vpos(v,R,cx,cy);
+    if((mx-x)**2+(my-y)**2<Math.max(14,R*0.16)**2*1.9){
+      col[v]=(col[v]+1)%k; refresh(false); return;
+    }
+  }
+});
+
+/* ---------------- 表格 + 公式 ---------------- */
+const tbl=document.getElementById('tbl');
+function miniCanvas(el){
+  const c=document.createElement('canvas'); const s=40;
+  c.width=s*dpr; c.height=s*dpr; c.style.width=c.style.height=s+'px'; c.className='mini';
+  const g=c.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0);
+  const cx=s/2,cy=s/2,R=s*0.36;
+  g.beginPath();
+  for(let v=0;v<=n;v++){ const [x,y]=vpos(v%n,R,cx,cy); v?g.lineTo(x,y):g.moveTo(x,y); }
+  g.strokeStyle='#2b3a55'; g.lineWidth=1; g.stroke();
+  for(let v=0;v<n;v++){
+    const [x,y]=vpos(v,R,cx,cy);
+    g.beginPath(); g.arc(x,y,4,0,7);
+    g.fillStyle=`hsl(${el.cycles[v]*360/el.c+15} 75% 62%)`; g.fill();
+  }
+  if(el.type==='ref'){
+    const th=-Math.PI/2+Math.PI*el.i/n;
+    g.beginPath(); g.moveTo(cx+Math.cos(th)*R*1.35,cy+Math.sin(th)*R*1.35);
+    g.lineTo(cx-Math.cos(th)*R*1.35,cy-Math.sin(th)*R*1.35);
+    g.strokeStyle='#ffd27f88'; g.stroke();
+  }
+  return c;
+}
+function renderTable(){
+  tbl.innerHTML=`<tr><th>g</th><th>循环图</th><th>循环数 c(g)</th>
+    <th>|Fix(g)| = k<sup>c</sup></th><th>固定当前染色?</th><th></th></tr>`;
+  G.forEach((el,i)=>{
+    const tr=tbl.insertRow(); tr.id='row'+i;
+    const fixed=eq(applyPerm(el.perm,col),col);
+    if(fixed) tr.classList.add('stab');       // 圈出稳定子群的行
+    tr.insertCell().outerHTML=`<td class="name">${el.name}<div style="font-weight:400;color:#8a99b5;font-size:10.5px">${el.desc}</div></td>`;
+    tr.insertCell().appendChild(miniCanvas(el));
+    tr.insertCell().textContent = el.type==='rot' ? `gcd(${el.j},${n}) = ${el.c}` : el.c;
+    tr.insertCell().innerHTML = `${k}${sup(el.c)} = <b>${el.fix.toLocaleString()}</b>`;
+    tr.insertCell().innerHTML = fixed?'<span class="fx1">✓</span>':'<span class="fx0">✗</span>';
+    const bc=tr.insertCell(); const b=document.createElement('button');
+    b.textContent='▶'; b.title='演示这个操作'; b.onclick=()=>playEl(el); bc.appendChild(b);
+    const b2=document.createElement('button');
+    b2.textContent='⬠'; b2.title='在左图画出该元素的循环多边形';
+    b2.style.marginLeft='4px';
+    if(cycShowIdx===i) b2.classList.add('on');
+    b2.onclick=()=>{ cycShowIdx=(cycShowIdx===i)?-1:i; renderTable(); };
+    bc.appendChild(b2);
+  });
+  const sum=G.reduce((a,e)=>a+e.fix,0), N=sum/G.length;
+  const terms=G.map(e=>e.fix.toLocaleString()).join(' + ');
+  document.getElementById('formula').innerHTML=
+    `N = (1/|G|) Σ|Fix(g)| = ( ${terms} ) / ${G.length}`+
+    ` = ${sum.toLocaleString()} / ${G.length} = <span class="big">${N.toLocaleString()}</span> 种本质不同的染色`+
+    (dihedral?'':`<br><span style="color:#8a99b5">即 N = (1/${n}) Σ<sub>j=0..${n-1}</sub> ${k}<sup>gcd(j,${n})</sup></span>`);
+  return N;
+}
+
+/* ---------------- 轨道 / 稳定子 ---------------- */
+const orbitCv=document.getElementById('orbitCv'), obTxt=document.getElementById('obTxt');
+function renderOrbit(){
+  const seen=new Map();
+  G.forEach(el=>{ const t=applyPerm(el.perm,col); const key=t.join(','); if(!seen.has(key)) seen.set(key,t); });
+  const orbit=[...seen.values()];
+  const stab=G.filter(el=>eq(applyPerm(el.perm,col),col));
+  const W=orbitCv.clientWidth||600, s=54, gap=8;
+  const perRow=Math.max(1,Math.floor(W/(s+gap))), rows=Math.ceil(orbit.length/perRow);
+  const Hh=rows*(s+gap)+4;
+  orbitCv.width=W*dpr; orbitCv.height=Hh*dpr; orbitCv.style.height=Hh+'px';
+  const g=orbitCv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,Hh);
+  orbit.forEach((cols,idx)=>{
+    const ox=(idx%perRow)*(s+gap)+s/2+2, oy=Math.floor(idx/perRow)*(s+gap)+s/2+2, R=s*0.34;
+    g.beginPath();
+    for(let v=0;v<=n;v++){ const [x,y]=vpos(v%n,R,ox,oy); v?g.lineTo(x,y):g.moveTo(x,y); }
+    g.strokeStyle='#2b3a55'; g.lineWidth=1; g.stroke();
+    for(let v=0;v<n;v++){ const [x,y]=vpos(v,R,ox,oy);
+      g.beginPath(); g.arc(x,y,4.6,0,7); g.fillStyle=PAL[cols[v]]; g.fill(); }
+    if(idx===0){ g.strokeStyle='#3ad0c4'; g.lineWidth=1.5;
+      g.strokeRect(ox-s/2+1,oy-s/2+1,s-2,s-2); }
+  });
+  obTxt.innerHTML=`|轨道| = <b>${orbit.length}</b>，稳定子 = { ${stab.map(e=>e.name).join(', ')} }，`+
+    `|稳定子| = <b>${stab.length}</b>；　验证轨道-稳定子定理：${orbit.length} × ${stab.length} = ${orbit.length*stab.length} = |G| ✓`;
+}
+
+/* ---------------- 控件 ---------------- */
+const nS=document.getElementById('nS'), kS=document.getElementById('kS');
+function refresh(structural){
+  if(structural){
+    G=buildGroup();
+    col=col.slice(0,n); while(col.length<n) col.push(col.length%k);
+    col=col.map(c=>c%k);
+    animEl=null; animPhase='idle'; cycShowIdx=-1;
+  }
+  document.getElementById('nV').textContent=n;
+  document.getElementById('kV').textContent=k;
+  renderTable();
+  renderOrbit();
+}
+nS.oninput=()=>{ n=+nS.value; refresh(true); };
+kS.oninput=()=>{ k=+kS.value; refresh(true); };
+document.getElementById('gC').onclick=()=>{ dihedral=false; togGrp(); };
+document.getElementById('gD').onclick=()=>{ dihedral=true; togGrp(); };
+function togGrp(){
+  document.getElementById('gC').classList.toggle('on',!dihedral);
+  document.getElementById('gD').classList.toggle('on',dihedral);
+  refresh(true);
+}
+document.getElementById('rnd').onclick=()=>{ col=col.map(()=>Math.floor(Math.random()*k)); refresh(false); };
+document.getElementById('mono').onclick=()=>{ col=col.map(()=>0); refresh(false); };
+addEventListener('resize',()=>refresh(false));
+
+refresh(true);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
