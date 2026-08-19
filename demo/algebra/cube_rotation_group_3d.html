@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>正方体的旋转群 · 24 阶 ≅ S₄ · 3D 演示</title>
+<style>
+  :root { --panel:#111726cc; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5; --accent:#3ad0c4; --warn:#ffd27f; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#04050b; color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  #app { position:fixed; inset:0; }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--dim); font-size:14px; }
+  .panel { position:fixed; top:14px; right:14px; width:332px; max-height:calc(100% - 28px); overflow:auto;
+    background:var(--panel); backdrop-filter:blur(8px); border:1px solid var(--line); border-radius:12px; padding:15px; }
+  h1 { font-size:15px; margin:0 0 4px; }
+  .sub { font-size:11.5px; color:var(--dim); margin:0 0 10px; line-height:1.55; }
+  .grp { margin:9px 0; }
+  .grp > label { display:block; font-size:11.5px; color:var(--dim); margin-bottom:4px; }
+  .axrow { display:flex; align-items:center; gap:5px; margin:4px 0; }
+  .axrow .axl { width:30px; font-size:12px; text-align:right; flex:none; }
+  .axrow button { flex:1; }
+  button { background:#1b2536; color:var(--txt); border:1px solid var(--line);
+    padding:5px 3px; border-radius:7px; font-size:11.5px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#03110f; border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:0.45; cursor:default; }
+  .wideRow { display:flex; gap:6px; }
+  .wideRow button { flex:1; }
+  .cFace { color:#7fc7ff; } .cVert { color:#c9a2ff; } .cEdge { color:#ffb37f; }
+  .state { font-size:12px; background:#0b101c; border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; line-height:1.75; }
+  .state b { color:var(--accent); }
+  .state .word { color:var(--warn); word-break:break-all; }
+  #visited { display:grid; grid-template-columns:repeat(8,1fr); gap:3px; margin-top:4px; }
+  #visited div { border:1px solid var(--line); border-radius:5px; font-size:10.5px; text-align:center;
+    padding:2.5px 0; color:#5a6a85; }
+  #visited div.hit { color:#03110f; background:#3ad0c4; border-color:#3ad0c4; font-weight:700; }
+  #visited div.cur { outline:2px solid var(--warn); outline-offset:-1px; }
+  .hint { font-size:11px; color:var(--dim); line-height:1.65; border-top:1px solid var(--line);
+    padding-top:9px; margin-top:11px; }
+  .hint b { color:var(--txt); }
+  .tag { position:fixed; left:14px; bottom:12px; font-size:11.5px; color:var(--dim); }
+  #note { position:fixed; left:50%; transform:translateX(-50%); bottom:44px; max-width:min(620px,92vw);
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:9px 14px;
+    font-size:12.5px; line-height:1.6; display:none; }
+  #note b { color:var(--warn); }
+  body.ctl-collapsed .panel, body.ctl-collapsed #note, body.ctl-collapsed .tag { display:none !important; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading">正在加载 three.js …（此页需要联网）</div>
+
+<div class="panel">
+  <h1>正方体的旋转群（24 阶 ≅ S₄）</h1>
+  <p class="sub">能把正方体转回自身的旋转恰有 <b>24 个</b>：绕 <span class="cFace">3 条面心轴</span>转 90°/180°/270°（9 个）、
+    绕 <span class="cVert">4 条体对角线</span>转 ±120°（8 个）、绕 <span class="cEdge">6 条棱中点轴</span>转 180°（6 个），加恒等。
+    顶点上<b>同色成对的编号球</b>标记同一条体对角线（可用下方按钮显示对角线杆）：每个旋转把 4 条对角线重新排列 —— 24 个旋转 ↔ 4! 种排列，<b>正好是 S₄</b>。</p>
+
+  <div class="grp">
+    <label><span class="cFace">■</span> 面心轴（穿过对面面心）</label>
+    <div class="axrow"><span class="axl cFace">x</span>
+      <button data-g="1">90°</button><button data-g="2">180°</button><button data-g="3">270°</button></div>
+    <div class="axrow"><span class="axl cFace">y</span>
+      <button data-g="4">90°</button><button data-g="5">180°</button><button data-g="6">270°</button></div>
+    <div class="axrow"><span class="axl cFace">z</span>
+      <button data-g="7">90°</button><button data-g="8">180°</button><button data-g="9">270°</button></div>
+  </div>
+  <div class="grp">
+    <label><span class="cVert">■</span> 体对角线轴（穿过对角顶点，转 120° 三个面轮换）</label>
+    <div class="axrow"><span class="axl cVert">d₁</span><button data-g="10">120°</button><button data-g="11">240°</button>
+      <span class="axl cVert">d₂</span><button data-g="12">120°</button><button data-g="13">240°</button></div>
+    <div class="axrow"><span class="axl cVert">d₃</span><button data-g="14">120°</button><button data-g="15">240°</button>
+      <span class="axl cVert">d₄</span><button data-g="16">120°</button><button data-g="17">240°</button></div>
+  </div>
+  <div class="grp">
+    <label><span class="cEdge">■</span> 棱中点轴（穿过对边中点，只能转 180°）</label>
+    <div class="axrow">
+      <button data-g="18">t₁</button><button data-g="19">t₂</button><button data-g="20">t₃</button>
+      <button data-g="21">t₄</button><button data-g="22">t₅</button><button data-g="23">t₆</button></div>
+  </div>
+  <div class="grp wideRow">
+    <button data-g="0">e</button>
+    <button id="rndB">🎲 随机一步</button>
+    <button id="reset">↺ 复位</button>
+    <button id="demoB">⚡ 面转×2=对角线转</button>
+  </div>
+  <div class="grp wideRow">
+    <button id="rodsB">◇ 显示 4 条体对角线杆</button>
+  </div>
+
+  <div class="grp"><div class="state" id="state"></div></div>
+
+  <div class="grp">
+    <label>已到访的群元素（<span id="visN">1</span>/24）—— 试试只用 x·90° 和 d₁·120° 走遍全部 24 个</label>
+    <div id="visited"></div>
+  </div>
+
+  <div class="hint">共轭类：恒等 ×1 ｜ 面轴 90°/270° ×6 ｜ 面轴 180° ×3 ｜ 对角线 ±120° ×8 ｜ 棱轴 180° ×6，
+    合计 24 = 1+6+3+8+6，正是 S₄ 的类方程。鼠标悬停按钮会点亮对应的轴。
+    若再允许镜像反射，对称群翻倍成 48 阶（Oₕ）。</div>
+</div>
+
+<div id="note"></div>
+<div class="tag">鼠标拖动=旋转视角 · 滚轮=缩放 · 点按钮=施加旋转 · 悬停按钮=显示轴</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+document.getElementById('loading').remove();
+
+/* ---------- 24 个群元素 ---------- */
+const SUB='₀₁₂₃₄₅₆₇₈₉';
+const sub=x=>String(x).split('').map(d=>SUB[+d]).join('');
+const nrm=v=>{const l=Math.hypot(...v);return v.map(x=>x/l);};
+const DIAG=[[1,1,1],[1,1,-1],[1,-1,1],[-1,1,1]];      // 体对角线方向
+const EDGE=[[1,1,0],[1,-1,0],[1,0,1],[1,0,-1],[0,1,1],[0,1,-1]];
+const ELS=[{name:'e',axis:[0,0,1],ang:0,kind:'e',axkey:null,cls:'恒等'}];
+[['x',[1,0,0]],['y',[0,1,0]],['z',[0,0,1]]].forEach(([nm,ax])=>{
+  [1,2,3].forEach(p=>ELS.push({name:nm+(p===1?'':p===2?'²':'³'),axis:ax,ang:p*Math.PI/2,
+    kind:'face',axkey:'f'+nm,cls:`面轴 ${p*90}°`}));
+});
+DIAG.forEach((v,i)=>[1,2].forEach(p=>ELS.push({name:`d${sub(i+1)}${p===2?'²':''}`,axis:nrm(v),
+  ang:p*2*Math.PI/3,kind:'vert',axkey:'d'+i,cls:`对角线轴 ${p*120}°`})));
+EDGE.forEach((v,i)=>ELS.push({name:`t${sub(i+1)}`,axis:nrm(v),ang:Math.PI,
+  kind:'edge',axkey:'t'+i,cls:'棱轴 180°'}));
+
+const qs=ELS.map(el=>new THREE.Quaternion()
+  .setFromAxisAngle(new THREE.Vector3(...el.axis),el.ang));
+function findIdx(q){
+  let best=0,bd=-1;
+  for(let i=0;i<24;i++){const d=Math.abs(qs[i].dot(q));if(d>bd){bd=d;best=i;}}
+  return best;
+}
+// T[a][b] = 先做 a 再做 b
+const T=ELS.map((_,a)=>ELS.map((_,b)=>findIdx(qs[b].clone().multiply(qs[a]))));
+
+/* ---------- three.js 场景 ---------- */
+const app=document.getElementById('app');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+app.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x04050b);
+const camera=new THREE.PerspectiveCamera(45,1,0.1,100);
+camera.position.set(4.6,-6.6,4.6); camera.up.set(0,0,1);
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;
+scene.add(new THREE.AmbientLight(0xffffff,0.85));
+const dl=new THREE.DirectionalLight(0xffffff,1.3); dl.position.set(5,-6,8); scene.add(dl);
+const dl2=new THREE.DirectionalLight(0xffffff,0.6); dl2.position.set(-5,5,-6); scene.add(dl2);
+
+/* 立方体：六面异色、半透明，看得见体对角线 */
+const S=1.55;
+const FCOL=[0xc0392b,0xe07b2a,0x2471c9,0x1f9e50,0xdfe4ee,0xe8c81f]; // +x -x +y -y +z -z
+const cube=new THREE.Group();
+{
+  const mats=FCOL.map(c=>new THREE.MeshStandardMaterial({color:c,roughness:0.5,
+    transparent:true,opacity:0.62,side:THREE.DoubleSide}));
+  const box=new THREE.Mesh(new THREE.BoxGeometry(2*S,2*S,2*S),mats);
+  cube.add(box);
+  cube.add(new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry),
+    new THREE.LineBasicMaterial({color:0x0b101c})));
+}
+/* 4 条体对角线杆(默认隐藏,按钮开关) + 8 个顶点球 + 编号 */
+const DCOL=[0xff5f6b,0xffd23a,0x59d96c,0x6ea8ff];
+const rodsGrp=new THREE.Group(); rodsGrp.visible=false; cube.add(rodsGrp);
+function labelSprite(txt,color){
+  const c=document.createElement('canvas'); c.width=c.height=128;
+  const g=c.getContext('2d');
+  g.beginPath(); g.arc(64,64,50,0,7); g.fillStyle='#0b101c'; g.fill();
+  g.lineWidth=8; g.strokeStyle=color; g.stroke();
+  g.fillStyle=color; g.font='bold 64px sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText(txt,64,70);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false}));
+  sp.scale.set(0.46,0.46,1); return sp;
+}
+DIAG.forEach((v,i)=>{
+  const dir=new THREE.Vector3(...v).normalize();
+  const len=2*S*Math.sqrt(3);
+  const rod=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,len*0.98,10),
+    new THREE.MeshBasicMaterial({color:DCOL[i]}));
+  rod.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
+  rodsGrp.add(rod);
+  for(const sg of [1,-1]){
+    const p=dir.clone().multiplyScalar(sg*S*Math.sqrt(3));
+    const ball=new THREE.Mesh(new THREE.SphereGeometry(0.11,18,14),
+      new THREE.MeshBasicMaterial({color:DCOL[i]}));
+    ball.position.copy(p); cube.add(ball);
+    const sp=labelSprite(String(i+1),'#'+DCOL[i].toString(16).padStart(6,'0'));
+    sp.position.copy(p.clone().multiplyScalar(1.16)); cube.add(sp);
+  }
+});
+scene.add(cube);
+
+/* 静止影子轮廓 */
+{
+  const g=new THREE.BoxGeometry(2*S*1.04,2*S*1.04,2*S*1.04);
+  scene.add(new THREE.LineSegments(new THREE.EdgesGeometry(g),
+    new THREE.LineBasicMaterial({color:0x2b3a55})));
+}
+
+/* 13 条旋转轴 */
+const AXLEN=3.4;
+const axisLines={};
+function addAxis(key,dir,color){   // 轴画成实体圆柱杆,点按/悬停时才显示,穿透立方体也清晰可见
+  const d=new THREE.Vector3(...dir).normalize();
+  const m=new THREE.MeshBasicMaterial({color});
+  const ln=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,2*AXLEN,12),m);
+  ln.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d);
+  ln.visible=false; scene.add(ln);
+  const tip1=new THREE.Mesh(new THREE.ConeGeometry(0.11,0.3,12),m);
+  tip1.position.y=AXLEN; ln.add(tip1);
+  const tip2=new THREE.Mesh(new THREE.ConeGeometry(0.11,0.3,12),m);
+  tip2.position.y=-AXLEN; tip2.rotation.x=Math.PI; ln.add(tip2);
+  axisLines[key]={m,ln};
+}
+addAxis('fx',[1,0,0],0x7fc7ff); addAxis('fy',[0,1,0],0x7fc7ff); addAxis('fz',[0,0,1],0x7fc7ff);
+DIAG.forEach((v,i)=>addAxis('d'+i,v,0xc9a2ff));
+EDGE.forEach((v,i)=>addAxis('t'+i,v,0xffb37f));
+function setAxisHL(key){          // 所有轴默认隐藏，只显示正在用/悬停的那一条
+  for(const k in axisLines){
+    const a=axisLines[k], on=(k===key);
+    a.ln.visible=on;
+    if(a.label) a.label.visible=on;
+  }
+}
+function axisLabel(key,txt,color,pos){   // 轴的字母标注，跟随该轴一起显示/隐藏
+  const c=document.createElement('canvas'); c.width=c.height=96;
+  const g=c.getContext('2d');
+  g.fillStyle=color; g.font='italic bold 72px Times,serif';
+  g.shadowColor=color; g.shadowBlur=10;
+  g.textAlign='center'; g.textBaseline='middle'; g.fillText(txt,48,52);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false,transparent:true}));
+  sp.scale.set(0.62,0.62,1); sp.position.copy(pos); sp.visible=false; scene.add(sp);
+  axisLines[key].label=sp;
+}
+axisLabel('fx','x','#7fc7ff',new THREE.Vector3(AXLEN*0.92,0,0.3));
+axisLabel('fy','y','#7fc7ff',new THREE.Vector3(0,AXLEN*0.92,0.3));
+axisLabel('fz','z','#7fc7ff',new THREE.Vector3(0.3,0,AXLEN*0.92));
+setAxisHL(null);
+
+/* ---------- 状态 + UI ---------- */
+let curIdx=0, word=[];
+const visited=new Set([0]);
+const stateBox=document.getElementById('state');
+const noteBox=document.getElementById('note');
+const gBtns=[...document.querySelectorAll('button[data-g]')];
+
+const DHTML=i=>`<span style="color:#${DCOL[i].toString(16).padStart(6,'0')};font-weight:700">${i+1}</span>`;
+function diagPerm(idx){          // 对角线 i 被送到哪条
+  const q=qs[idx],u=new THREE.Vector3();
+  return DIAG.map(v=>{
+    u.set(...v).normalize().applyQuaternion(q);
+    let best=0,bd=-1;
+    DIAG.forEach((w,j)=>{const ww=new THREE.Vector3(...w).normalize();
+      const d=Math.abs(u.dot(ww)); if(d>bd){bd=d;best=j;}});
+    return best;
+  });
+}
+function cycleHTML(perm){
+  const seen=new Array(4).fill(false); let out='';
+  for(let i=0;i<4;i++) if(!seen[i]){
+    const cyc=[]; let u=i;
+    while(!seen[u]){seen[u]=true;cyc.push(u);u=perm[u];}
+    if(cyc.length>1) out+='('+cyc.map(DHTML).join(' ')+')';
+  }
+  return out||'(恒等)';
+}
+function renderState(){
+  const el=ELS[curIdx];
+  const perm=diagPerm(curIdx);
+  const w=word.length?word.map(i=>ELS[i].name).join('·'):'（空）';
+  stateBox.innerHTML=
+    `当前元素：<b>${el.name}</b>　<span style="color:#8a99b5">${el.cls}</span><br>`+
+    `对角线置换：${cycleHTML(perm)}　<span style="color:#8a99b5">${perm.map((j,i)=>DHTML(i)+'→'+DHTML(j)).join('　')}</span><br>`+
+    `操作历史：<span class="word">${w}</span>${word.length>1?` = <b>${el.name}</b>`:''}`;
+  gBtns.forEach(b=>b.classList.toggle('on',+b.dataset.g===curIdx));
+  // 到访格
+  [...visGrid.children].forEach((c,i)=>{
+    c.classList.toggle('hit',visited.has(i));
+    c.classList.toggle('cur',i===curIdx);
+  });
+  document.getElementById('visN').textContent=visited.size;
+  if(visited.size===24&&!allDone){ allDone=true;
+    noteBox.innerHTML='🎉 <b>24/24</b>！你已走遍正方体旋转群的全部元素 —— 它们与 4 条对角线的 4!=24 种排列一一对应（≅ S₄）。';
+    noteBox.style.display='block';
+  }
+}
+let allDone=false;
+const visGrid=document.getElementById('visited');
+ELS.forEach(el=>{const d=document.createElement('div');d.textContent=el.name;visGrid.appendChild(d);});
+
+/* ---------- 动画队列 ---------- */
+const queue=[];
+let anim=null;
+function enqueue(g){ queue.push(g); }
+function applyAlg(g){ curIdx=T[curIdx][g]; word.push(g); visited.add(curIdx); renderState(); }
+function step(now){
+  if(!anim&&queue.length){
+    const g=queue.shift(), el=ELS[g];
+    if(el.ang===0){ applyAlg(g); }
+    else{
+      anim={g,start:cube.quaternion.clone(),t0:now,dur:400+520*el.ang/Math.PI};
+      setAxisHL(el.axkey);
+      applyAlg(g);
+    }
+  }
+  if(anim){
+    const el=ELS[anim.g];
+    let t=(now-anim.t0)/anim.dur;
+    if(t>=1){
+      cube.quaternion.copy(qs[anim.g].clone().multiply(anim.start));
+      anim=null; setAxisHL(hoverKey);
+    }else{
+      const e=t<0.5?2*t*t:1-((-2*t+2)**2)/2;
+      const dq=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(...el.axis),el.ang*e);
+      cube.quaternion.copy(dq.multiply(anim.start));
+    }
+  }
+}
+
+/* ---------- 交互 ---------- */
+let hoverKey=null;
+gBtns.forEach(b=>{
+  const el=ELS[+b.dataset.g];
+  b.addEventListener('click',()=>enqueue(+b.dataset.g));
+  b.addEventListener('mouseenter',()=>{hoverKey=el.axkey;if(!anim)setAxisHL(el.axkey);});
+  b.addEventListener('mouseleave',()=>{hoverKey=null;if(!anim)setAxisHL(null);});
+});
+document.getElementById('rndB').addEventListener('click',()=>enqueue(1+Math.floor(Math.random()*23)));
+const rodsB=document.getElementById('rodsB');
+rodsB.addEventListener('click',()=>{
+  rodsGrp.visible=!rodsGrp.visible;
+  rodsB.classList.toggle('on',rodsGrp.visible);
+});
+let resetSlerp=null,resetT=0;
+document.getElementById('reset').addEventListener('click',()=>{
+  queue.length=0;anim=null;setAxisHL(null);
+  curIdx=0;word=[];visited.add(0);
+  resetSlerp=cube.quaternion.clone();resetT=performance.now();
+  renderState();noteBox.style.display='none';
+});
+
+/* ⚡ 两个 90° 面转合成一个 120° 对角线转 */
+const demoB=document.getElementById('demoB');
+demoB.addEventListener('click',async()=>{
+  demoB.disabled=true;
+  const wait=ms=>new Promise(r=>setTimeout(r,ms));
+  const idle=async()=>{while(queue.length||anim)await wait(60);};
+  const say=h=>{noteBox.innerHTML=h;noteBox.style.display='block';};
+  document.getElementById('reset').click(); await wait(480);
+  say('先绕 <b>x</b> 转 90°，再绕 <b>y</b> 转 90° …');
+  enqueue(1); await idle(); await wait(300); enqueue(4); await idle();
+  const A=curIdx;
+  say(`x·y = <b>${ELS[A].name}</b>（${ELS[A].cls}）—— 两个面转 90° 合成了一个对角线 120° 转！换个顺序 ——`);
+  await wait(1600);
+  document.getElementById('reset').click(); await wait(480);
+  say('这次先绕 <b>y</b>，再绕 <b>x</b> …');
+  enqueue(4); await idle(); await wait(300); enqueue(1); await idle();
+  const B=curIdx;
+  say(`x·y = <b>${ELS[A].name}</b>，而 y·x = <b>${ELS[B].name}</b>${A!==B?' —— 顺序不同结果不同，<b>非交换</b>；且都落在对角线 120° 这一类里。':''}`);
+  demoB.disabled=false;
+});
+
+renderState();
+
+/* ---------- 主循环 ---------- */
+function resize(){
+  const w=app.clientWidth,h=app.clientHeight;
+  renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();
+}
+addEventListener('resize',resize);resize();
+renderer.setAnimationLoop(now=>{
+  if(resetSlerp){
+    const t=Math.min(1,(now-resetT)/380);
+    cube.quaternion.copy(resetSlerp).slerp(new THREE.Quaternion(),t<0.5?2*t*t:1-((-2*t+2)**2)/2);
+    if(t>=1){cube.quaternion.identity();resetSlerp=null;}
+  }else step(now);
+  controls.update();
+  renderer.render(scene,camera);
+});
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;background:#1b2536;color:#e2e9f7;border:1px solid #26324a;padding:6px 9px;border-radius:8px;font-size:11.5px;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>
