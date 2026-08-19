@@ -17,8 +17,9 @@ const cases = [
     [R`C^d_i`, R`Cᵈᵢ`],                          // 上标在前
     [R`C_i^d`, R`Cᵢᵈ`],
     [R`x^q`, R`x^q`],                             // q 无上标形式
-    [R`e^{i\pi}`, R`e^(iπ)`],                     // 裸模式退化为线性
-    [R`\|x\|_{L^2}`, R`‖x‖_(L²)`],
+    [R`e^{i\pi}`, R`e^{iπ}`],                     // 转不成 Unicode 的上标保持花括号形式
+    [R`|X^{r^j}| = k^{\gcd(j,n)}`, R`|X^{rʲ}| = k^{gcd(j,n)}`],   // 嵌套上标: {} 不退化成 ()
+    [R`\|x\|_{L^2}`, R`‖x‖_{L²}`],
     // frac / sqrt
     [R`\frac{a}{b}`, R`a/b`],
     [R`\frac{x^2+1}{3}`, R`(x²+1)/3`],
@@ -140,7 +141,7 @@ const cases = [
     // underbrace → 三行(内容/╰─╯/标注)
     ['$$\n\\underbrace{𝔽ₚ[x] \\text{ 上分解}}_{\\text{局部、易}} ⟶ \\underbrace{ℤ[x] \\text{ 上分解}}_{\\text{全局、难}}\n$$',
      '𝔽ₚ[x] 上分解 ⟶ ℤ[x] 上分解\n╰──────────╯   ╰─────────╯\n  局部、易      全局、难'],
-    [R`\underbrace{a + \hat{bc}}_{n}`, R`\underbrace{a + \hat{bc}}_n`],   // 内容有残留: 放弃(裸模式 _{n} 退化为 _n)
+    [R`\underbrace{a + \hat{bc}}_{n}`, R`\underbrace{a + \hat{bc}}_{n}`],   // 内容有残留: 放弃
     [R`\underbrace{a+b}_{n}`, 'a+b\n╰─╯\n n'],
     // 六项扩展: frac 变体/正体外壳/binom/not/xarrow/更多环境
     [R`\dfrac{a+b}{2} + \tfrac{1}{2}`, R`(a+b)/2 + 1/2`],
