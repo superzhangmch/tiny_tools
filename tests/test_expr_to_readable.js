@@ -36,10 +36,13 @@ const cases = [
     [R`\frac{1}{(x+1)^2}`, R`1/(x+1)²`],
     // 大算符界限
     [R`\sum_{i=1}^n i^2`, R`∑ᵢ₌₁ⁿ i²`],
+    [R`\sum_{x \in E} f(x)`, R`∑_{x ∈ E} f(x)`],    // 界限转不成 Unicode 时保留花括号, 不退化成 ∑_(…)
+    [R`$\sum_{x \in E} f(x)$ 求和`, R`∑_{x ∈ E} f(x) 求和`],   // 大算符界限不算残留, 去 $
+    [R`$\int_0^\infty e^{-x} dx = 1$ 成立`, R`∫₀^∞ e⁻ˣ dx = 1 成立`],
     [R`\prod_{j=1}^m`, R`∏ⱼ₌₁ᵐ`],
     [R`\int_0^\infty e^{-x} dx`, R`∫₀^∞ e⁻ˣ dx`],
     [R`\lim_n a_n`, R`limₙ aₙ`],
-    [R`\lim_{n \to \infty} a_n`, R`lim_(n → ∞) aₙ`],
+    [R`\lim_{n \to \infty} a_n`, R`lim_{n → ∞} aₙ`],   // 大算符界限保留花括号
     // 变音符
     [R`\vec{v} \cdot \hat{n}`, R`v⃗ ⋅ n̂`],
     [R`\hat{x}^2`, R`x̂²`],
