@@ -195,6 +195,11 @@ var _err_out = { innerHTML: '' };   // 错误收集(沿用页面时代的 html �
 	    // "(...)²" 这种括号组带上下标的整体是原子的，不需要再包括号
 	    var re_paren_pow = new RegExp('^\\([^()]*\\)[' + sup2 + sub2 + ']*$');
 
+	    // 大算符：它们的 _{...} ^… 界限本身是可读文本，不做括号退化、也不算"没转干净"的残留
+	    var bigop_src = '(?:[∑∏∫∬∭∮⋀⋁⋂⋃⨀⨁⨂⨄⨆]|(?:^|[^A-Za-z])(?:limsup|liminf|lim|max|min|sup|inf))';
+	    var re_bigop_before = new RegExp(bigop_src + '[ \\t]*$');
+	    var re_bigop_scripts = new RegExp('(' + bigop_src + '[ \\t]*)(?:[' + sup2 + sub2 + ']|[_^](?:\\{[^{}]*\\}|[^\\s_^{}]))+', 'g');
+
 	    // 组合变音符（跟在基字符后面）
 	    var m_accent = {hat:'̂', widehat:'̂', check:'̌', tilde:'̃', widetilde:'̃',
 		acute:'́', grave:'̀', ddot:'̈', dot:'̇', breve:'̆', bar:'̄',
@@ -506,7 +511,9 @@ var _err_out = { innerHTML: '' };   // 错误收集(沿用页面时代的 html �
 		// 兜底（仅裸表达式模式）：没能转成 Unicode 的 ^{...} _{...} 退化为线性形式，消掉花括号。
 		// 先试转里面的简单上下标（^{e_i} → ^(eᵢ)）；单字符/纯数字不加圆括号。
 		// 混合文本模式不退化：这类段落会保留 $ 交给 latex 渲染器，得留着合法 latex
-		if (degrade) latex = latex.replace(/([_^])\{([^{}]*)\}/g, function (m, op, arg) {
+		if (degrade) latex = latex.replace(/([_^])\{([^{}]*)\}/g, function (m, op, arg, offset, whole) {
+		    // 大算符的界限保留花括号形式：∑_{x∈E} 比 ∑_(x∈E) 可读
+		    if (re_bigop_before.test(whole.slice(0, offset))) return m;
 		    arg = arg.trim()
 			.replace(/_([A-Za-z0-9])(?![A-Za-z0-9])/g, function (m2, c) { var s = trans(m_sub, c); return s ? s : m2; })
 			.replace(/\^([A-Za-z0-9])(?![A-Za-z0-9])/g, function (m2, c) { var s = trans(m_sup, c); return s ? s : m2; });
@@ -544,8 +551,10 @@ var _err_out = { innerHTML: '' };   // 错误收集(沿用页面时代的 html �
 		    try { r = convert_one(groups[idx]); } catch (e) { return match; }
 		    r = r.trim();
 		    // 残留 \ ^ _ 算没转干净：部分转换的结果保留定界符交给 latex 渲染。
-		    // 单独的花括号不算——真残留必伴随 \ ^ _，孤立 {} 是集合字面量({1,6})
-		    if (/[\\^_]/.test(r)) {
+		    // 单独的花括号不算——真残留必伴随 \ ^ _，孤立 {} 是集合字面量({1,6})。
+		    // 大算符的界限(∑_{x∈E}、∫_0^∞)是可读文本，先剔除再检查残留
+		    var probe = r.replace(re_bigop_scripts, '$1');
+		    if (/[\\^_]/.test(probe)) {
 			return sp.pairs[idx][0] + r + sp.pairs[idx][1];
 		    }
 		    // 多行结果(矩阵/分段函数)的续行，按段落在原句中的起始列缩进
