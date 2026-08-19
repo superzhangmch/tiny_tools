@@ -197,7 +197,6 @@ var _err_out = { innerHTML: '' };   // 错误收集(沿用页面时代的 html �
 
 	    // 大算符：它们的 _{...} ^… 界限本身是可读文本，不做括号退化、也不算"没转干净"的残留
 	    var bigop_src = '(?:[∑∏∫∬∭∮⋀⋁⋂⋃⨀⨁⨂⨄⨆]|(?:^|[^A-Za-z])(?:limsup|liminf|lim|max|min|sup|inf))';
-	    var re_bigop_before = new RegExp(bigop_src + '[ \\t]*$');
 	    var re_bigop_scripts = new RegExp('(' + bigop_src + '[ \\t]*)(?:[' + sup2 + sub2 + ']|[_^](?:\\{[^{}]*\\}|[^\\s_^{}]))+', 'g');
 
 	    // 组合变音符（跟在基字符后面）
@@ -469,7 +468,7 @@ var _err_out = { innerHTML: '' };   // 错误收集(沿用页面时代的 html �
 		latex = latex.replace(/\\(arcsin|arccos|arctan|sinh|cosh|tanh|coth|limsup|liminf|sin|cos|tan|cot|sec|csc|log|ln|exp|lim|max|min|sup|inf|det|gcd|deg|arg|dim|ker|hom|Pr)(?![a-zA-Z])/g, "$1").replace(/\*\*/g, "^");
 		return latex;
 	      }
-	    function convert_one(expr, degrade) {
+	    function convert_one(expr) {
 		expr = do_replace(expr.trim());
 		const tokens = tokenize(expr, false);
 		const syntaxTree = buildSyntaxTree(tokens, expr, false);
@@ -508,17 +507,7 @@ var _err_out = { innerHTML: '' };   // 错误收集(沿用页面时代的 html �
 		latex = latex.replace(/\s*\^(\s*[^\^_ \t]+\s*)_/g, function (match, p3) {
 		    var s1 = trans(m_sup, strip_braces(p3));
 		    if (s1) { return s1+"_"; } else { return match; } });
-		// 兜底（仅裸表达式模式）：没能转成 Unicode 的 ^{...} _{...} 退化为线性形式，消掉花括号。
-		// 先试转里面的简单上下标（^{e_i} → ^(eᵢ)）；单字符/纯数字不加圆括号。
-		// 混合文本模式不退化：这类段落会保留 $ 交给 latex 渲染器，得留着合法 latex
-		if (degrade) latex = latex.replace(/([_^])\{([^{}]*)\}/g, function (m, op, arg, offset, whole) {
-		    // 大算符的界限保留花括号形式：∑_{x∈E} 比 ∑_(x∈E) 可读
-		    if (re_bigop_before.test(whole.slice(0, offset))) return m;
-		    arg = arg.trim()
-			.replace(/_([A-Za-z0-9])(?![A-Za-z0-9])/g, function (m2, c) { var s = trans(m_sub, c); return s ? s : m2; })
-			.replace(/\^([A-Za-z0-9])(?![A-Za-z0-9])/g, function (m2, c) { var s = trans(m_sup, c); return s ? s : m2; });
-		    return op + (/^([A-Za-z]|-?[0-9.]+|[^\x00-\x7F])$/.test(arg) ? arg : '(' + arg + ')');
-		});
+		// 转不成 Unicode 的 ^{...} _{...} 保持花括号形式（^{rʲ} 比 ^(rʲ) 可读，且对 renderer 合法）
 		if (opts.transMatrix !== false) {
 		    latex = trans_underbrace_to_text(latex);
 		    latex = trans_env_to_text(latex);
@@ -568,7 +557,7 @@ var _err_out = { innerHTML: '' };   // 错误收集(沿用页面时代的 html �
 		});
 		return { text: out, mode: 'mixed' };
 	    }
-	    return { text: convert_one(input, true), mode: 'single' };
+	    return { text: convert_one(input), mode: 'single' };
 	}
 
 	function show_err1(input, pos, pos_len, msg, left_pos, left_len) {
