@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>黎曼几何：度量 · 测地线 · 平行移动 · 曲率</title>
+<style>
+  :root { --panel:#111726cc; --line:#26324a; --txt:#e2e9f7; --dim:#8a99b5; --accent:#3ad0c4; --warn:#ffd27f;
+          --pos:#ff6a4d; --neg:#4c7dff; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#04050b; color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif; }
+  #app { position:fixed; inset:0; }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--dim); font-size:14px; }
+  .panel { position:fixed; top:14px; right:14px; width:352px; max-height:calc(100% - 28px); overflow:auto;
+    background:var(--panel); backdrop-filter:blur(8px); border:1px solid var(--line); border-radius:12px; padding:15px; }
+  h1 { font-size:15px; margin:0 0 4px; padding-right:60px; }
+  .sub { font-size:11.5px; color:var(--dim); margin:0 0 8px; line-height:1.55; }
+  .sub b { color:var(--txt); }
+  .grp { margin:9px 0; }
+  .grp > label { display:block; font-size:11.5px; color:var(--dim); margin-bottom:4px; }
+  select { width:100%; background:#1b2536; color:var(--txt); border:1px solid var(--line); border-radius:7px;
+    padding:5px 6px; font-size:12px; }
+  button { background:#1b2536; color:var(--txt); border:1px solid var(--line);
+    padding:5px 4px; border-radius:7px; font-size:11.5px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.on { background:var(--accent); color:#03110f; border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:0.45; cursor:default; }
+  .tabs { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin:10px 0 8px; }
+  .tabs button { padding:6px 2px; font-size:11px; }
+  .wideRow { display:flex; gap:6px; margin:5px 0; }
+  .wideRow button { flex:1; }
+  .row { display:flex; gap:12px; font-size:11.5px; color:var(--dim); margin:5px 0; flex-wrap:wrap; }
+  .row label { display:flex; align-items:center; gap:4px; cursor:pointer; }
+  .sl { margin:6px 0; }
+  .sl label { display:flex; justify-content:space-between; font-size:11.5px; color:var(--dim); }
+  .sl label .val { color:var(--txt); }
+  .sl input { width:100%; margin:2px 0 0; }
+  .state { font-size:12px; background:#0b101c; border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; line-height:1.7; margin-top:8px; font-variant-numeric:tabular-nums; }
+  .state b { color:var(--accent); }
+  .state .w { color:var(--warn); }
+  .state .p { color:var(--pos); } .state .n { color:var(--neg); }
+  .state .ok { color:#7be08a; }
+  .state table { border-collapse:collapse; font-size:11.5px; margin:2px 0; }
+  .state td { padding:0 8px 0 0; }
+  .cu { color:#ff7a7a; } .cv { color:#7ee787; } .cn { color:#aab4c8; }
+  .kbar { display:inline-block; vertical-align:middle; width:110px; height:9px; border-radius:4px; margin:0 5px;
+    background:linear-gradient(90deg,var(--neg),#cfd6e4,var(--pos)); }
+  .hint { font-size:11px; color:var(--dim); line-height:1.65; border-top:1px solid var(--line);
+    padding-top:9px; margin-top:11px; }
+  .hint b { color:var(--txt); }
+  .tag { position:fixed; left:14px; bottom:12px; font-size:11.5px; color:var(--dim); }
+  #busy { position:fixed; left:50%; top:14px; transform:translateX(-50%); background:var(--panel);
+    border:1px solid var(--line); border-radius:8px; padding:6px 12px; font-size:12px; display:none; }
+  body.ctl-collapsed .panel, body.ctl-collapsed .tag { display:none !important; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading">正在加载 three.js …（此页需要联网）</div>
+<div id="busy">计算中…</div>
+
+<div class="panel">
+  <h1>黎曼几何：度量 · 测地线 · 平行移动 · 曲率</h1>
+  <p class="sub">整个页面只被告知一件事：曲面的参数式 <b>r(u,v)</b>。度量 g<sub>ij</sub>=∂<sub>i</sub>r·∂<sub>j</sub>r、
+    克氏符号 Γ、测地线方程、平行移动、高斯曲率 K，全部从 g 数值算出，不用任何现成结论 ——
+    这正是黎曼几何"<b>只在曲面里用尺子量，不看外面</b>"的内蕴视角。
+    曲面按 K 着色：<span class="kbar"></span> <span style="color:var(--neg)">K&lt;0</span> · 灰 K≈0 · <span style="color:var(--pos)">K&gt;0</span></p>
+
+  <div class="grp">
+    <label>曲面</label>
+    <select id="surf"></select>
+    <div class="row">
+      <label><input type="checkbox" id="ckK" checked> 按 K 着色</label>
+      <label><input type="checkbox" id="ckGrid" checked> 坐标网格 (u,v)</label>
+    </div>
+    <div id="surfNote" class="sub" style="margin-top:4px"></div>
+  </div>
+
+  <div class="tabs">
+    <button data-m="0" class="on">① 度量·曲率</button>
+    <button data-m="1">② 测地线</button>
+    <button data-m="2">③ 平行移动</button>
+    <button data-m="3">④ 测地三角形</button>
+  </div>
+
+  <div class="mode" id="mode0">
+    <p class="sub"><b>鼠标悬停</b>看局部：切向量 <span class="cu">∂<sub>u</sub></span>、<span class="cv">∂<sub>v</sub></span>、<span class="cn">法向 n</span>，
+      度量矩阵 g、6 个 Γ。<b>点击</b>可固定探针。曲率 K 用三种办法各算一遍：
+      <b>外在</b>（用法向：(LN−M²)/(EG−F²)）、<b>内蕴</b>（只用 g：Γ 的导数拼出黎曼张量）、
+      <b>测量</b>（以 ρ 为半径画测地圆量周长：C = 2πρ(1 − Kρ²/6 + …)）。三者一致 —— 这就是 Gauss 的<b>绝妙定理</b>：曲率不需要看外面。</p>
+    <div class="sl"><label><span>测地圆半径 ρ</span><span class="val" id="rhoV">0.50</span></label><input type="range" id="rho" min="0.1" max="1.2" step="0.01" value="0.5"></div>
+    <div class="row"><label><input type="checkbox" id="ckCircle" checked> 显示测地圆与 8 根半径</label></div>
+    <div class="wideRow"><button id="unpin">解除固定（探针跟随鼠标）</button></div>
+  </div>
+
+  <div class="mode" id="mode1" hidden>
+    <p class="sub"><b>点击曲面</b>设起点，调方向与长度。测地线 = 在曲面内"一直直走"：
+      ü<sup>k</sup> + Γ<sup>k</sup><sub>ij</sub> u̇<sup>i</sup> u̇<sup>j</sup> = 0（RK4 积分）。
+      <b>扇束</b>把 24 条测地线一齐放出：K&gt;0 处它们互相<b>靠拢</b>（球面上在对径点重聚），K&lt;0 处<b>散开</b>，K=0 处保持等距（测地偏离方程）。
+      勾选"uv 直线"可看到：坐标里的直线一般<b>不是</b>测地线。</p>
+    <div class="sl"><label><span>出发方向 α（相对 ∂<sub>u</sub>）</span><span class="val" id="alphaV">30°</span></label><input type="range" id="alpha" min="0" max="360" step="1" value="30"></div>
+    <div class="sl"><label><span>弧长 L</span><span class="val" id="lenV">3.0</span></label><input type="range" id="len" min="0.2" max="9" step="0.05" value="3"></div>
+    <div class="wideRow"><button id="bSingle" class="on">单条</button><button id="bSpray">扇束 ×24</button></div>
+    <div class="row"><label><input type="checkbox" id="ckUV"> 对比：uv 坐标里的"直线"（灰）</label></div>
+  </div>
+
+  <div class="mode" id="mode2" hidden>
+    <p class="sub"><b>点击若干点</b>围成回路（顶点间在 uv 里直连），或用预设。然后把一个切向量沿回路<b>平行移动</b>
+      （dV<sup>k</sup>/dt = −Γ<sup>k</sup><sub>ij</sub>V<sup>i</sup>ẋ<sup>j</sup>，每一步都"尽量不转"）一圈。
+      回到原点时向量却<b>转了一个角</b>（和乐角）—— Gauss–Bonnet 说它恰等于回路所围区域的 <b>∫∫K dA</b>。
+      平直曲面（圆柱、极坐标平面）→ 0；球面纬圈 → 2π(1−cos θ)。</p>
+    <div class="sl"><label><span>初始向量方向 β（相对 ∂<sub>u</sub>）</span><span class="val" id="betaV">0°</span></label><input type="range" id="beta" min="0" max="360" step="1" value="0"></div>
+    <div class="sl"><label><span>预设小矩形半宽（uv 单位）</span><span class="val" id="hwV">0.35</span></label><input type="range" id="hw" min="0.1" max="1.0" step="0.01" value="0.35"></div>
+    <div class="wideRow"><button id="bLat">预设：绕一圈（纬圈）</button><button id="bRect">预设：坐标小矩形</button></div>
+    <div class="wideRow"><button id="bRun" class="on">▶ 闭合并平行移动</button><button id="bClearLoop">清除回路</button></div>
+  </div>
+
+  <div class="mode" id="mode3" hidden>
+    <p class="sub"><b>点 3 个点</b>，程序用测地线把它们连成三角形（打靶法解边界值问题：扫描出发角，命中目标点）。
+      内角和 − 180° = ∫∫<sub>△</sub>K dA：球面 &gt;0、马鞍面/伪球面 &lt;0、圆柱面 = 0。这是 Gauss–Bonnet 最经典的形式，也是"测地三角形内角和"如何反映曲率的直接体现。</p>
+    <div class="wideRow"><button id="bRandTri">随机一个三角形</button><button id="bClearTri">清除</button></div>
+  </div>
+
+  <div class="state" id="out">…</div>
+
+  <div class="hint">数值细节：r 的一、二阶导用中心差分（h=10⁻⁴），Γ 的导数再差分一次（h=10⁻³），所以"内蕴 K"与"外在 K"通常只差 ~10⁻⁵ 量级，纯属数值误差。
+    球面/椭球用经纬参数，两极是<b>坐标奇点</b>（不是曲面奇点）：测地线走到极点附近会停下并提示。<b>拖动=旋转视角 · 滚轮=缩放</b>。</div>
+</div>
+<div class="tag">鼠标拖动=旋转视角 · 滚轮=缩放 · 点击曲面=设点/探针 · 右上 ⚙ 收起面板</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+document.getElementById('loading').remove();
+
+/* ============ 0. 小工具 ============ */
+const TAU=2*Math.PI, RAD=180/Math.PI;
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const norm=a=>Math.hypot(a[0],a[1],a[2]);
+const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
+const lin=(a,b,s,t)=>[a[0]*s+b[0]*t,a[1]*s+b[1]*t,a[2]*s+b[2]*t];
+const unit=a=>{const l=norm(a)||1;return [a[0]/l,a[1]/l,a[2]/l];};
+const f3=x=>(Math.abs(x)<5e-4?0:x).toFixed(3);
+const f2=x=>(Math.abs(x)<5e-3?0:x).toFixed(2);
+const dg=x=>(x*RAD).toFixed(2)+'°';
+const V3=a=>new THREE.Vector3(a[0],a[1],a[2]);
+const sech=x=>1/Math.cosh(x);
+const $=id=>document.getElementById(id);
+
+/* ============ 1. 曲面库：每个曲面只提供 r(u,v) ============ */
+/* poleEnds: u 的两端是否为坐标极点(图卡在那里收拢成一点)。perU/perV: 该坐标是否周期. */
+const SURFACES={
+  sphere:{name:'球面 (K ≡ +1)',u:[0.02,Math.PI-0.02],v:[0,TAU],perU:false,perV:true,poleEnds:[true,true],uPole:0,
+    r:(u,v)=>[Math.sin(u)*Math.cos(v),Math.sin(u)*Math.sin(v),Math.cos(u)],
+    note:'常正曲率。测地线 = 大圆，扇束在对径点重新汇聚；沿纬圈平行移动一圈转过 2π(1−cos θ)；测地三角形内角和 > 180°。'},
+  ellipsoid:{name:'椭球面 (K > 0 但不常数)',u:[0.02,Math.PI-0.02],v:[0,TAU],perU:false,perV:true,poleEnds:[true,true],uPole:0,
+    r:(u,v)=>[1.35*Math.sin(u)*Math.cos(v),Math.sin(u)*Math.sin(v),0.7*Math.cos(u)],
+    note:'尖端处 K 大、扁处 K 小；测地线一般不再闭合。K 处处正，所有效应与球面同向但不均匀。'},
+  torus:{name:'环面 (K 有正有负)',u:[0,TAU],v:[0,TAU],perU:true,perV:true,poleEnds:[false,false],
+    r:(u,v)=>[(0.95+0.42*Math.cos(v))*Math.cos(u),(0.95+0.42*Math.cos(v))*Math.sin(u),0.42*Math.sin(v)],
+    note:'外侧 K>0、内侧 K<0，整体 ∮K dA = 0（Gauss–Bonnet：χ=0）。绕洞或绕管一周的回路不围成圆盘，面积分不再适用。'},
+  saddle:{name:'马鞍面 z = 0.55(x²−y²)  (K < 0)',u:[-1.2,1.2],v:[-1.2,1.2],perU:false,perV:false,poleEnds:[false,false],
+    r:(u,v)=>[u,v,0.55*(u*u-v*v)],
+    note:'负曲率：测地扇束发散，三角形内角和 < 180°，测地圆周长 > 2πρ，平行移动的和乐角与回路反向。'},
+  pseudo:{name:'伪球面 (K ≡ −1)',u:[0.05,2.7],v:[0,TAU],perU:false,perV:true,poleEnds:[false,false],
+    r:(u,v)=>[sech(u)*Math.cos(v),-sech(u)*Math.sin(v),u-Math.tanh(u)-0.8],
+    note:'常负曲率 —— 双曲几何的局部模型。K 处处 −1，但外观一点也不"均匀"：曲率是内蕴的，与看起来弯不弯无关。'},
+  cylinder:{name:'圆柱面 (K ≡ 0：看着弯，内蕴平直！)',u:[0,TAU],v:[-1.2,1.2],perU:true,perV:false,poleEnds:[false,false],
+    r:(u,v)=>[0.8*Math.cos(u),0.8*Math.sin(u),v],
+    note:'把纸卷起来不拉伸，度量与平面完全一样：Γ ≡ 0、K ≡ 0。测地线 = 螺旋线（展开即直线），平行移动一圈原样回来，三角形内角和恰 180°。'},
+  catenoid:{name:'悬链面 (极小曲面, K < 0)',u:[0,TAU],v:[-0.85,0.85],perU:true,perV:false,poleEnds:[false,false],
+    r:(u,v)=>[0.5*Math.cosh(v/0.5)*Math.cos(u),0.5*Math.cosh(v/0.5)*Math.sin(u),v],
+    note:'肥皂膜（平均曲率 H=0）。高斯曲率在腰部最负，向两端趋于 0。'},
+  wavy:{name:'波浪面 z = 0.32·sin2x·cos2y  (K 正负混合)',u:[-1.35,1.35],v:[-1.35,1.35],perU:false,perV:false,poleEnds:[false,false],
+    r:(u,v)=>[u,v,0.32*Math.sin(2*u)*Math.cos(2*v)],
+    note:'峰、谷处 K>0（碗形），鞍点处 K<0。大回路里正负曲率互相抵消，和乐角可能很小。'},
+  polar:{name:'平面·极坐标 (K ≡ 0 但 Γ ≠ 0)',u:[0.03,1.5],v:[0,TAU],perU:false,perV:true,poleEnds:[true,false],uPole:0,
+    r:(u,v)=>[u*Math.cos(v),u*Math.sin(v),0],
+    note:'对照组：坐标线是弯的（同心圆 + 射线），Γ 不为零，但测地线仍是直线、K=0、平行移动回来不转 —— 坐标弯 ≠ 空间弯。'},
+};
+
+/* ============ 2. 微分几何数值核心：一切只从 r(u,v) 出发 ============ */
+const H1=1e-4, H2=1e-3;
+function geom(S,u,v){
+  const r=S.r(u,v), pu=S.r(u+H1,v), mu=S.r(u-H1,v), pv=S.r(u,v+H1), mv=S.r(u,v-H1),
+        pp=S.r(u+H1,v+H1), pm=S.r(u+H1,v-H1), mp=S.r(u-H1,v+H1), mm=S.r(u-H1,v-H1);
+  const ru=[0,0,0],rv=[0,0,0],ruu=[0,0,0],ruv=[0,0,0],rvv=[0,0,0];
+  for(let k=0;k<3;k++){
+    ru[k]=(pu[k]-mu[k])/(2*H1); rv[k]=(pv[k]-mv[k])/(2*H1);
+    ruu[k]=(pu[k]-2*r[k]+mu[k])/(H1*H1); rvv[k]=(pv[k]-2*r[k]+mv[k])/(H1*H1);
+    ruv[k]=(pp[k]-pm[k]-mp[k]+mm[k])/(4*H1*H1);
+  }
+  const E=dot(ru,ru),F=dot(ru,rv),G=dot(rv,rv),det=E*G-F*F;
+  // ∂g 由二阶导精确给出：E_u = 2 r_u·r_uu 等
+  const Eu=2*dot(ru,ruu),Ev=2*dot(ru,ruv),Fu=dot(ruu,rv)+dot(ru,ruv),Fv=dot(ruv,rv)+dot(ru,rvv),Gu=2*dot(rv,ruv),Gv=2*dot(rv,rvv);
+  const iE=G/det,iF=-F/det,iG=E/det;                          // g^{ij}
+  // 第一类克氏符号 Γ_{l,ij} = ½(∂_i g_jl + ∂_j g_il − ∂_l g_ij)，下标序 (11,12,22)
+  const L1=[0.5*Eu, 0.5*Ev, Fv-0.5*Gu], L2=[Fu-0.5*Ev, 0.5*Gu, 0.5*Gv];
+  const Gam=[[0,1,2].map(i=>iE*L1[i]+iF*L2[i]), [0,1,2].map(i=>iF*L1[i]+iG*L2[i])]; // Γ^k_{ij}
+  const n=unit(cross(ru,rv));
+  const Kext=(dot(ruu,n)*dot(rvv,n)-dot(ruv,n)**2)/det;       // 外在：第二基本形式 (LN−M²)/(EG−F²)
+  return {r,ru,rv,n,E,F,G,det,Gam,Kext};
+}
+/* 内蕴 K：只用 Γ（即只用 g）。R^l_{212} = ∂_1Γ^l_22 − ∂_2Γ^l_21 + Γ^l_1m Γ^m_22 − Γ^l_2m Γ^m_21 ; K = g_{1l}R^l_{212}/det g */
+function Kint(S,u,v){
+  const g=geom(S,u,v), Gm=g.Gam;
+  const a=geom(S,u+H2,v).Gam, b=geom(S,u-H2,v).Gam, c=geom(S,u,v+H2).Gam, d=geom(S,u,v-H2).Gam;
+  const R=[0,1].map(l=>(a[l][2]-b[l][2])/(2*H2) - (c[l][1]-d[l][1])/(2*H2)
+      + (Gm[l][0]*Gm[0][2]+Gm[l][1]*Gm[1][2]) - (Gm[l][1]*Gm[0][1]+Gm[l][2]*Gm[1][1]));
+  return (g.E*R[0]+g.F*R[1])/g.det;
+}
+/* 切平面内与 ∂u 夹角 alpha 的单位向量 → 坐标分量 (du,dv) */
+function dirToUV(g,alpha){
+  const e1=unit(g.ru); const c=dot(g.rv,e1); const e2=unit(lin(g.rv,e1,1,-c));
+  const w=lin(e1,e2,Math.cos(alpha),Math.sin(alpha));
+  const a=dot(w,g.ru), b=dot(w,g.rv);
+  return [(g.G*a-g.F*b)/g.det, (-g.F*a+g.E*b)/g.det];
+}
+const tan3=(g,a,b)=>lin(g.ru,g.rv,a,b);
+const gnorm=(g,a,b)=>Math.sqrt(Math.max(0,g.E*a*a+2*g.F*a*b+g.G*b*b));
+const inDom=(S,u,v)=>(S.perU||(u>=S.u[0]&&u<=S.u[1]))&&(S.perV||(v>=S.v[0]&&v<=S.v[1]));
+function boundaryKind(S,y){
+  if(!S.perU){ if(y[0]<S.u[0]&&S.poleEnds[0]) return '接近坐标极点（参数化奇异），停止'; if(y[0]>S.u[1]&&S.poleEnds[1]) return '接近坐标极点（参数化奇异），停止'; }
+  return '到达曲面边界，停止';
+}
+/* 测地线方程 ü^k = −Γ^k_ij u̇^i u̇^j，RK4，弧长参数 */
+function geoF(S,y){ const g=geom(S,y[0],y[1]); const a=y[2],b=y[3],G=g.Gam;
+  return [a,b,-(G[0][0]*a*a+2*G[0][1]*a*b+G[0][2]*b*b),-(G[1][0]*a*a+2*G[1][1]*a*b+G[1][2]*b*b)]; }
+function geodesic(S,u,v,du,dv,L,ds=0.01){
+  const g0=geom(S,u,v); const sp=gnorm(g0,du,dv)||1; du/=sp; dv/=sp;
+  let y=[u,v,du,dv], s=0, stop=null;
+  const pts=[[u,v]], pts3=[g0.r], vels=[[du,dv]], ss=[0];
+  for(let it=0; s<L-1e-12; it++){
+    if(it>40000){stop='步数上限';break;}
+    const k1=geoF(S,y); const acc=Math.hypot(k1[2],k1[3]);
+    const h=Math.min(ds, L-s, 0.3/(1+acc));                   // 靠近坐标奇点时自动缩步
+    const k2=geoF(S,y.map((x,i)=>x+0.5*h*k1[i]));
+    const k3=geoF(S,y.map((x,i)=>x+0.5*h*k2[i]));
+    const k4=geoF(S,y.map((x,i)=>x+h*k3[i]));
+    const yn=y.map((x,i)=>x+h/6*(k1[i]+2*k2[i]+2*k3[i]+k4[i]));
+    if(!inDom(S,yn[0],yn[1])){ stop=boundaryKind(S,yn); break; }
+    y=yn; s+=h; pts.push([y[0],y[1]]); pts3.push(S.r(y[0],y[1])); vels.push([y[2],y[3]]); ss.push(s);
+  }
+  return {pts,pts3,vels,ss,len:s,stop};
+}
+/* 平行移动 dV^k/dt = −Γ^k_ij V^i ẋ^j，沿 uv 折线 path（RK4，每段一步） */
+function transport(S,path,V){
+  const f=(g,V,xd)=>{const G=g.Gam; return [
+    -(G[0][0]*V[0]*xd[0]+G[0][1]*(V[0]*xd[1]+V[1]*xd[0])+G[0][2]*V[1]*xd[1]),
+    -(G[1][0]*V[0]*xd[0]+G[1][1]*(V[0]*xd[1]+V[1]*xd[0])+G[1][2]*V[1]*xd[1])];};
+  const out=[V.slice()]; let g0=geom(S,path[0][0],path[0][1]);
+  for(let i=0;i+1<path.length;i++){
+    const p=path[i],q=path[i+1],xd=[q[0]-p[0],q[1]-p[1]];
+    const gm=geom(S,(p[0]+q[0])/2,(p[1]+q[1])/2), g1=geom(S,q[0],q[1]);
+    const k1=f(g0,V,xd), k2=f(gm,[V[0]+0.5*k1[0],V[1]+0.5*k1[1]],xd),
+          k3=f(gm,[V[0]+0.5*k2[0],V[1]+0.5*k2[1]],xd), k4=f(g1,[V[0]+k3[0],V[1]+k3[1]],xd);
+    V=[V[0]+(k1[0]+2*k2[0]+2*k3[0]+k4[0])/6, V[1]+(k1[1]+2*k2[1]+2*k3[1]+k4[1])/6];
+    out.push(V); g0=g1;
+  }
+  return out;
+}
+/* 周期坐标：把 p 平移整数个周期，使其最靠近 ref（"提升"到连续的坐标平面） */
+function liftNear(S,p,ref){
+  const q=[p[0],p[1]];
+  if(S.perU){const P=S.u[1]-S.u[0]; q[0]+=Math.round((ref[0]-q[0])/P)*P;}
+  if(S.perV){const P=S.v[1]-S.v[0]; q[1]+=Math.round((ref[1]-q[1])/P)*P;}
+  return q;
+}
+function densify(pts,maxStep=0.02){
+  const out=[pts[0]];
+  for(let i=0;i+1<pts.length;i++){
+    const p=pts[i],q=pts[i+1]; const m=Math.max(1,Math.ceil(Math.hypot(q[0]-p[0],q[1]-p[1])/maxStep));
+    for(let k=1;k<=m;k++) out.push([p[0]+(q[0]-p[0])*k/m, p[1]+(q[1]-p[1])*k/m]);
+  }
+  return out;
+}
+/* 回路所围区域上的 ∫∫K dA 与面积（uv 平面光栅化 + 奇偶规则；绕极点一周的回路取含极点一侧） */
+function regionIntegral(S,poly){
+  const n=poly.length, PU=S.u[1]-S.u[0], PV=S.v[1]-S.v[0];
+  const closeTo=liftNear(S,poly[0],poly[n-1]);
+  const wU=S.perU?Math.round((closeTo[0]-poly[0][0])/PU):0, wV=S.perV?Math.round((closeTo[1]-poly[0][1])/PV):0;
+  if(wU) return {ok:false,reason:'回路绕过 u 的周期方向一周，不围成圆盘：Gauss–Bonnet 的面积分不适用（和乐角本身仍有意义）'};
+  if(Math.abs(wV)>1) return {ok:false,reason:'回路绕了不止一圈'};
+  if(wV&&!S.poleEnds[0]) return {ok:false,reason:'回路绕曲面一周而该方向没有极点：不围成圆盘，Gauss–Bonnet 的面积分不适用（和乐角本身仍有意义）'};
+  const edges=[]; for(let i=0;i<n;i++) edges.push([poly[i], i+1<n?poly[i+1]:closeTo]);
+  let umin=Infinity,umax=-Infinity,vmin=Infinity,vmax=-Infinity;
+  for(const p of [...poly,closeTo]){umin=Math.min(umin,p[0]);umax=Math.max(umax,p[0]);vmin=Math.min(vmin,p[1]);vmax=Math.max(vmax,p[1]);}
+  let gu0,gu1,gv0,gv1;
+  if(wV){gu0=S.uPole??S.u[0];gu1=Math.min(S.u[1],umax);gv0=S.v[0];gv1=S.v[0]+PV;}
+  else{gu0=Math.max(S.u[0],umin);gu1=Math.min(S.u[1],umax);gv0=vmin;gv1=vmax;}
+  const N=170, du=(gu1-gu0)/N, dv=(gv1-gv0)/N;
+  let area=0,KA=0;
+  for(let i=0;i<N;i++){ const u=gu0+(i+0.5)*du;
+    for(let j=0;j<N;j++){ const v=gv0+(j+0.5)*dv;
+      let cnt=0;                                            // 射线沿 +u 方向
+      for(const [p,q] of edges){
+        const lo=Math.min(p[1],q[1]), hi=Math.max(p[1],q[1]); if(hi===lo) continue;
+        let k0=0,k1=0; if(wV){k0=Math.ceil((lo-v)/PV);k1=Math.floor((hi-v)/PV);}
+        for(let k=k0;k<=k1;k++){ const vt=v+k*PV;
+          if((p[1]<=vt&&vt<q[1])||(q[1]<=vt&&vt<p[1])){ const uc=p[0]+(vt-p[1])/(q[1]-p[1])*(q[0]-p[0]); if(uc>u) cnt++; }
+        }
+      }
+      if(cnt&1){ const g=geom(S,u,v); const dA=Math.sqrt(Math.max(0,g.det))*du*dv; area+=dA; KA+=g.Kext*dA; }
+    }
+  }
+  let sign;
+  if(wV) sign=wV>0?1:-1;
+  else { let A=0; for(const [p,q] of edges) A+=p[0]*q[1]-q[0]*p[1]; sign=A>=0?1:-1; }
+  return {ok:true,area,KA,sign,wV};
+}
+/* 打靶法：A→B 的测地线。扫描出发角 α，找最接近 B 的路径，再黄金分割细化 */
+function connect(S,A,B){
+  const B3=S.r(B[0],B[1]), A3=S.r(A[0],A[1]);
+  const Lmax=Math.min(2.5*dist(A3,B3)+0.6, 8);
+  const g=geom(S,A[0],A[1]);
+  const f=(alpha,ds)=>{ const [du,dv]=dirToUV(g,alpha); const path=geodesic(S,A[0],A[1],du,dv,Lmax,ds);
+    let best=Infinity,bi=0; const P=path.pts3;                // 目标到折线（线段）的最近距离，避免被步长限制精度
+    for(let i=0;i<P.length;i++){
+      let d=dist(P[i],B3);
+      if(i+1<P.length){ const a=P[i],b=P[i+1],ab=lin(b,a,1,-1),aB=lin(B3,a,1,-1),l2=dot(ab,ab);
+        if(l2>0){ const t=Math.max(0,Math.min(1,dot(aB,ab)/l2)); d=Math.min(d,dist(lin(a,ab,1,t),B3)); } }
+      if(d<best){best=d;bi=i;} }
+    if(bi+1<P.length&&dist(P[bi+1],B3)<dist(P[bi],B3)) bi++;
+    return {alpha,d:best,i:bi,path}; };
+  const NC=96, coarse=[]; for(let k=0;k<NC;k++) coarse.push(f(k/NC*TAU,0.03));
+  const cands=[];
+  for(let k=0;k<NC;k++){ const d=coarse[k].d; if(d<=coarse[(k+NC-1)%NC].d&&d<=coarse[(k+1)%NC].d&&d<0.4) cands.push(k); }
+  let results=[]; const gr=(Math.sqrt(5)-1)/2;
+  for(const k of cands){
+    let lo=coarse[k].alpha-TAU/NC, hi=coarse[k].alpha+TAU/NC;
+    let x1=hi-gr*(hi-lo), x2=lo+gr*(hi-lo), f1=f(x1,0.015).d, f2v=f(x2,0.015).d;
+    for(let it=0;it<24;it++){
+      if(f1<f2v){hi=x2;x2=x1;f2v=f1;x1=hi-gr*(hi-lo);f1=f(x1,0.015).d;}
+      else{lo=x1;x1=x2;f1=f2v;x2=lo+gr*(hi-lo);f2v=f(x2,0.015).d;}
+    }
+    const fin=f((lo+hi)/2,0.01); if(fin.d<0.012) results.push(fin);
+  }
+  if(!results.length) return {ok:false};
+  results.sort((a,b)=>a.path.ss[a.i]-b.path.ss[b.i]);
+  const r=results[0], P=r.path, i=r.i;
+  return {ok:true, pts:P.pts.slice(0,i+1), pts3:P.pts3.slice(0,i+1), v0:P.vels[0], v1:P.vels[i], endPt:P.pts[i], len:P.ss[i], miss:r.d};
+}
+
+/* ============ 3. three.js 场景 ============ */
+const app=$('app');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+app.appendChild(renderer.domElement);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x04050b);
+const camera=new THREE.PerspectiveCamera(42,1,0.05,100);
+camera.position.set(3.1,-3.0,2.3); camera.up.set(0,0,1);
+const controls=new OrbitControls(camera,renderer.domElement); controls.enableDamping=true;
+scene.add(new THREE.AmbientLight(0xffffff,0.7));
+const dl=new THREE.DirectionalLight(0xffffff,1.4); dl.position.set(4,-5,7); scene.add(dl);
+const dl2=new THREE.DirectionalLight(0xffffff,0.55); dl2.position.set(-5,4,-5); scene.add(dl2);
+const dyn=new THREE.Group(); scene.add(dyn);            // 各模式的临时物体
+const surfGroup=new THREE.Group(); scene.add(surfGroup);
+function resize(){ const w=innerWidth,h=innerHeight; renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+addEventListener('resize',resize); resize();
+
+const mat=(color,opacity=1)=>new THREE.MeshStandardMaterial({color,roughness:0.45,emissive:color,emissiveIntensity:0.3,
+  transparent:opacity<1,opacity,depthWrite:opacity>=1});
+function arrow(o,d,len,color,rad=0.012,opacity=1){
+  const g=new THREE.Group();
+  const shaft=new THREE.Mesh(new THREE.CylinderGeometry(rad,rad,len*0.72,8),mat(color,opacity)); shaft.position.y=len*0.36;
+  const head=new THREE.Mesh(new THREE.ConeGeometry(rad*2.6,len*0.28,10),mat(color,opacity)); head.position.y=len*0.86;
+  g.add(shaft,head); g.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),V3(unit(d))); g.position.copy(V3(o));
+  return g;
+}
+function setArrow(g,o,d){ g.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),V3(unit(d))); g.position.copy(V3(o)); }
+function tube3(pts3,color,radius=0.009,closed=false,opacity=1){
+  if(pts3.length<2) return new THREE.Group();
+  const curve=new THREE.CatmullRomCurve3(pts3.map(V3),closed,'centripetal');
+  const geo=new THREE.TubeGeometry(curve,Math.min(900,Math.max(8,pts3.length)),radius,6,closed);
+  return new THREE.Mesh(geo,mat(color,opacity));
+}
+const lift3=(p,off=0.006)=>{const g=geom(S,p[0],p[1]); return lin(g.r,g.n,1,off);};
+const tubeUV=(pts,color,radius,closed,off)=>tube3(pts.map(p=>lift3(p,off)),color,radius,closed);
+function marker(p3,color,r=0.03){ const m=new THREE.Mesh(new THREE.SphereGeometry(r,16,12),mat(color)); m.position.copy(V3(p3)); return m; }
+function clearDyn(){ dyn.traverse(o=>{if(o.geometry)o.geometry.dispose();}); dyn.clear(); }
+
+/* ---- 曲面网格（按 K 着色）+ 坐标网格线 ---- */
+let S=SURFACES.sphere, surfMesh=null, gridLines=null, colK=null, colFlat=null, Kscale=1;
+const NU=140,NV=140;
+function kColor(t){ const z=[0.81,0.84,0.90], a=t<0?[0.30,0.49,1.0]:[1.0,0.42,0.30], w=Math.min(1,Math.abs(t));
+  return [z[0]+(a[0]-z[0])*w, z[1]+(a[1]-z[1])*w, z[2]+(a[2]-z[2])*w]; }
+function buildSurface(){
+  surfGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();}); surfGroup.clear();
+  const pos=new Float32Array(NU*NV*3), nor=new Float32Array(NU*NV*3), uv=new Float32Array(NU*NV*2), Ks=new Float32Array(NU*NV);
+  const c=[0,0,0]; let cnt=0;
+  for(let i=0;i<NU;i++){ const u=S.u[0]+(S.u[1]-S.u[0])*i/(NU-1);
+    for(let j=0;j<NV;j++){ const v=S.v[0]+(S.v[1]-S.v[0])*j/(NV-1), k=i*NV+j, g=geom(S,u,v);
+      pos.set(g.r,3*k); nor.set(g.n,3*k); uv[2*k]=i/(NU-1); uv[2*k+1]=j/(NV-1); Ks[k]=g.Kext;
+      c[0]+=g.r[0];c[1]+=g.r[1];c[2]+=g.r[2];cnt++; } }
+  c[0]/=cnt;c[1]/=cnt;c[2]/=cnt; let Rb=0; for(let k=0;k<NU*NV;k++) Rb=Math.max(Rb,Math.hypot(pos[3*k]-c[0],pos[3*k+1]-c[1],pos[3*k+2]-c[2]));
+  const idx=[]; for(let i=0;i+1<NU;i++) for(let j=0;j+1<NV;j++){ const a=i*NV+j,b=a+NV; idx.push(a,b,a+1, b,b+1,a+1); }
+  const absK=Array.from(Ks).map(Math.abs).sort((a,b)=>a-b); Kscale=Math.max(1e-3,absK[Math.floor(absK.length*0.92)]);
+  colK=new Float32Array(NU*NV*3); colFlat=new Float32Array(NU*NV*3);
+  for(let k=0;k<NU*NV;k++){ colK.set(kColor(Math.tanh(Ks[k]/Kscale)),3*k); colFlat.set([0.72,0.76,0.84],3*k); }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3)); geo.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+  geo.setAttribute('uv',new THREE.BufferAttribute(uv,2)); geo.setAttribute('color',new THREE.BufferAttribute($('ckK').checked?colK:colFlat,3));
+  geo.setIndex(idx);
+  surfMesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:0.78,metalness:0.05,
+    polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:2}));
+  surfGroup.add(surfMesh);
+  // 坐标网格：各 16 条
+  const lp=[]; const NL=16, M=200;
+  for(let a=0;a<=NL;a++){ const u=S.u[0]+(S.u[1]-S.u[0])*a/NL; if(S.perU&&a===NL) continue;
+    for(let m=0;m<M;m++){ const v0=S.v[0]+(S.v[1]-S.v[0])*m/M, v1=S.v[0]+(S.v[1]-S.v[0])*(m+1)/M; lp.push(...lift3([u,v0],0.002),...lift3([u,v1],0.002)); } }
+  for(let a=0;a<=NL;a++){ const v=S.v[0]+(S.v[1]-S.v[0])*a/NL; if(S.perV&&a===NL) continue;
+    for(let m=0;m<M;m++){ const u0=S.u[0]+(S.u[1]-S.u[0])*m/M, u1=S.u[0]+(S.u[1]-S.u[0])*(m+1)/M; lp.push(...lift3([u0,v],0.002),...lift3([u1,v],0.002)); } }
+  const lg=new THREE.BufferGeometry(); lg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(lp),3));
+  gridLines=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0x000000,transparent:true,opacity:0.32}));
+  gridLines.visible=$('ckGrid').checked; surfGroup.add(gridLines);
+  controls.target.set(c[0],c[1],c[2]);                       // 视角：按包围球自动取景
+  const d=Rb/Math.sin(camera.fov/2/RAD)*1.25, dir=new THREE.Vector3(3.1,-3.0,2.3).normalize();
+  camera.position.copy(controls.target).addScaledVector(dir,d);
+}
+
+/* ============ 4. 交互与四个模式 ============ */
+let mode=0, probe=null, pinned=false, geoStart=null, spray=false, loopPts=[], loopPreset=false, triPts=[], anim=null;
+const out=$('out');
+const busy=(on)=>{$('busy').style.display=on?'block':'none';};
+
+/* 曲面选择 */
+for(const [k,s] of Object.entries(SURFACES)){ const o=document.createElement('option'); o.value=k; o.textContent=s.name; $('surf').appendChild(o); }
+function defaultProbe(){ const um=(S.u[0]+S.u[1])/2, vm=(S.v[0]+S.v[1])/2; return [S.perU?5.5:um, S.perV?5.5:(S.perU?1.0:vm)]; }
+function setSurface(key){
+  S=SURFACES[key]; $('surf').value=key; $('surfNote').textContent=S.note;
+  buildSurface(); probe=defaultProbe(); pinned=false; geoStart=null; loopPts=[]; loopPreset=false; triPts=[]; tri=null; anim=null;
+  redraw();
+}
+$('surf').addEventListener('change',e=>setSurface(e.target.value));
+$('ckK').addEventListener('change',()=>{ surfMesh.geometry.setAttribute('color',new THREE.BufferAttribute($('ckK').checked?colK:colFlat,3)); });
+$('ckGrid').addEventListener('change',()=>{ gridLines.visible=$('ckGrid').checked; });
+
+/* 模式切换 */
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>setMode(+b.dataset.m)));
+function setMode(m){ mode=m; anim=null;
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',+b.dataset.m===m));
+  for(let i=0;i<4;i++) $('mode'+i).hidden=(i!==m);
+  redraw();
+}
+function redraw(){ clearDyn(); [drawProbe,drawGeo,drawLoop,drawTri][mode](); }
+
+/* 鼠标：拾取 (u,v) */
+const ray=new THREE.Raycaster(), ptr=new THREE.Vector2(); let downPos=null;
+function pick(ev){
+  const rect=renderer.domElement.getBoundingClientRect();
+  ptr.x=((ev.clientX-rect.left)/rect.width)*2-1; ptr.y=-((ev.clientY-rect.top)/rect.height)*2+1;
+  ray.setFromCamera(ptr,camera); const hit=ray.intersectObject(surfMesh)[0]; if(!hit||!hit.uv) return null;
+  const u=S.u[0]+(S.u[1]-S.u[0])*hit.uv.x, v=S.v[0]+(S.v[1]-S.v[0])*hit.uv.y;
+  return [Math.min(S.u[1]-1e-3,Math.max(S.u[0]+1e-3,u)), Math.min(S.v[1]-1e-3,Math.max(S.v[0]+1e-3,v))];
+}
+renderer.domElement.addEventListener('pointerdown',e=>{downPos=[e.clientX,e.clientY];});
+renderer.domElement.addEventListener('pointerup',e=>{
+  if(!downPos||Math.hypot(e.clientX-downPos[0],e.clientY-downPos[1])>6) return;
+  const p=pick(e); if(!p){ if(mode===0) pinned=false; return; } clickAt(p);
+});
+let hoverPending=null;
+renderer.domElement.addEventListener('pointermove',e=>{
+  if(mode!==0||pinned) return; hoverPending=e;
+});
+function clickAt(p){
+  if(mode===0){ probe=p; pinned=true; redraw(); }
+  else if(mode===1){ geoStart=p; redraw(); }
+  else if(mode===2){ if(loopPreset){loopPts=[];loopPreset=false;} anim=null; loopPts.push(loopPts.length?liftNear(S,p,loopPts[loopPts.length-1]):p); redraw(); }
+  else if(mode===3){ if(triPts.length>=3||tri) {triPts=[];tri=null;} triPts.push(p); if(triPts.length===3) solveTri(); else redraw(); }
+}
+
+/* ---- 模式 ①：度量 · 曲率 ---- */
+$('rho').addEventListener('input',()=>{$('rhoV').textContent=(+$('rho').value).toFixed(2); if(mode===0) redraw();});
+$('ckCircle').addEventListener('change',()=>{if(mode===0) redraw();});
+$('unpin').addEventListener('click',()=>{pinned=false;});
+function drawProbe(){
+  if(!probe){ out.innerHTML='把鼠标移到曲面上…'; return; }
+  const [u,v]=probe, g=geom(S,u,v), p=g.r;
+  dyn.add(marker(p,0xffffff,0.022));
+  const sc=0.42;                                              // 切向量按真实长度 ×0.42 画出：越长表示该坐标"尺子"越大
+  dyn.add(arrow(p,g.ru,Math.max(0.05,sc*Math.sqrt(g.E)),0xff5c5c,0.011));
+  dyn.add(arrow(p,g.rv,Math.max(0.05,sc*Math.sqrt(g.G)),0x5fe07a,0.011));
+  dyn.add(arrow(p,g.n,0.3,0xaab4c8,0.008));
+  const ki=Kint(S,u,v);
+  let circ='';
+  if($('ckCircle').checked){
+    const rho=+$('rho').value, N=96, ends=[], endsUV=[]; let okAll=true;
+    for(let k=0;k<N;k++){ const [du,dv]=dirToUV(g,k/N*TAU); const path=geodesic(S,u,v,du,dv,rho,0.02);
+      if(path.stop) okAll=false; ends.push(path.pts3[path.pts3.length-1]); endsUV.push(path.pts[path.pts.length-1]);
+      if(k%12===0) dyn.add(tubeUV(path.pts,0xffd27f,0.0045,false,0.006));      // 8 根测地半径
+    }
+    let C=0; for(let k=0;k<N;k++) C+=dist(ends[k],ends[(k+1)%N]);
+    dyn.add(tubeUV(endsUV,0xffd27f,0.008,true,0.006));                          // 测地圆
+    const Kmeas=6*(1-C/(TAU*rho))/(rho*rho);
+    circ=okAll
+      ? `<div style="margin-top:4px"><b>测量</b>：测地圆 ρ=${rho.toFixed(2)}，周长 C=<span class="w">${f3(C)}</span>（平面应为 2πρ=${f3(TAU*rho)}）<br>
+         由 C ≈ 2πρ(1−Kρ²/6) 反推 <b>K ≈ ${f3(Kmeas)}</b>（ρ 越小越准，${C<TAU*rho-1e-3?'周长偏短 → K&gt;0':C>TAU*rho+1e-3?'周长偏长 → K&lt;0':'与平面一致 → K≈0'}）</div>`
+      : `<div style="margin-top:4px"><b>测量</b>：测地圆越出了曲面边界/坐标极点，换个点或减小 ρ</div>`;
+  }
+  const ang=Math.acos(g.F/Math.sqrt(g.E*g.G))*RAD;
+  const G=g.Gam;
+  out.innerHTML=`探针 (u,v) = (${f3(u)}, ${f3(v)})${pinned?' <span class="w">[已固定]</span>':' [跟随鼠标]'}<br>
+    度量 g = [<span class="cu">E</span> F; F <span class="cv">G</span>] = [${f3(g.E)} ${f3(g.F)}; ${f3(g.F)} ${f3(g.G)}]，
+    √det g = ${f3(Math.sqrt(g.det))}（面积元），∠(∂u,∂v) = ${ang.toFixed(1)}°<br>
+    Γ<sup>u</sup><sub>uu,uv,vv</sub> = ${f2(G[0][0])}, ${f2(G[0][1])}, ${f2(G[0][2])} ；
+    Γ<sup>v</sup><sub>uu,uv,vv</sub> = ${f2(G[1][0])}, ${f2(G[1][1])}, ${f2(G[1][2])}<br>
+    <b>K 外在</b>（法向, LN−M²）= <span class="${g.Kext>1e-3?'p':g.Kext<-1e-3?'n':''}">${f3(g.Kext)}</span> ；
+    <b>K 内蕴</b>（只用 g）= <span class="${ki>1e-3?'p':ki<-1e-3?'n':''}">${f3(ki)}</span>
+    <span class="ok">${Math.abs(ki-g.Kext)<1e-3*Math.max(1,Math.abs(ki))?'✓ 一致':'差 '+f3(ki-g.Kext)}</span>${circ}`;
+}
+
+/* ---- 模式 ②：测地线 ---- */
+$('alpha').addEventListener('input',()=>{$('alphaV').textContent=$('alpha').value+'°'; if(mode===1) redraw();});
+$('len').addEventListener('input',()=>{$('lenV').textContent=(+$('len').value).toFixed(2); if(mode===1) redraw();});
+$('bSingle').addEventListener('click',()=>{spray=false;$('bSingle').classList.add('on');$('bSpray').classList.remove('on');redraw();});
+$('bSpray').addEventListener('click',()=>{spray=true;$('bSpray').classList.add('on');$('bSingle').classList.remove('on');redraw();});
+$('ckUV').addEventListener('change',()=>{if(mode===1) redraw();});
+function drawGeo(){
+  if(!geoStart){ out.innerHTML='点击曲面设置测地线起点。'; return; }
+  const [u,v]=geoStart, g=geom(S,u,v), L=+$('len').value, alpha=+$('alpha').value/RAD;
+  dyn.add(marker(g.r,0xffffff,0.028));
+  if(spray){
+    const N=24; let stops=0;
+    for(let k=0;k<N;k++){ const [du,dv]=dirToUV(g,k/N*TAU); const path=geodesic(S,u,v,du,dv,L,0.01); if(path.stop) stops++;
+      const col=new THREE.Color().setHSL(k/N,0.75,0.6); dyn.add(tubeUV(path.pts,col,0.007,false,0.006)); }
+    const sgn=g.Kext>1e-3?'K&gt;0：邻近测地线互相靠拢（球面上在对径点重聚成焦点）':g.Kext<-1e-3?'K&lt;0：邻近测地线彼此散开，越走越远':'K≈0：邻近测地线保持等距（像平面上的平行线束）';
+    out.innerHTML=`起点 (u,v)=(${f3(u)},${f3(v)})，此处 K=${f3(g.Kext)}；24 条测地线，各走弧长 L=${L.toFixed(2)}${stops?`，其中 ${stops} 条提前停在边界/坐标极点`:''}<br>
+      <b>测地偏离</b>：d²ξ/ds² = −K ξ —— ${sgn}。`;
+    return;
+  }
+  const [du,dv]=dirToUV(g,alpha);
+  const path=geodesic(S,u,v,du,dv,L,0.01);
+  dyn.add(tubeUV(path.pts,0x3ad0c4,0.01,false,0.006));
+  dyn.add(arrow(g.r,tan3(g,du,dv),0.32,0x3ad0c4,0.011));
+  const e=path.pts[path.pts.length-1], ge=geom(S,e[0],e[1]), spEnd=gnorm(ge,...path.vels[path.vels.length-1]);
+  dyn.add(marker(ge.r,0x3ad0c4,0.02));
+  let uvTxt='';
+  if($('ckUV').checked){
+    const pts=[[u,v]]; let s=0, prev=g.r, t=0, stopped=false;
+    while(s<L){ t+=0.01; const q=[u+du*t,v+dv*t]; if(!inDom(S,q[0],q[1])){stopped=true;break;} const r=S.r(q[0],q[1]); s+=dist(prev,r); prev=r; pts.push(q); }
+    dyn.add(tubeUV(pts,0x9aa5b8,0.007,false,0.006));
+    const qe=pts[pts.length-1], chordDiff=dist(S.r(qe[0],qe[1]),ge.r);
+    uvTxt=`<br><span style="color:#9aa5b8">灰线</span>：uv 坐标里同样出发方向的"直线"(u,v)=(u₀+at, v₀+bt)，等弧长后与测地线终点相距 ${f3(chordDiff)}${stopped?'（灰线先出界）':''}
+      —— ${chordDiff<1e-3?'此处两者重合（坐标线恰好是测地线）':'坐标直线 ≠ 测地线，Γ≠0 就是这个差别的来源'}`;
+  }
+  out.innerHTML=`起点 (u,v)=(${f3(u)},${f3(v)})，方向 α=${$('alpha').value}°，弧长 L=${L.toFixed(2)}${path.stop?`<br><span class="w">${path.stop}，实际走了 ${f3(path.len)}</span>`:''}<br>
+    终点 (u,v)=(${f3(e[0])},${f3(e[1])})，起终点空间直线距离 ${f3(dist(g.r,ge.r))}<br>
+    速度模 |γ̇|<sub>g</sub>：出发 1.000 → 到达 <b>${spEnd.toFixed(4)}</b>（测地线保持匀速：守恒量检验）${uvTxt}`;
+}
+
+/* ---- 模式 ③：平行移动 ---- */
+$('beta').addEventListener('input',()=>{$('betaV').textContent=$('beta').value+'°'; if(mode===2&&!anim) redraw();});
+$('hw').addEventListener('input',()=>{$('hwV').textContent=(+$('hw').value).toFixed(2);});
+$('bClearLoop').addEventListener('click',()=>{loopPts=[];loopPreset=false;anim=null;redraw();});
+function basePt(){ return loopPts.length?loopPts[loopPts.length-1]:(probe||defaultProbe()); }
+$('bLat').addEventListener('click',()=>{
+  const b=basePt(); const per=S.perV?1:(S.perU?0:-1); anim=null;
+  if(per<0){ out.innerHTML='该曲面没有周期坐标，请手动点几个点围成回路。'; return; }
+  const N=72, P=(per?S.v[1]-S.v[0]:S.u[1]-S.u[0]); loopPts=[];
+  for(let i=0;i<N;i++) loopPts.push(per?[b[0],b[1]+P*i/N]:[b[0]+P*i/N,b[1]]);
+  loopPreset=true; redraw();
+});
+$('bRect').addEventListener('click',()=>{
+  const b=basePt(), h=+$('hw').value; anim=null;
+  const cu=x=>S.perU?x:Math.min(S.u[1]-1e-3,Math.max(S.u[0]+1e-3,x)), cv=x=>S.perV?x:Math.min(S.v[1]-1e-3,Math.max(S.v[0]+1e-3,x));
+  loopPts=[[cu(b[0]-h),cv(b[1]-h)],[cu(b[0]+h),cv(b[1]-h)],[cu(b[0]+h),cv(b[1]+h)],[cu(b[0]-h),cv(b[1]+h)]]; loopPreset=true; redraw();
+});
+$('bRun').addEventListener('click',runTransport);
+function drawLoop(){
+  if(!loopPts.length){ out.innerHTML='点击曲面添加回路顶点（≥3 个），或用预设。'; return; }
+  const closed=loopPts.length>=3;
+  const chain=closed?[...loopPts,liftNear(S,loopPts[0],loopPts[loopPts.length-1])]:loopPts;
+  if(!loopPreset) loopPts.forEach(p=>dyn.add(marker(S.r(p[0],p[1]),0xffd27f,0.022)));
+  else dyn.add(marker(S.r(loopPts[0][0],loopPts[0][1]),0xffd27f,0.022));
+  if(chain.length>=2) dyn.add(tubeUV(densify(chain,0.02),0xffd27f,0.007,false,0.006));
+  const g0=geom(S,loopPts[0][0],loopPts[0][1]); const [a,b]=dirToUV(g0,+$('beta').value/RAD);
+  dyn.add(arrow(g0.r,tan3(g0,a,b),0.36,0xffffff,0.012));
+  if(!anim) out.innerHTML=`回路顶点 ${loopPts.length} 个${closed?'':'（至少 3 个）'}。白箭头 = 待移动的切向量 V（|V|<sub>g</sub>=1）。点 ▶ 开始沿回路平行移动。`;
+}
+function runTransport(){
+  if(mode!==2) setMode(2);
+  if(loopPts.length<3){ out.innerHTML='<span class="w">至少需要 3 个顶点。</span>'; return; }
+  const chain=[...loopPts,liftNear(S,loopPts[0],loopPts[loopPts.length-1])];
+  const path=densify(chain,0.012);
+  const g0=geom(S,path[0][0],path[0][1]); const V0=dirToUV(g0,+$('beta').value/RAD);
+  const Vs=transport(S,path,V0);
+  const reg=regionIntegral(S,loopPts);
+  const W0=tan3(g0,...V0), W1=tan3(g0,...Vs[Vs.length-1]);
+  const hol=Math.atan2(dot(cross(W0,W1),g0.n),dot(W0,W1));
+  const lenEnd=gnorm(g0,...Vs[Vs.length-1]);
+  redraw();
+  const mover=arrow(g0.r,W0,0.36,0xff8a3d,0.013); dyn.add(mover);
+  const ghosts=[]; const NG=14;
+  for(let k=1;k<NG;k++){ const i=Math.round(path.length*k/NG); const gi=geom(S,path[i][0],path[i][1]);
+    const a=arrow(gi.r,tan3(gi,...Vs[i]),0.3,0xff8a3d,0.009,0.45); a.visible=false; a.userData.i=i; ghosts.push(a); dyn.add(a); }
+  const finalArrow=arrow(g0.r,W1,0.36,0xff8a3d,0.013); finalArrow.visible=false; dyn.add(finalArrow);
+  anim={path,Vs,mover,ghosts,finalArrow,t0:performance.now(),dur:Math.min(6000,1800+path.length*4),done:false};
+  const orient=reg.ok?(reg.sign>0?'逆时针（相对法向 n）':'顺时针（相对法向 n）'):'';
+  let gb;
+  if(reg.ok){ const pred=reg.sign*reg.KA; let diff=hol-pred; diff=((diff+Math.PI)%TAU+TAU)%TAU-Math.PI;
+    gb=`<b>Gauss–Bonnet</b>：所围区域面积 ${f3(reg.area)}，∫∫K dA = ${f3(reg.KA)} rad = <span class="w">${dg(reg.KA)}</span>${reg.wV?'（回路绕极点一周，取含极点一侧）':''}<br>
+        预期和乐角 ≡ ${reg.sign>0?'+':'−'}∫∫K dA = ${dg(pred)} (mod 360°)；实测 − 预期 = <span class="ok">${dg(diff)}</span>`; }
+  else gb=`<span class="w">${reg.reason}</span>`;
+  anim.report=`回路顶点 ${loopPts.length} 个，绕行方向：${orient||'—'}<br>
+    平行移动一圈后，V 相对出发时转过 <b>Δθ = ${dg(hol)}</b>（|V|<sub>g</sub>：1.000 → ${lenEnd.toFixed(4)}，长度不变）<br>${gb}`;
+  out.innerHTML=`正在沿回路平行移动…（橙色箭头；半透明为途中快照）`;
+}
+
+/* ---- 模式 ④：测地三角形 ---- */
+let tri=null;
+$('bClearTri').addEventListener('click',()=>{triPts=[];tri=null;redraw();});
+$('bRandTri').addEventListener('click',()=>{
+  const um=(S.u[0]+S.u[1])/2, vm=(S.v[0]+S.v[1])/2, su=(S.u[1]-S.u[0]), sv=(S.v[1]-S.v[0]);
+  const cu=S.perU?um+ (Math.random()-0.5)*su : um+(Math.random()-0.5)*su*0.4, cv=S.perV?5.5+(Math.random()-0.5)*1.5 : vm+(Math.random()-0.5)*sv*0.4;
+  const spread=S.perV&&!S.perU? 0.5 : Math.min(0.55, 0.22*su);
+  const cl=(p)=>[S.perU?p[0]:Math.min(S.u[1]-0.05,Math.max(S.u[0]+0.05,p[0])), S.perV?p[1]:Math.min(S.v[1]-0.05,Math.max(S.v[0]+0.05,p[1]))];
+  triPts=[0,1,2].map(k=>{const a=k/3*TAU+Math.random()*0.8; const rr=spread*(0.7+0.3*Math.random()); return cl([cu+rr*Math.cos(a),cv+rr*Math.sin(a)]);});
+  tri=null; solveTri();
+});
+function drawTri(){
+  triPts.forEach((p,i)=>dyn.add(marker(S.r(p[0],p[1]),[0xff7a7a,0x7ee787,0x7fb7ff][i],0.03)));
+  if(!tri){ out.innerHTML=triPts.length<3?`已选 ${triPts.length}/3 个顶点，继续点击曲面…（或"随机一个三角形"）`:'…'; return; }
+  if(!tri.ok){ out.innerHTML='<span class="w">打靶法没能把三个点连成测地三角形（可能点太远、或测地线要穿过坐标极点）。换几个点试试。</span>'; return; }
+  tri.sides.forEach(sd=>dyn.add(tubeUV(sd.pts,0x3ad0c4,0.01,false,0.006)));
+  // 顶点处角弧
+  tri.corners.forEach(c=>{ const N=24, pts=[]; const th=c.angle, d1=unit(c.d1), d2=unit(c.d2);
+    for(let k=0;k<=N;k++){ const t=k/N; const w=Math.sin(th)<1e-6?d1:unit(lin(d1,d2,Math.sin((1-t)*th)/Math.sin(th),Math.sin(t*th)/Math.sin(th)));
+      pts.push(lin(lin(c.p,w,1,0.14),c.n,1,0.012)); }
+    dyn.add(tube3(pts,0xffd27f,0.005)); });
+  const sum=tri.corners.reduce((a,c)=>a+c.angle,0), ex=sum-Math.PI;
+  const reg=tri.reg;
+  out.innerHTML=`<table><tr><td class="cu">A</td><td>(${f3(triPts[0][0])}, ${f3(triPts[0][1])})</td><td>∠A = ${dg(tri.corners[0].angle)}</td><td>|AB| = ${f3(tri.sides[0].len)}</td></tr>
+    <tr><td class="cv">B</td><td>(${f3(triPts[1][0])}, ${f3(triPts[1][1])})</td><td>∠B = ${dg(tri.corners[1].angle)}</td><td>|BC| = ${f3(tri.sides[1].len)}</td></tr>
+    <tr><td style="color:#7fb7ff">C</td><td>(${f3(triPts[2][0])}, ${f3(triPts[2][1])})</td><td>∠C = ${dg(tri.corners[2].angle)}</td><td>|CA| = ${f3(tri.sides[2].len)}</td></tr></table>
+    内角和 = <b>${dg(sum)}</b>，超出平面的 <b>Σ − 180° = <span class="${ex>1e-4?'p':ex<-1e-4?'n':''}">${dg(ex)}</span></b><br>
+    ${reg.ok?`Gauss–Bonnet：三角形面积 ${f3(reg.area)}，∫∫<sub>△</sub>K dA = ${f3(reg.KA)} rad = <span class="w">${dg(reg.KA)}</span>，
+      与角超差 <span class="ok">${dg(ex-reg.KA)}</span>（打靶残差 ${tri.sides.map(s=>s.miss.toExponential(1)).join(' / ')}）`:`<span class="w">${reg.reason}</span>`}`;
+}
+function solveTri(){
+  busy(true); redraw();
+  setTimeout(()=>{
+    const [A,B,C]=triPts;
+    const sAB=connect(S,A,B), sBC=connect(S,B,C), sCA=connect(S,C,A);
+    if(!sAB.ok||!sBC.ok||!sCA.ok){ tri={ok:false}; busy(false); redraw(); return; }
+    const gA=geom(S,A[0],A[1]), gB=geom(S,B[0],B[1]), gC=geom(S,C[0],C[1]);
+    const ang=(x,y)=>Math.acos(Math.max(-1,Math.min(1,dot(unit(x),unit(y)))));
+    // 终点速度的坐标分量要用"终点所在处"的基向量 ∂u,∂v 换算成 3D（基向量随位置变化）
+    const endDir=sd=>{const ge=geom(S,sd.endPt[0],sd.endPt[1]); return lin(tan3(ge,...sd.v1),[0,0,0],-1,0);};
+    const dAB=tan3(gA,...sAB.v0), dAC=endDir(sCA);
+    const dBC=tan3(gB,...sBC.v0), dBA=endDir(sAB);
+    const dCA=tan3(gC,...sCA.v0), dCB=endDir(sBC);
+    const corners=[{p:gA.r,n:gA.n,d1:dAB,d2:dAC,angle:ang(dAB,dAC)},{p:gB.r,n:gB.n,d1:dBC,d2:dBA,angle:ang(dBC,dBA)},{p:gC.r,n:gC.n,d1:dCA,d2:dCB,angle:ang(dCA,dCB)}];
+    // 拼成连续提升的多边形
+    const poly=[...sAB.pts]; let last=poly[poly.length-1];
+    for(const sd of [sBC,sCA]){ const off=[0,0]; const l0=liftNear(S,sd.pts[0],last); off[0]=l0[0]-sd.pts[0][0]; off[1]=l0[1]-sd.pts[0][1];
+      for(let i=1;i<sd.pts.length;i++) poly.push([sd.pts[i][0]+off[0],sd.pts[i][1]+off[1]]); last=poly[poly.length-1]; }
+    tri={ok:true,sides:[sAB,sBC,sCA],corners,reg:regionIntegral(S,poly)};
+    busy(false); redraw();
+  },20);
+}
+
+/* ============ 5. 渲染循环 ============ */
+renderer.setAnimationLoop(()=>{
+  if(hoverPending){ const p=pick(hoverPending); hoverPending=null; if(p&&!pinned){probe=p;redraw();} }
+  if(anim&&!anim.done){
+    const t=Math.min(1,(performance.now()-anim.t0)/anim.dur), i=Math.min(anim.path.length-1,Math.floor(t*(anim.path.length-1)));
+    const gi=geom(S,anim.path[i][0],anim.path[i][1]); setArrow(anim.mover,gi.r,tan3(gi,...anim.Vs[i]));
+    anim.ghosts.forEach(a=>{ if(a.userData.i<=i) a.visible=true; });
+    if(t>=1){ anim.done=true; anim.finalArrow.visible=true; anim.mover.visible=false; out.innerHTML=anim.report; }
+  }
+  controls.update(); renderer.render(scene,camera);
+});
+
+setSurface('sphere');
+$('rhoV').textContent=(+$('rho').value).toFixed(2);
+
+/* 调试/自测接口 */
+window.__rg={setSurface,setMode,clickAt,runTransport,SURFACES,geom,Kint,geodesic,transport,regionIntegral,connect,
+  get S(){return S;}, get anim(){return anim;}, get out(){return out.textContent;}, setLoop(p){loopPts=p;loopPreset=false;redraw();}};
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;background:#1b2536;color:#e2e9f7;border:1px solid #26324a;padding:6px 9px;border-radius:8px;font-size:11.5px;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>
