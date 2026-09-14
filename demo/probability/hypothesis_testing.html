@@ -3,376 +3,1075 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>假设检验的兑现率：说 5% 就得付 5%</title>
+<title>假设检验全景：α、β、功效、p 值、置信区间在同一张图上</title>
 <style>
-  body { margin: 0; padding: 12px 16px; background: #fff; color: #222;
-         font-family: Arial, "PingFang SC", sans-serif; }
-  h1 { font-size: 18px; margin: 4px 0 8px; }
-  button { padding: 4px 12px; font-size: 13px; cursor: pointer; background: #f2f3f5; color: #222;
-    border: 1px solid #bbb; border-radius: 3px; }
-  button:hover { background: #e2e6ee; }
-  button.on { background: #2b5fb8; color: #fff; border-color: #2b5fb8; }
-  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
-  .hint { color: #555; font-size: 12.5px; line-height: 1.6; max-width: 1150px; margin-top: 8px; }
-  .mono { font-family: Menlo, Consolas, monospace; }
-  canvas { display: block; border: 1px solid #999; touch-action: none; }
-  .cap { font-size: 12px; color: #555; margin: 2px 0 8px; }
-  b.k { color: #b03030; }
-  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .hint { display: none !important; }
+  body { margin:0; padding:10px 14px; background:#fff; color:#222;
+         font-family:Arial,"PingFang SC",sans-serif; }
+  h1 { font-size:17px; margin:2px 0 6px; }
+  button { padding:3px 10px; font-size:12.5px; cursor:pointer; background:#f2f3f5; color:#222;
+    border:1px solid #bbb; border-radius:3px; }
+  button:hover { background:#e2e6ee; }
+  button.on { background:#2b5fb8; color:#fff; border-color:#2b5fb8; }
+  .bar { display:flex; flex-wrap:wrap; gap:9px; align-items:center; font-size:12.5px; margin:5px 0; }
+  .mono { font-family:Menlo,Consolas,monospace; }
+  canvas { display:block; border:1px solid #999; touch-action:none; max-width:100%; }
+  .cap { font-size:11.5px; color:#555; margin:3px 0 7px; }
+  #t2warn:not(:empty) { background:#fff4e5; border:1px solid #e0b070; border-radius:4px;
+    padding:5px 9px; margin:0 0 5px; font-size:12px; line-height:1.6; max-width:1078px; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  .box { font-size:12px; color:#333; line-height:1.8; margin:8px 0; max-width:1100px;
+    background:#f7f8fa; border:1px solid #e0e3e8; border-radius:4px; padding:8px 11px; }
+  .box b { color:#1f3a6e; }
+  .sw { display:inline-block; width:10px; height:10px; border:1px solid #666; vertical-align:-1px; }
+  .st { font-family:Menlo,Consolas,monospace; font-size:12.5px; background:#0f1522; color:#dfe6f3;
+        padding:6px 10px; border-radius:4px; margin:5px 0; line-height:1.95; max-width:1078px; }
+  .hint { color:#777; font-size:11px; margin:0 6px 0 4px; }
+  .rd { font-size:12px; margin-right:6px; cursor:pointer; user-select:none; }
+  /* 控制区：两列并排的网格，列宽写死 → 左右对齐，文字长短不再挤压滑块。
+     只有 n 需要长滑块（2..1000），所以它横跨中间几列。 */
+  .grid { display:grid; gap:5px 10px; align-items:center; width:100%;
+          grid-template-rows:repeat(3,auto);
+          grid-template-columns:126px 88px 184px 74px 76px 88px 184px 74px 76px minmax(0,1fr); }
+  .grid .note { align-self:start; border-left:1px solid #dcdcdc; padding-left:10px;
+                line-height:1.55; white-space:normal; }
+  .grid .sec { color:#222; white-space:nowrap; }
+  .grid input[type=range] { width:100%; margin:0; }
+  .grid .lb { color:#333; }
+  .grid .vf { white-space:nowrap; }
+  .grid .hint { margin:0; }
+  .grow { flex:1 0 100%; }
+  .gline { flex:1 0 100%; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  label.fx { white-space:nowrap; font-size:12px; cursor:pointer; color:#888; }
+  label.fx.on { color:#a86b1a; font-weight:600; }
+  label.fx input { vertical-align:middle; margin-right:2px; }
+  .lb.auto { background:#eef3fb; border-radius:3px; color:#2b5fb8; font-weight:600;
+             padding:1px 3px; }
+  label.fx.on { color:#a86b1a; font-weight:700; }
+  .lb.auto::after { content:' ⇄'; font-weight:400; }
+  .rd input { vertical-align:middle; margin-right:2px; }
+  .st b { color:#7fd3c4; } .st .r { color:#ff8f7a; } .st .g { color:#8fe09a; } .st .y { color:#ffd27f; }
+  table.t2 { border-collapse:collapse; font-size:12px; }
+  table.t2 td, table.t2 th { border:1px solid #ccc; padding:3px 8px; text-align:right;
+    font-family:Menlo,Consolas,monospace; white-space:nowrap; }
+  table.t2 th { background:#eef1f6; text-align:center; font-family:inherit; }
+  table.t2 td.lb { text-align:left; font-family:inherit; background:#f7f8fa; }
+  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .box,
+  body.ctl-collapsed .cap { display:none !important; }
 </style>
 </head>
 <body>
-<h1>假设检验的兑现率：总体由你定，检验说 5% 就得付 5%</h1>
+<h1>假设检验全景 · <b>上帝视角</b>　<span style="font-size:13px;font-weight:400;color:#555">
+真实分布由你（上帝）指定 → 机器按它反复抽样做检验 → 于是 α、β、功效、FDR 全都能<b>数出来</b>，
+而不是像现实里那样只能靠假设去估。</span></h1>
+
 <div class="bar">
-  总体:
-  <button data-p="normal">正态样</button>
-  <button class="on" data-p="skew">偏态</button>
-  <button data-p="bimodal">双峰</button>
-  <button data-p="uniform">均匀</button>
-  <button data-p="cauchy">柯西(重尾)</button>
-  n = <input type="range" id="ns" min="0" max="8" value="2" style="width:130px"><span class="mono" id="ns2"></span>
-  α:
-  <button data-a="0.01">1%</button>
-  <button class="on" data-a="0.05">5%</button>
-  <button data-a="0.10">10%</button>
-</div>
-<div class="bar">
-  H₀: μ = μ₀ = <input type="range" id="mu0" min="0" max="1000" value="500" style="width:210px"><span class="mono" id="mu02"></span>
-  <button id="setMean">μ₀ ← 真均值(让 t 检验的 H₀ 为真)</button>
-  <button id="setMed">μ₀ ← 真中位数(让符号检验的 H₀ 为真)</button>
-  <button id="resetAcc">重新累计</button>
-</div>
-<div class="bar mono" id="stat1"></div>
-<div class="bar mono" id="stat2"></div>
-<canvas id="dcv" width="1100" height="150"></canvas>
-<div class="cap">总体密度（<b>拖动手绘</b>）　<span style="color:#1f3a6e">▎真均值 μ</span>　<span style="color:#27713d">▎真中位数</span>　<span style="color:#c0392b">┆ 你的假设 μ₀</span></div>
-<div style="display:flex; gap:16px; flex-wrap:wrap">
-  <div>
-    <canvas id="pcv" width="542" height="290"></canvas>
-    <div class="cap">t 检验 p 值的直方图。<b>H₀ 为真时应是均匀的</b>（灰线）——"p&lt;0.05 恰有 5%"全靠它；H₀ 为假时堆向 0</div>
-  </div>
-  <div>
-    <canvas id="ccv" width="542" height="290"></canvas>
-    <div class="cap">最近 120 条 (1−α) 置信区间：<span style="color:#27713d">盖住真均值(绿)</span> / <span style="color:#c0392b">没盖住(红)</span>，横线 = 真均值</div>
+  <div class="gline"><b>① 真实分布</b>
+    <button data-p="normal" class="on">正态</button>
+    <button data-p="exp">偏态(指数)</button>
+    <button data-p="lognorm">强偏态(对数正态)</button>
+    <button data-p="bimodal">双峰</button>
+    <button data-p="uniform">均匀</button>
+    <button data-p="cauchy">柯西(方差无限)</button>
+    <span class="mono" style="margin-left:6px">真实均值 μ</span>
+    <input type="range" id="eff" min="0" max="250" value="70" style="width:200px;margin:0">
+    <span class="mono" id="effV"></span>
   </div>
 </div>
-<div class="hint">
-  流程：从你画的总体反复抽 n 个 → 做 <b>t 检验</b>（H₀: 均值 = μ₀）和<b>符号检验</b>（H₀: 中位数 = μ₀）→ 数出实付账单与承诺对账。
-  <b class="k">该看的实验</b>：① 按"μ₀ ← 真均值"：t 拒绝率应 ≈ α（承诺兑现），p 值直方图变均匀；把 μ₀ 拖离真值 → 拒绝率变成<b>功效</b>，随 |μ₀−μ| 和 n 增大而升。
-  ② 偏态总体 + n=5：t 检验实付 &gt; 名义 α（正态假设小样本下失守，靠 CLT 要 n 够大才救回来）；符号检验不看分布形状，仍守约（离散性还偏保守，实付 ≤ α）。
-  ③ 柯西：均值不存在，t 检验的"真值"都无从谈起——见读数注记。④ CI 覆盖率与拒绝率是同一枚硬币：t 检验在 α 拒绝 ⟺ (1−α) CI 不含 μ₀。
-  t 分布 CDF 由正则不完全贝塔函数精确计算（非正态近似），符号检验用精确二项尾概率。
+
+<div class="bar">
+  <div class="grid">
+    <span class="sec"><b>② pre-test setting</b></span>
+    <span class="mono lb">显著性 α</span>
+    <input type="range" id="al" min="1" max="200" value="50">
+    <span class="hint" style="text-align:center">恒固定</span>
+    <span class="mono vf" id="alV"></span>
+    <span class="mono lb" id="lbB">β</span>
+    <input type="range" id="bt" min="1" max="990" step="1" value="200">
+    <label class="fx"><input type="checkbox" class="fxc" data-k="b"> 固定</label>
+    <span class="mono vf" id="btV"></span>
+
+    <span></span>
+    <span class="mono lb" id="lbN">样本量 n</span>
+    <input type="range" id="ns" min="2" max="1000" step="1" value="20" style="grid-column:3/8">
+    <label class="fx"><input type="checkbox" class="fxc" data-k="n"> 固定</label>
+    <span class="mono vf" id="nsV"></span>
+
+    <span></span>
+    <span class="mono lb" id="lbD">设计用 d</span>
+    <input type="range" id="dz" min="0" max="250" value="70">
+    <label class="fx"><input type="checkbox" class="fxc" data-k="d"> 固定</label>
+    <span class="mono vf" id="dzV"></span>
+    <span class="mono lb">H₀: μ = μ₀</span>
+    <input type="range" id="mu0" min="0" max="250" value="0">
+    <span></span><span class="mono vf" id="mu0V"></span>
+
+    <span class="hint note" style="grid-column:10;grid-row:1/span 3">α 永远由你定死；余下
+      <b>β、n、d 被一条方程绑住</b>，只有两个自由度 —— 恒定 <b>2 个「固定」+ 1 个自动算出</b>
+      给定 α 后，三者被一条方程锁住：<b>功效(n, d) = 1 − β</b>。
+      <b>勾「固定」的那个钉死不动；剩下两个标 ⇄ 互变</b> —— 你拖其中一个，另一个就被方程唯一确定。
+      （只能勾一个：钉死一个后只剩 1 个自由度。）</span>
+  </div>
+</div>
+
+<div class="bar">
+  <b>③ 跑实验</b><span class="hint">点哪个就按哪个次数重跑一次</span>
+  <button data-r="1">1</button>
+  <button data-r="100">100</button>
+  <button data-r="500">500</button>
+  <button data-r="1000">1千</button>
+  <button data-r="3000">3千</button>
+  <button data-r="5000">5千</button>
+  <button data-r="10000" class="on">1万</button>
+  <button data-r="30000">3万</button>
+  <button data-r="50000">5万</button>
+  <button data-r="100000">10万</button>
+  <span class="mono" id="prog"></span>
+</div>
+
+<canvas id="dcv" width="1100" height="96"></canvas>
+<div class="cap">总体密度（<b>可拖动手绘</b>，横轴单位已标准化成 σ）　<span style="color:#c0392b">▎μ₀ <b>实线</b>（你在②里定的）</span>　<span style="color:#1f3a6e">┊ 真实均值 μ <b>虚线</b>（真相，看不到）</span>　<span style="color:#111">▎这次抽到的 n 个样本</span>　<span style="color:#4a6a4a">▒ 绿底 = 下方主图的横轴范围（−3σ…+3σ）</span></div>
+
+<canvas id="main" width="1100" height="584"></canvas>
+<div class="cap">
+  <b>线型约定：实线 = 你自己定的／数据算出来的　虚线 = 上帝视角的真相（现实里看不到）</b>　
+  <span class="sw" style="background:#e8a0a0"></span> α（H₀ 临界线外）
+  <span class="sw" style="background:rgba(70,120,200,.45)"></span> p（观测值以外）
+  <span class="sw" style="background:#9ecf9e"></span> 功效（H₁ 临界线外）
+  <span class="sw" style="background:#d8d8d8"></span> β（H₁ 临界线内）
+  <span class="sw" style="background:#f3b0a0"></span> Type S 区（拒绝但方向反）
+  <span class="sw" style="background:#eef4ee;border-color:#7aa77a"></span> 置信区间
+</div>
+
+<div class="st" id="st"></div>
+
+
+<div class="row">
+  <div>
+    <canvas id="pcv" width="520" height="248"></canvas>
+    <div class="cap"><b>实测：p 值分布</b>　蓝柱=密度(左轴) ／ 紫线=累积(右轴)。H₀ 为真时柱子该平贴灰线、紫线该压对角线</div>
+  </div>
+  <div>
+    <canvas id="ccv" width="520" height="248"></canvas>
+    <div class="cap"><b>实测：最近 120 条置信区间</b>　<span style="color:#27713d">绿=盖住真值</span> ／ <span style="color:#c0392b">红=没盖住</span>，<b>横虚线=真值</b></div>
+  </div>
+</div>
+
+<div class="row" style="align-items:flex-start;gap:14px">
+  <div style="flex:0 0 auto">
+    <div class="cap" style="margin:0 0 4px"><b>🧑 凡人视角</b>　现实里你手上<b>只有</b>这些
+      <span class="hint">（抽样前你定的 + 抽样后数得出来的）</span></div>
+    <table class="t2" id="t1"></table>
+  </div>
+  <div style="flex:1 1 0;min-width:0">
+    <div class="cap" style="margin:0 0 4px"><b>👁 上帝视角：两类错误 2×2</b>　
+      把左表最后那一行<b>拆开</b> —— 现实里做不到
+      　π <input type="range" id="pri" min="0" max="100" value="30" style="width:90px;vertical-align:middle"><span class="mono" id="priV"></span>
+      <span class="hint" style="margin:0">π = 你送去检验的<b>那一批假设</b>里，<b>本来就真有效应</b>的占多少
+      —— 不是数据的性质，是"你这批课题靠不靠谱"。它不改变 α 和功效，只决定 <b>FDR / FOR</b>。
+      <br><span id="priNote"></span></span></div>
+    <div id="t2warn"></div>
+    <table class="t2" id="t2"></table>
+  </div>
+</div>
+
+<div class="cap" style="margin:10px 0 4px"><b>核对：理论预言 vs 实测数出来的</b>　
+这才是本页的目的 —— 凡人只能靠理论公式预言，上帝视角能把结果一次次数出来；两列对上了，说明理论是对的。
+<span style="opacity:.7">（次数越多，"差"越趋近 0；蒙特卡洛噪声量级 ±1/√次数）</span></div>
+<table class="t2" id="chk"></table>
+<div class="cap" id="chknote" style="margin-top:4px"></div>
+
+<div class="cap" style="margin:12px 0 4px"><b>陷阱：事后功效（observed power / post-hoc power）</b>　
+功效是<b>抽样前</b>就定死的设计量 —— 现实里它不需要、也无法被事后验证（单次实验只给你一个"拒绝/不拒绝"，
+从一个伯努利样本估不出它背后的概率）。常见错误是把<b>这次观测到</b>的效应量 d̂ = t_obs/√n 代回功效公式，
+当成"我这次实验的功效"。下表说明：<b>它只是 p 值换了件衣服，零新信息。</b></div>
+<table class="t2" id="op"></table>
+<div class="cap" id="opNote" style="margin-top:4px"></div>
+
+<div class="bar" style="margin-top:10px">
+  <b>指标随 n / d 怎么变</b>　横轴:
+  <button data-sw="n" class="on">扫 n（真实效应固定）</button>
+  <button data-sw="d">扫 真实效应 μ−μ₀（n 固定）</button>
+  <button data-sw="b">扫 β（按设计 d 反解 n）</button>
+  　每点次数:
+  <button data-m="2000">2 千</button>
+  <button data-m="8000" class="on">8 千</button>
+  <button data-m="30000">3 万</button>
+  　<button id="swrun">▶ 跑扫描</button>
+  <span class="mono" id="swprog"></span>
+</div>
+<canvas id="swv" width="1100" height="286"></canvas>
+<div class="cap">
+  <b>细实线 = 理论值</b>（用<b>非中心 t</b> 精确算的，不是正态近似 —— 正态近似在 n 很小时会把功效算低一半）／
+  <b>圆点 = 实测值</b>（每个横轴点独立跑一批实验数出来的）。
+  两者贴合说明公式适用；分开说明前提被破坏 —— 换成强偏态总体再扫一次 n，看红色的 α 怎么在小 n 处高出 5% 那条线。
+</div>
+
+<div class="box">
+  <b>主图三排共用一条横轴</b>，单位是标准误，原点是 μ₀。
+  <b>①</b> H₀ 的抽样分布，中心 = 你在②里定的 <b>μ₀</b>：红两尾＝<b>α</b>，<b>红实线＝接受域边界 μ₀±t_crit/√n</b>（你定的，所以画实线）。
+  三排横轴都是<b>绝对 μ</b>（单位 σ）、范围写死，并且和上方总体密度图逐像素对齐 —— 拖任何滑块刻度都不动。
+  <b>②</b> <b>μ_A = μ₀ + d</b> 的抽样分布（<b>紫实线</b>）。<b>颜色分区只画在这一条上</b>：绿＝<b>功效</b>、灰＝<b>β</b>、左侧浅红＝<b>Type S 区</b>
+  —— 因为 β 和功效本来就是<b>对你声称的 μ_A 定义的</b>，是抽样前就算得出的数。
+  旁边那条<b>黑虚线是真实分布</b>（真相，不可观测，所以<b>不填色</b>）：它只告诉你现实落在哪、你的 μ_A 猜得准不准。
+  <b>两条重合 ⟺ 你猜对了</b>，这时"声称的功效"才等于"真实功效"。
+  <b>同一条接受域边界贯通两排</b>，所以 α 和功效必然此消彼长；想两个都好，只能把两条曲线拉开，即加 n 或降噪。<br>
+  <b>这一次的观测值只用③里那根置信区间表示</b>：区间中点就是 x̄，半宽就是 t_crit·s/√n。
+  它在①切出的<b>蓝色面积就是 p 值</b>（和 α 是同一条曲线上的两个切点，区别只在切点由谁定）；
+  而③里<b>区间盖住 μ₀ ⟺ 不拒绝</b>，与 p 的判定必然一致 —— 所以不用再画一根竖线穿过三排。<br>
+  <b>两个 d 别搞混（虚线 vs 实线）</b>：①里的<b>真实均值 μ</b> 决定机器怎么抽样、决定真实功效；②里的<b>设计用 d</b> 只是你设计时的假设，
+  用来反解 n 和 MDE。两者相等时一切自洽；拖开就能看到「声称 80% 功效、实际只有 30%」是怎么来的。
+  μ 恰好等于 μ₀ 时两条曲线完全重合、功效退化成 α。
+  拖 d 看②怎么平移、功效怎么涨；拖 n 看两条曲线怎么被拉开；换成强偏态且 n 小，看①的 p 值直方图怎么失守。
 </div>
 
 <script>
 'use strict';
-// ===== 核心（无 DOM）=====
-function mulberry32(seed) {
-  return function () {
-    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
-    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-function logGamma(x) {
-  const c = [76.18009172947146, -86.50532032941677, 24.01409824083091,
-    -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5];
-  let y = x, tmp = x + 5.5;
-  tmp -= (x + 0.5) * Math.log(tmp);
-  let ser = 1.000000000190015;
-  for (let j = 0; j < 6; j++) ser += c[j] / ++y;
-  return -tmp + Math.log(2.5066282746310005 * ser / x);
-}
-function betacf(a, b, x) {
-  const FPMIN = 1e-300;
-  const qab = a + b, qap = a + 1, qam = a - 1;
-  let c = 1, d = 1 - qab * x / qap;
-  if (Math.abs(d) < FPMIN) d = FPMIN;
-  d = 1 / d;
-  let h = d;
-  for (let m = 1; m <= 300; m++) {
-    const m2 = 2 * m;
-    let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
-    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
-    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
-    d = 1 / d; h *= d * c;
-    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
-    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
-    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
-    d = 1 / d;
-    const del = d * c;
-    h *= del;
-    if (Math.abs(del - 1) < 3e-14) break;
-  }
-  return h;
-}
-function ibeta(a, b, x) {                      // 正则不完全贝塔 I_x(a,b)
-  if (x <= 0) return 0;
-  if (x >= 1) return 1;
-  const bt = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
-  return x < (a + 1) / (a + b + 2) ? bt * betacf(a, b, x) / a : 1 - bt * betacf(b, a, 1 - x) / b;
-}
-function tCDF(t, nu) {
-  const p = 0.5 * ibeta(nu / 2, 0.5, nu / (nu + t * t));
-  return t >= 0 ? 1 - p : p;
-}
-function tQuantile(p, nu) {
-  let lo = -300, hi = 300;
-  for (let i = 0; i < 100; i++) {
-    const mid = (lo + hi) / 2;
-    if (tCDF(mid, nu) < p) lo = mid; else hi = mid;
-  }
-  return (lo + hi) / 2;
-}
-function tTestP(mean, sd, n, mu0) {            // 双侧单样本 t; sd 为样本标准差(n−1)
-  if (!(sd > 0)) return mean === mu0 ? 1 : 0;
-  const t = (mean - mu0) / (sd / Math.sqrt(n));
-  return 2 * (1 - tCDF(Math.abs(t), n - 1));
-}
-function signTestP(k, n) {                     // 双侧符号检验: k = 大于 μ0 的个数(去掉平局)
-  if (n === 0) return 1;
-  const tailHi = k === 0 ? 1 : ibeta(k, n - k + 1, 0.5);         // P(X ≥ k)
-  const tailLo = k === n ? 1 : ibeta(n - k, k + 1, 0.5);         // P(X ≤ k) = P(X' ≥ n−k)
-  return Math.min(1, 2 * Math.min(tailHi, tailLo));
-}
-// 手绘网格密度 → 采样器 + 精确均值/中位数 (分段常数)
-function buildPop(f) {
-  const K = f.length, dx = 1 / K;
-  let tot = 0;
-  for (const v of f) tot += v;
-  if (!(tot > 0)) return null;
-  const p = Array.from(f, v => v / tot);
-  let mu = 0;
-  for (let i = 0; i < K; i++) mu += p[i] * (i + 0.5) * dx;
-  const cdf = new Float64Array(K + 1);
-  for (let i = 0; i < K; i++) cdf[i + 1] = cdf[i] + p[i];
-  let med = 0.5;
-  for (let i = 0; i < K; i++)
-    if (cdf[i + 1] >= 0.5) { med = (i + (0.5 - cdf[i]) / (p[i] || 1e-300)) * dx; break; }
-  const sample = rng => {
-    const u = rng();
-    let lo = 0, hi = K;
-    while (hi - lo > 1) {
-      const mid = (lo + hi) >> 1;
-      if (cdf[mid] <= u) lo = mid; else hi = mid;
-    }
-    const w = cdf[lo + 1] - cdf[lo];
-    return (lo + (w > 0 ? (u - cdf[lo]) / w : 0.5)) * dx;
-  };
-  return { mu, median: med, sample };
-}
-// ===== 核心结束 =====
-
-const K = 256;
-let fvals = new Float64Array(K);
-let useCauchy = false, pop = null;
-const NS = [5, 8, 10, 15, 20, 30, 50, 100, 200];
-let ALPHA = 0.05;
-const rng = mulberry32(4242);
 const $ = id => document.getElementById(id);
-const dcv = $('dcv'), gD = dcv.getContext('2d');
-const pcv = $('pcv'), gP = pcv.getContext('2d');
-const ccv = $('ccv'), gC = ccv.getContext('2d');
 
-// 累计器
-const PB = 40;
-let pHist = new Float64Array(PB), nSim = 0, rejT = 0, rejS = 0, nS = 0, cover = 0;
-let ciList = [], tq = 2;
-function resetAcc() {
-  pHist.fill(0); nSim = 0; rejT = 0; rejS = 0; nS = 0; cover = 0; ciList = [];
-  const n = NS[+$('ns').value];
-  tq = tQuantile(1 - ALPHA / 2, n - 1);
+/* ════════ 数学 ════════ */
+function mul32(seed){ return function(){ seed|=0; seed=seed+0x6D2B79F5|0;
+  let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296; }; }
+const rng = mul32(20260913);
+function erf(x){ const s=Math.sign(x); x=Math.abs(x); const t=1/(1+0.3275911*x);
+  return s*(1-((((1.061405429*t-1.453152027)*t+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x)); }
+const ncdf = x => 0.5*(1+erf(x/Math.SQRT2));
+const npdf = x => Math.exp(-x*x/2)/Math.sqrt(2*Math.PI);
+function lgam(x){ const c=[76.18009172947146,-86.50532032941677,24.01409824083091,
+  -1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+  let y=x,tmp=x+5.5; tmp-=(x+0.5)*Math.log(tmp); let ser=1.000000000190015;
+  for(let j=0;j<6;j++) ser+=c[j]/++y; return -tmp+Math.log(2.5066282746310005*ser/x); }
+function betacf(a,b,x){ const F=1e-300, qab=a+b, qap=a+1, qam=a-1;
+  let c=1,d=1-qab*x/qap; if(Math.abs(d)<F)d=F; d=1/d; let h=d;
+  for(let m=1;m<=300;m++){ const m2=2*m;
+    let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+    d=1+aa*d; if(Math.abs(d)<F)d=F; c=1+aa/c; if(Math.abs(c)<F)c=F; d=1/d; h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+    d=1+aa*d; if(Math.abs(d)<F)d=F; c=1+aa/c; if(Math.abs(c)<F)c=F; d=1/d;
+    const del=d*c; h*=del; if(Math.abs(del-1)<3e-14) break; }
+  return h; }
+function ibeta(a,b,x){ if(x<=0)return 0; if(x>=1)return 1;
+  const bt=Math.exp(lgam(a+b)-lgam(a)-lgam(b)+a*Math.log(x)+b*Math.log(1-x));
+  return x<(a+1)/(a+b+2) ? bt*betacf(a,b,x)/a : 1-bt*betacf(b,a,1-x)/b; }
+function tCDF(t,nu){ const p=0.5*ibeta(nu/2,0.5,nu/(nu+t*t)); return t>=0?1-p:p; }
+function tQ(p,nu){ let lo=-300,hi=300; for(let i=0;i<90;i++){const m=(lo+hi)/2;
+  if(tCDF(m,nu)<p) lo=m; else hi=m;} return (lo+hi)/2; }
+function tP(mean,sd,n){ if(!(sd>0)) return mean===0?1:0;
+  return 2*(1-tCDF(Math.abs(mean/(sd/Math.sqrt(n))),n-1)); }
+
+const tcCache=new Map();
+function tcOf(n){ const k=n+'|'+ALPHA; if(!tcCache.has(k)) tcCache.set(k,tQ(1-ALPHA/2,n-1)); return tcCache.get(k); }
+/* 非中心 t 的双侧拒绝概率（对 χ²_ν 数值积分）。正态近似在小 n 处会严重偏低, 必须用这个 */
+function nctTails(tc,nu,delta,M){
+  M=M||700;
+  /* 代换 v = s²：χ²_ν 在 ν=1 时 v^(ν/2−1) 有可积奇点，直接对 v 做梯形积分会爆掉。
+     f(v)dv = exp[(1−ν/2)ln2 − lnΓ(ν/2) + (ν−1)ln s − s²/2] ds，对任意 ν≥1 都光滑。 */
+  const sp=Math.sqrt(2*nu);
+  const slo=Math.sqrt(Math.max(1e-12, nu-12*sp-40)), shi=Math.sqrt(nu+12*sp+40);
+  const h=(shi-slo)/M, lc=(1-nu/2)*Math.LN2-lgam(nu/2), sq=Math.sqrt(nu);
+  let R=0,Lf=0;
+  for(let i=0;i<=M;i++){
+    const s=slo+i*h, w=(i===0||i===M)?0.5:1;
+    const f=Math.exp(lc+(nu-1)*Math.log(s)-s*s/2), r=tc*s/sq;
+    R+=w*f*(1-ncdf(r-delta)); Lf+=w*f*ncdf(-r-delta);
+  }
+  return { R:R*h, Lf:Lf*h };
+}
+/* 在显著性水平 a 下的理论拒绝概率；a=ALPHA 时就是功效 */
+const rejAt=(n,d,a)=>{ if(n<2) return 0;
+  const tc=tQ(1-a/2,n-1), t=nctTails(tc,n-1,Math.abs(d)*Math.sqrt(n),500); return t.R+t.Lf; };
+const powerExact=(n,d)=>{ if(n<2) return 0;
+  const t=nctTails(tcOf(n),n-1,Math.abs(d)*Math.sqrt(n)); return t.R+t.Lf; };
+/* 给定目标功效, 反解最小 n（指数扩张 + 二分） */
+function minN(d,target){
+  if(d<=1e-9) return null;
+  let hi=2; while(hi<200000 && powerExact(hi,d)<target) hi=Math.ceil(hi*1.7)+1;
+  if(hi>=200000) return null;
+  let lo=2; while(lo+1<hi){ const m=(lo+hi)>>1; if(powerExact(m,d)<target) lo=m; else hi=m; }
+  return hi;
+}
+/* 给定目标功效, 反解最小可检出效应 MDE */
+function minD(n,target){
+  let lo=0, hi=6;
+  for(let i=0;i<44;i++){ const m=(lo+hi)/2; if(powerExact(n,m)<target) lo=m; else hi=m; }
+  return (lo+hi)/2;
 }
 
-// 手绘
-let drawing = false, lastX = null;
-dcv.addEventListener('pointerdown', e => { if (!useCauchy) { drawing = true; lastX = null; dcv.setPointerCapture(e.pointerId); dpaint(e); } });
-dcv.addEventListener('pointermove', e => { if (drawing) dpaint(e); });
-dcv.addEventListener('pointerup', () => { drawing = false; lastX = null; rebuildPop(); });
-function dpaint(e) {
-  const r = dcv.getBoundingClientRect();
-  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
-  const i = Math.max(0, Math.min(K - 1, Math.floor(x * K)));
-  const h = Math.max(0, Math.min(1, 1 - y));
-  if (lastX !== null && Math.abs(i - lastX[0]) > 1) {
-    const [i0, h0] = lastX, d = i - i0, sgn = Math.sign(d);
-    for (let k = 1; k <= Math.abs(d); k++) fvals[i0 + sgn * k] = h0 + (h - h0) * k / Math.abs(d);
-  } else fvals[i] = h;
-  lastX = [i, h];
-  document.querySelectorAll('button[data-p]').forEach(b => b.classList.remove('on'));
-}
-const PRESETS = {
-  normal: () => { for (let i = 0; i < K; i++) fvals[i] = Math.exp(-((((i + 0.5) / K - 0.5) / 0.11) ** 2)); },
-  skew: () => { for (let i = 0; i < K; i++) fvals[i] = Math.exp(-5.5 * (i + 0.5) / K); },
-  bimodal: () => {
-    for (let i = 0; i < K; i++) {
-      const x = (i + 0.5) / K;
-      fvals[i] = Math.exp(-(((x - 0.25) / 0.07) ** 2)) + 0.6 * Math.exp(-(((x - 0.72) / 0.09) ** 2));
-    }
-  },
-  uniform: () => fvals.fill(0.7),
-  cauchy: null,
+/* ════════ 总体：标准化成 均值0 / 标准差1，再整体平移 d ════════ */
+const K=256;
+const PRESETS={
+  normal:  i=>Math.exp(-Math.pow((i/K-0.5)*7,2)/2),
+  exp:     i=>Math.exp(-(i/K)*6),
+  lognorm: i=>{ const x=i/K*4+0.02; return Math.exp(-Math.pow(Math.log(x)+0.9,2)/(2*0.3))/x; },
+  bimodal: i=>Math.exp(-Math.pow((i/K-0.28)*11,2)/2)+0.85*Math.exp(-Math.pow((i/K-0.75)*11,2)/2),
+  uniform: i=>(i/K>0.06&&i/K<0.94)?1:0.02,
+  cauchy:  i=>1,
 };
-function rebuildPop() {
-  if (useCauchy) pop = { mu: NaN, median: 0.5, sample: r => 0.5 + 0.06 * Math.tan(Math.PI * (r() - 0.5)) };
-  else pop = buildPop(fvals);
-  resetAcc();
+const PNAME={normal:'正态',exp:'偏态(指数)',lognorm:'强偏态(对数正态)',bimodal:'双峰',uniform:'均匀',cauchy:'柯西'};
+let fvals=new Float64Array(K), pop=null, isCauchy=false, POPNAME='正态';
+let popM=0.5, popSD=1;                                  // 手绘密度的原始均值/标准差(用于画图)
+function buildPop(){
+  if(isCauchy){ pop={ z:r=>Math.tan(Math.PI*(r()-0.5)), skew:NaN }; return; }
+  let m=0,w=0; for(let i=0;i<K;i++){ w+=fvals[i]; m+=fvals[i]*(i+0.5)/K; }
+  if(w<=1e-9){ for(let i=0;i<K;i++) fvals[i]=PRESETS.normal(i); return buildPop(); }
+  m/=w;
+  let v=0,s3=0; for(let i=0;i<K;i++){ const x=(i+0.5)/K-m; v+=fvals[i]*x*x; s3+=fvals[i]*x*x*x; }
+  v/=w; s3/=w; const sd=Math.sqrt(Math.max(v,1e-12));
+  popM=m; popSD=sd;
+  const cdf=new Float64Array(K); let acc=0;
+  for(let i=0;i<K;i++){ acc+=fvals[i]/w; cdf[i]=acc; }
+  pop={ skew:s3/(sd*sd*sd),
+    z:r=>{ const u=r(); let lo=0,hi=K-1;
+      while(lo<hi){ const mid=(lo+hi)>>1; if(cdf[mid]<u) lo=mid+1; else hi=mid; }
+      return ((lo+r())/K - m)/sd; } };
 }
-document.body.addEventListener('click', e => {
-  const p = e.target.dataset && e.target.dataset.p;
-  const a = e.target.dataset && e.target.dataset.a;
-  if (p) {
-    document.querySelectorAll('button[data-p]').forEach(b => b.classList.toggle('on', b === e.target));
-    useCauchy = p === 'cauchy';
-    if (!useCauchy) { fvals.fill(0); PRESETS[p](); }
-    rebuildPop();
-  }
-  if (a) {
-    ALPHA = +a;
-    document.querySelectorAll('button[data-a]').forEach(b => b.classList.toggle('on', b === e.target));
-    resetAcc();
-  }
-});
-$('ns').addEventListener('input', resetAcc);
-$('mu0').addEventListener('input', resetAcc);
-$('resetAcc').addEventListener('click', resetAcc);
-$('setMean').addEventListener('click', () => {
-  if (pop && isFinite(pop.mu)) { $('mu0').value = Math.round(pop.mu * 1000); resetAcc(); }
-});
-$('setMed').addEventListener('click', () => {
-  if (pop) { $('mu0').value = Math.round(pop.median * 1000); resetAcc(); }
-});
+const smp = (r,m) => pop.z(r)+m;                        // m = 这一次抽样背后的真实均值 (σ 为单位)
 
-function frame() {
-  const n = NS[+$('ns').value];
-  const mu0 = +$('mu0').value / 1000;
-  $('ns2').textContent = 'n=' + n;
-  $('mu02').textContent = mu0.toFixed(3);
-  if (pop && nSim < 400000) {
-    const B = Math.max(30, Math.floor(3000 / n));
-    for (let b = 0; b < B; b++) {
-      let s = 0, s2 = 0, k = 0, ties = 0;
-      for (let i = 0; i < n; i++) {
-        const v = pop.sample(rng);
-        s += v; s2 += v * v;
-        if (v > mu0) k++; else if (v === mu0) ties++;
-      }
-      const mean = s / n;
-      const sd = Math.sqrt(Math.max((s2 - n * mean * mean) / (n - 1), 0));
-      const pT = tTestP(mean, sd, n, mu0);
-      const pS = signTestP(k, n - ties);
-      nSim++;
-      pHist[Math.min(PB - 1, Math.floor(pT * PB))]++;
-      if (pT < ALPHA) rejT++;
-      if (pS < ALPHA) rejS++;
-      nS++;
-      const half = tq * sd / Math.sqrt(n);
-      const truth = isFinite(pop.mu) ? pop.mu : 0.5;
-      const ok = mean - half <= truth && truth <= mean + half;
-      if (ok) cover++;
-      if (ciList.length >= 120) ciList.shift();
-      ciList.push([mean - half, mean + half, ok]);
-    }
+/* ════════ 状态与累积器 ════════ */
+let ALPHA=0.05, RUNS=10000, remain=0, dirty=true, TARGET=0.80;
+const markDirty=()=>{ dirty=true; };
+const PB=40, CB=1000;
+/* ══ 所有分布图共用的【绝对 μ 轴】：范围和左右边距都写死。
+      这样任何一个 μ 值在总体密度图、主图、置信区间图里都落在同一个位置，
+      而且拖任何滑块（包括 μ₀）刻度都不动。 ══ */
+const AXLO=-3.6, AXHI=6.1, AXL=66, AXR=44;          // 总体密度图：要装得下一整条密度
+const MLO=-3, MHI=3;                                 // 主图三排：固定 ±3σ
+const axX=(v,W)=>AXL+(Math.max(AXLO,Math.min(AXHI,v))-AXLO)/(AXHI-AXLO)*(W-AXL-AXR);
+const mX =(v,W)=>AXL+(Math.max(MLO ,Math.min(MHI ,v))-MLO )/(MHI -MLO )*(W-AXL-AXR);
+const axOff=v=>v<MLO-1e-9?-1:(v>MHI+1e-9?1:0);
+const pHist=new Float64Array(PB), cHist=new Float64Array(CB);
+let nA=0, rej=0, cover=0, ciList=[], tcrit=2;
+let TP=0,FN=0,FP=0,TN=0,typeS=0,nB=0;
+let snap=null;
+const nOf=()=>+$('ns').value, priOf=()=>+$('pri').value/100;
+const muOf =()=>+$('eff').value/100;        // ①行：真实均值 μ（上帝知道）
+const mu0Of=()=>+$('mu0').value/100;        // ②：你的假设值 μ₀（凡人拍板）
+const effOf=()=>muOf()-mu0Of();             // 真实效应 = 真值 − 假设值，检验的一切只取决于它
+const dzOf =()=>+$('dz').value/100;         // ②：设计用 d，可以和真实效应不一致
+
+function reroll(){
+  const n=nOf(), mu=muOf(), m0=mu0Of(), xs=new Float64Array(n);
+  let s=0,s2=0; for(let i=0;i<n;i++){ const v=smp(rng,mu); xs[i]=v; s+=v; s2+=v*v; }
+  const mean=s/n, sd=Math.sqrt(Math.max((s2-n*mean*mean)/(n-1),0)), dv=mean-m0;
+  snap={ xs,n,mean,sd, se:sd/Math.sqrt(n), t:sd>0?dv/(sd/Math.sqrt(n)):0, p:tP(dv,sd,n) };
+}
+function clearAcc(){
+  pHist.fill(0); cHist.fill(0); nA=0; rej=0; cover=0; ciList=[];
+  TP=FN=FP=TN=typeS=nB=0; remain=0; dirty=true;
+}
+function resetAcc(){                                    // 参数变了: 清空 + 自动跑一轮
+  clearAcc();
+  tcrit=tQ(1-ALPHA/2, nOf()-1);
+  reroll();
+  remain=RUNS;
+  if(typeof swBuild==='function') swBuild();          // 扫描的理论曲线跟着重算
+}
+
+/* ════════ 手绘 ════════ */
+const dcv=$('dcv'), gD=dcv.getContext('2d');
+let drawing=false,lastX=null;
+dcv.addEventListener('pointerdown',e=>{ if(isCauchy) return; drawing=true; lastX=null;
+  dcv.setPointerCapture(e.pointerId); paint(e); });
+dcv.addEventListener('pointermove',e=>{ if(drawing) paint(e); });
+dcv.addEventListener('pointerup',()=>{ if(drawing){ drawing=false; lastX=null; buildPop(); resetAcc(); } });
+dcv.addEventListener('pointermove',()=>{ if(drawing) markDirty(); });
+function paint(e){
+  const r=dcv.getBoundingClientRect();
+  const mu=muOf(), m0=mu0Of();
+  const px=(e.clientX-r.left)/r.width*dcv.width;         // 反推时也要扣掉左右边距
+  const zx=AXLO+(AXHI-AXLO)*(px-AXL)/(dcv.width-AXL-AXR);
+  const i=Math.max(0,Math.min(K-1,Math.floor(((zx-mu)*popSD+popM)*K)));
+  const h=Math.max(0,Math.min(1,1-(e.clientY-r.top)/r.height));
+  if(lastX!==null && Math.abs(i-lastX[0])>1){ const [i0,h0]=lastX, dd=i-i0, sg=Math.sign(dd);
+    for(let k=1;k<=Math.abs(dd);k++) fvals[i0+sg*k]=h0+(h-h0)*k/Math.abs(dd); }
+  else fvals[i]=h;
+  lastX=[i,h];
+}
+
+/* ════════ 画：总体 ════════ */
+function drawPop(){
+  const W=dcv.width,H=dcv.height, mu=muOf(), m0=mu0Of();
+  gD.fillStyle='#fff'; gD.fillRect(0,0,W,H);
+  const LO=AXLO, HI=AXHI, X=v=>axX(v,W);
+  if(isCauchy){
+    gD.strokeStyle='#1f3a6e'; gD.lineWidth=2; gD.beginPath();
+    for(let px=0;px<=W;px++){ const v=LO+(HI-LO)*px/W, d=1/(Math.PI*(1+(v-mu)*(v-mu)));
+      const y=H-d*Math.PI*(H-18)-2; px?gD.lineTo(px,y):gD.moveTo(px,y); }
+    gD.stroke();
+    gD.fillStyle='#a03030'; gD.font='11px Menlo';
+    gD.fillText('柯西：均值与方差都不存在 → t 检验从根上无效，n 再大也没用', 10, 14);
+  } else {
+    let mx=0; for(let i=0;i<K;i++) mx=Math.max(mx,fvals[i]); mx=mx||1;
+    gD.fillStyle='rgba(31,58,110,.22)'; gD.strokeStyle='#1f3a6e'; gD.lineWidth=1.4;
+    gD.beginPath(); gD.moveTo(X(LO),H);
+    for(let i=0;i<K;i++){ const z=((i+0.5)/K-popM)/popSD+mu;
+      gD.lineTo(X(z), H-(fvals[i]/mx)*(H-14)); }
+    gD.lineTo(X(HI),H); gD.closePath(); gD.fill(); gD.stroke();
   }
-  draw(n, mu0);
+  if(snap){ gD.strokeStyle='rgba(17,17,17,.6)'; gD.lineWidth=1; gD.beginPath();
+    for(let i=0;i<snap.n;i++){ const x=X(snap.xs[i]); gD.moveTo(x,H); gD.lineTo(x,H-12); } gD.stroke(); }
+  gD.strokeStyle='#c0392b'; gD.lineWidth=2;                       // μ₀ 你定的 → 实线
+  gD.beginPath(); gD.moveTo(X(m0),0); gD.lineTo(X(m0),H); gD.stroke();
+  gD.strokeStyle='#1f3a6e'; gD.lineWidth=2; gD.setLineDash([5,4]);  // 真实均值 → 虚线
+  gD.beginPath(); gD.moveTo(X(mu),0); gD.lineTo(X(mu),H); gD.stroke(); gD.setLineDash([]);
+  gD.fillStyle='rgba(90,130,90,.10)';                         // 下方主图只画这一段
+  gD.fillRect(X(MLO),0,X(MHI)-X(MLO),H);
+  gD.strokeStyle='#6a8a6a'; gD.lineWidth=1; gD.setLineDash([3,3]);
+  for(const v of [MLO,MHI]){ gD.beginPath(); gD.moveTo(X(v),0); gD.lineTo(X(v),H); gD.stroke(); }
+  gD.setLineDash([]);
+  gD.font='10px Menlo'; gD.textAlign='center';
+  gD.fillStyle='#c0392b'; gD.fillText('μ₀='+m0.toFixed(2), X(m0), 22);
+  gD.fillStyle='#1f3a6e'; gD.fillText('μ='+mu.toFixed(2), X(mu), 10); gD.textAlign='left';
+}
+
+/* ════════ 画：主图 ════════ */
+const mcv=$('main'), g=mcv.getContext('2d');
+function drawMain(){
+  const n=nOf(), eff=effOf(), W=mcv.width,H=mcv.height,PW=W-AXL-AXR;
+  const m0=mu0Of(), mu=muOf(), dz=dzOf();
+  const X=v=>mX(v,W), off=axOff;
+  const sq=Math.sqrt(n), zc=tcrit/sq;              // 临界值（σ 单位）
+  const muA = m0 + (eff<0?-dz:dz);                 // 你声称的备择值 μ_A = μ₀ ± d
+  const cL=m0-zc, cR=m0+zc;                        // 接受域边界（绝对 μ）
+  const sameD=Math.abs(dz-Math.abs(eff))<5e-3;
+  const b1=198, b2=404, HT=140, b3=496;
+  const Y1=d=>b1-d/npdf(0)*HT, Y2=d=>b2-d/npdf(0)*HT;
+  g.fillStyle='#fff'; g.fillRect(0,0,W,H);
+  const pdf=(v,c)=>npdf((v-c)*sq);                 // 抽样分布的 sd = 1/√n
+  const fill=(a,b,Y,c,col)=>{ a=Math.max(a,MLO); b=Math.min(b,MHI); if(b<=a)return; g.fillStyle=col;
+    g.beginPath(); g.moveTo(X(a),Y(0));
+    for(let i=0;i<=300;i++){ const v=a+(b-a)*i/300; g.lineTo(X(v),Y(pdf(v,c))); }
+    g.lineTo(X(b),Y(0)); g.closePath(); g.fill(); };
+  const curve=(Y,c,col,lw)=>{ g.strokeStyle=col; g.lineWidth=lw; g.beginPath();
+    for(let i=0;i<=700;i++){ const v=MLO+(MHI-MLO)*i/700, y=Y(pdf(v,c)); i?g.lineTo(X(v),y):g.moveTo(X(v),y); }
+    g.stroke(); };
+  const arrow=(dir,y,col)=>{ const x=dir<0?AXL+5:AXL+PW-5, s2=dir<0?-1:1;
+    g.fillStyle=col; g.beginPath(); g.moveTo(x+s2*6,y); g.lineTo(x-s2*4,y-5); g.lineTo(x-s2*4,y+5);
+    g.closePath(); g.fill(); };
+
+  /* ── ① H₀：中心 μ₀，红两尾 = 你定的 α ── */
+  fill(cR,MHI,Y1,m0,'#e8a0a0'); fill(MLO,cL,Y1,m0,'#e8a0a0');
+  if(snap){ const o=snap.mean, r=Math.abs(o-m0);
+    fill(m0+r,MHI,Y1,m0,'rgba(70,120,200,.45)'); fill(MLO,m0-r,Y1,m0,'rgba(70,120,200,.45)'); }
+  curve(Y1,m0,'#333',2);
+  g.strokeStyle='#aaa'; g.lineWidth=1; g.beginPath(); g.moveTo(AXL,b1); g.lineTo(AXL+PW,b1); g.stroke();
+
+  /* ── ② 颜色分区画在 μ_A 那条上（β、功效都是对 μ_A 定义的，凡人算得出）── */
+  if(dz>1e-9){
+    fill(cL,cR,Y2,muA,'#d8d8d8');                        // β
+    if(muA>=m0){ fill(cR,MHI,Y2,muA,'#9ecf9e'); fill(MLO,cL,Y2,muA,'#f3b0a0'); }
+    else        { fill(MLO,cL,Y2,muA,'#9ecf9e'); fill(cR,MHI,Y2,muA,'#f3b0a0'); }
+    curve(Y2,muA,'#7a3fa0',2);
+    g.strokeStyle='#7a3fa0'; g.lineWidth=1.2;
+    g.beginPath(); g.moveTo(X(muA),b2); g.lineTo(X(muA),b2-HT-18); g.stroke();
+    if(off(muA)) arrow(off(muA), b2-HT-24, '#7a3fa0');
+  }
+  /* ── 真相：只有虚线轮廓，不填色（不可观测）── */
+  g.setLineDash([6,4]); curve(Y2,mu,'#333',1.6); g.setLineDash([]);
+  g.strokeStyle='#555'; g.lineWidth=1.1; g.setLineDash([2,3]);
+  g.beginPath(); g.moveTo(X(mu),b2); g.lineTo(X(mu),b2-HT-6); g.stroke(); g.setLineDash([]);
+  g.strokeStyle='#aaa'; g.lineWidth=1; g.beginPath(); g.moveTo(AXL,b2); g.lineTo(AXL+PW,b2); g.stroke();
+
+  /* ── 接受域边界：贯通三排（你定的 → 实线）── */
+  g.strokeStyle='#c0392b'; g.lineWidth=1.5;
+  for(const z of [cL,cR]){ g.beginPath(); g.moveTo(X(z),56); g.lineTo(X(z),b3+22); g.stroke();
+    if(off(z)) arrow(off(z), 70, '#c0392b'); }
+  g.strokeStyle='#555'; g.lineWidth=1.1; g.setLineDash([2,3]);
+  g.beginPath(); g.moveTo(X(m0),b1); g.lineTo(X(m0),b1-HT-6); g.stroke(); g.setLineDash([]);
+
+  /* ── μ₀ → μ_A 的距离 d ── */
+  const yd=b1+56;
+  if(dz>1e-9){
+    g.strokeStyle='#2b5fb8'; g.lineWidth=1.3; g.setLineDash([3,3]);
+    g.beginPath(); g.moveTo(X(m0),b1+6); g.lineTo(X(m0),yd);
+    g.moveTo(X(muA),yd); g.lineTo(X(muA),b2-HT-8); g.stroke(); g.setLineDash([]);
+    g.beginPath(); g.moveTo(X(m0),yd); g.lineTo(X(muA),yd); g.stroke();
+    g.fillStyle='#2b5fb8'; g.font='bold 11.5px Menlo'; g.textAlign='center';
+    g.fillText('d = μ_A−μ₀ = '+dz.toFixed(2)+' σ　（δ = d·√n = '+(dz*sq).toFixed(2)+'）',
+      X((m0+muA)/2), yd-5);
+  }
+
+  /* ── ③ 置信区间（绝对 μ）── */
+  const half = snap? tcrit*snap.sd/sq : zc;
+  const ctr = snap? snap.mean : m0;
+  const ciL=ctr-half, ciH=ctr+half, inside=ciL<=m0&&m0<=ciH, col=inside?'#27713d':'#c0392b';
+  const cl=Math.max(ciL,MLO), chh=Math.min(ciH,MHI);
+  if(chh>cl){
+    g.fillStyle='#eef4ee'; g.fillRect(X(cl),b3-16,X(chh)-X(cl),32);
+    g.strokeStyle=col; g.lineWidth=3.4;
+    g.beginPath(); g.moveTo(X(cl),b3); g.lineTo(X(chh),b3); g.stroke();
+    g.lineWidth=2.2; for(const e of [ciL,ciH]){ if(off(e)) arrow(off(e),b3,col);
+      else { g.beginPath(); g.moveTo(X(e),b3-11); g.lineTo(X(e),b3+11); g.stroke(); } }
+  }
+  if(!off(ctr)){ g.fillStyle=col; g.beginPath(); g.arc(X(ctr),b3,4.5,0,6.2832); g.fill(); }
+
+  /* ── 文字 ── */
+  const pwA = dz>1e-9?powerExact(n,dz):ALPHA, pwR = Math.abs(eff)>1e-9?powerExact(n,eff):ALPHA;
+  g.textAlign='left'; g.font='12.5px Arial'; g.fillStyle='#222';
+  g.fillText('① H₀ 的抽样分布（中心 = 你假设的 μ₀；n 越大越窄）　红两尾 = 你定的 α　蓝 = p（观测值以外）', AXL+3, 24);
+  g.fillStyle='#5a2a7a';
+  g.fillText(`② μ_A 的抽样分布（实线，μ_A = μ₀+d，你声称的备择值）　`
+    + `绿 = 功效 ${(pwA*100).toFixed(1)}%　灰 = β ${((1-pwA)*100).toFixed(1)}%　左浅红 = Type S 区`
+    + `　—— 颜色分区都是对 μ_A 定义的`, AXL+3, b1+84);
+  g.fillStyle='#444';
+  g.fillText(sameD
+    ? `　　黑虚线 = 真实分布（真相，看不到）—— 此刻正好和 μ_A 重合，所以上面那些数就是真的`
+    : `　　黑虚线 = 真实分布（真相，看不到，所以不填色）：真实 μ=${mu.toFixed(2)}σ → 真实功效只有 ${(pwR*100).toFixed(1)}%，不是 ${(pwA*100).toFixed(1)}%`,
+    AXL+3, b1+100);
+  g.fillStyle=col;
+  g.fillText('③ 参数轴：'+((1-ALPHA)*100).toFixed(0)+'% 置信区间 = 把接受域反演过来。'
+    +(inside?'盖住 μ₀ → 不拒绝':'没盖住 μ₀ → 拒绝')+'，与 p 的判定必然一致', AXL+3, b3-28);
+
+  g.textAlign='center'; g.font='11.5px Menlo'; g.fillStyle='#c0392b';
+  if(!off(cR)){ g.fillText(cR.toFixed(3),X(cR),48); if(!off(cL)) g.fillText(cL.toFixed(3),X(cL),48);
+    g.font='11px Arial'; g.fillText('接受域边界 μ₀±t_crit/√n', X(cR), 34); }
+  else { g.font='11px Arial'; g.textAlign='left';
+    g.fillText('接受域边界 μ₀±'+zc.toFixed(2)+'σ 已超出横轴范围（n 太小）', AXL+16, 40); g.textAlign='center'; }
+  g.fillStyle='#111'; g.font='11.5px Menlo';
+  if(!off(ctr)) g.fillText('x̄ = '+ctr.toFixed(3)+' σ（数据定，= 区间中点）', X(ctr), b3+30);
+  g.font='11px Arial';
+  g.fillStyle='#c0392b'; g.fillText('μ₀', X(m0), b1+15);
+  if(dz>1e-9&&!off(muA)){ g.fillStyle='#7a3fa0'; g.fillText('μ_A', X(muA), b2+15); }
+  if(!off(mu)){ g.fillStyle='#1f3a6e'; g.fillText('真值 μ', X(mu), b2+27); }
+
+  g.strokeStyle='#bbb'; g.lineWidth=1; g.fillStyle='#777'; g.font='10px Menlo';
+  const ax=H-40+0.5, PX=v=>Math.round(X(v))+0.5;   // 对齐半像素, 刻度不会有抗锯齿抖动
+  g.beginPath(); g.moveTo(AXL,ax); g.lineTo(AXL+PW,ax); g.stroke();
+  for(let k=-30;k<=30;k+=5){ const v=k/10;                   // 固定刻度：每 0.5σ 一格
+    g.beginPath(); g.moveTo(PX(v),ax); g.lineTo(PX(v),ax+(k%10?3:5)); g.stroke();
+    g.fillText(k%10?v.toFixed(1):v.toFixed(0),PX(v),ax+15); }
+  g.textAlign='center'; g.fillStyle='#555'; g.font='11px Arial';
+  g.fillText('μ（绝对刻度，单位 σ）　范围固定为 −3σ … +3σ，拖任何滑块都不动', AXL+PW/2, H-6);
+}
+
+/* ════════ 画：p 值分布 ════════ */
+const pcv=$('pcv'), gP=pcv.getContext('2d');
+function drawPHist(){
+  const W=pcv.width,H=pcv.height,L=44,R=32,T=12,B=28,PW=W-L-R,PH=H-T-B,y0=T+PH;
+  gP.fillStyle='#fff'; gP.fillRect(0,0,W,H);
+  let mx=0; for(let i=0;i<PB;i++) mx=Math.max(mx,pHist[i]);
+  const uni=nA/PB; mx=Math.max(mx,uni)||1;
+  gP.fillStyle='rgba(31,58,110,.55)';
+  for(let i=0;i<PB;i++) gP.fillRect(L+i/PB*PW+1, y0-pHist[i]/mx*PH, PW/PB-2, pHist[i]/mx*PH);
+  gP.strokeStyle='#999'; gP.lineWidth=1; gP.setLineDash([5,4]);
+  const uy=y0-uni/mx*PH; gP.beginPath(); gP.moveTo(L,uy); gP.lineTo(L+PW,uy); gP.stroke();
+  gP.strokeStyle='#c9b3dd'; gP.beginPath(); gP.moveTo(L,y0); gP.lineTo(L+PW,T); gP.stroke(); gP.setLineDash([]);
+  if(nA>0){ gP.strokeStyle='#7a3fa0'; gP.lineWidth=2; gP.beginPath(); gP.moveTo(L,y0);
+    let acc=0,px=-2;
+    for(let i=0;i<CB;i++){ acc+=cHist[i]/nA; const x=L+(i+1)/CB*PW;
+      if(x-px>=.5||i===CB-1){ gP.lineTo(x,y0-acc*PH); px=x; } }
+    gP.stroke(); }
+  gP.strokeStyle='#bbb'; gP.lineWidth=1; gP.beginPath();
+  gP.moveTo(L,T); gP.lineTo(L,y0); gP.lineTo(L+PW,y0); gP.moveTo(L+PW,T); gP.lineTo(L+PW,y0); gP.stroke();
+  gP.strokeStyle='#c0392b'; gP.beginPath(); gP.moveTo(L+ALPHA*PW,y0); gP.lineTo(L+ALPHA*PW,T); gP.stroke();
+  gP.fillStyle='#666'; gP.font='9.5px Menlo'; gP.textAlign='right';
+  gP.fillText(Math.round(mx).toLocaleString(),L-4,T+8);
+  if(uy>T+12&&uy<y0-6) gP.fillText(Math.round(uni).toLocaleString(),L-4,uy+3);
+  gP.textAlign='left'; gP.fillStyle='#7a3fa0';
+  for(const t of [0,.5,1]) gP.fillText(t.toFixed(1),L+PW+3,y0-t*PH+3);
+  gP.textAlign='center'; gP.fillStyle='#777';
+  for(const t of [0,.25,.5,.75,1]) gP.fillText(t.toFixed(2),L+t*PW,y0+12);
+  gP.fillStyle='#c0392b'; gP.fillText('α',L+ALPHA*PW,T+9);
+  gP.fillStyle='#555'; gP.fillText('p 值（40 桶）',L+PW/2,y0+24);
+}
+
+/* ════════ 画：CI 带 ════════ */
+const ccv=$('ccv'), gC=ccv.getContext('2d');
+function drawCI(){
+  const W=ccv.width,H=ccv.height; gC.fillStyle='#fff'; gC.fillRect(0,0,W,H);
+  if(!ciList.length) return;
+  const truth=muOf(), m0=mu0Of();
+  /* 纵轴固定：以 μ₀ 为中心的 ±2.9σ，和主图同一把尺子，不随抽样结果缩放 */
+  const lo=m0-2.9, hi=m0+2.9;
+  const Y=v=>H-16-(Math.max(lo,Math.min(hi,v))-lo)/(hi-lo)*(H-32);
+  gC.strokeStyle='#111'; gC.lineWidth=1.2; gC.setLineDash([5,4]);   // 真值不可观测 → 虚线
+  gC.beginPath(); gC.moveTo(0,Y(truth)); gC.lineTo(W,Y(truth)); gC.stroke(); gC.setLineDash([]);
+  ciList.forEach((c,i)=>{ const x=(i+.5)/120*W;
+    gC.strokeStyle=c[2]?'rgba(39,113,61,.75)':'#c0392b'; gC.lineWidth=c[2]?1.5:2.4;
+    gC.beginPath(); gC.moveTo(x,Y(c[0])); gC.lineTo(x,Y(c[1])); gC.stroke(); });
+  gC.fillStyle='#333'; gC.font='10px Menlo'; gC.textAlign='left';
+  gC.fillText('真值 μ = '+truth.toFixed(2)+' σ', 4, Y(truth)-5);
+  gC.strokeStyle='#c0392b'; gC.lineWidth=1.4;
+  gC.beginPath(); gC.moveTo(0,Y(m0)); gC.lineTo(W,Y(m0)); gC.stroke();
+  gC.fillStyle='#c0392b'; gC.fillText('μ₀ = '+m0.toFixed(2)+' σ（实线）', 4, Y(m0)+12);
+}
+
+/* ════════ 画：扫描图 ════════ */
+const swv=$('swv'), gS=swv.getContext('2d');
+const SER=[
+  {k:'pw', tk:'pw',  name:'功效',      col:'#27713d', on:true},
+  {k:'a',  tk:'a',   name:'实付 α',    col:'#c0392b', on:true},
+  {k:'fdr',tk:'fdr', name:'FDR',       col:'#e07b39', on:true},
+  {k:'fo', tk:'fo',  name:'FOR',       col:'#c98a20', on:true},
+  {k:'ts', tk:'ts',  name:'Type S 率', col:'#7a3fa0', on:true},
+];
+let legendBox=[];                 // 图例可点区域, 由 drawSweep 填
+function measAt(m){
+  const H0f=m.TP+m.FN, H0t=m.FP+m.TN, RJ=m.TP+m.FP, AC=m.FN+m.TN;
+  return { has:m.n>0,
+    pw: H0f>0? m.TP/H0f : null,  a: H0t>0? m.FP/H0t : null,
+    fdr: RJ>0? m.FP/RJ : null,   fo: AC>0? m.FN/AC : null,
+    ts: m.TP>0? m.TS/m.TP : null };
+}
+function drawSweep(){
+  const W=swv.width,H=swv.height,L=54,R=150,T=16,B=40,PW=W-L-R,PH=H-T-B,y0=T+PH;
+  gS.fillStyle='#fff'; gS.fillRect(0,0,W,H);
+  if(!swData.length) swBuild();
+  const N=swData.length, X=i=>L+(N===1?PW/2:i/(N-1)*PW), Y=v=>y0-v*PH;
+  gS.strokeStyle='#e6e6e6'; gS.lineWidth=1;
+  for(const v of [0,.2,.4,.6,.8,1]){ gS.beginPath(); gS.moveTo(L,Y(v)); gS.lineTo(L+PW,Y(v)); gS.stroke(); }
+  gS.strokeStyle='#c0392b'; gS.setLineDash([4,4]);
+  gS.beginPath(); gS.moveTo(L,Y(ALPHA)); gS.lineTo(L+PW,Y(ALPHA)); gS.stroke();
+  if(swMode==='b'){
+    /* 扫 β 时"目标功效"不是一条水平线, 而是 1−β 这条斜线 —— 它就是你声称能拿到的功效 */
+    gS.strokeStyle='#2a6b2a'; gS.beginPath();
+    swData.forEach((p,i)=>{ const y=Y(p.claim); i?gS.lineTo(X(i),y):gS.moveTo(X(i),y); }); gS.stroke();
+  } else {
+    gS.strokeStyle='#2a6b2a'; gS.beginPath(); gS.moveTo(L,Y(TARGET)); gS.lineTo(L+PW,Y(TARGET)); gS.stroke();
+  }
+  gS.setLineDash([]);
+  // 当前参数所在的竖线
+  const near=(arr,v)=>arr.reduce((bi,x,i)=>Math.abs(x-v)<Math.abs(arr[bi]-v)?i:bi,0);
+  const curX = swMode==='n'? near(SW_N,nOf()) : (swMode==='d'? near(SW_D,Math.abs(effOf())) : near(SW_B,1-TARGET));
+  if(curX>=0){ gS.strokeStyle='#999'; gS.setLineDash([2,3]);
+    gS.beginPath(); gS.moveTo(X(curX),T); gS.lineTo(X(curX),y0); gS.stroke(); gS.setLineDash([]); }
+  // 理论曲线 + 实测点
+  for(const S of SER){
+    if(!S.on) continue;
+    gS.strokeStyle=S.col; gS.lineWidth=1.6; gS.beginPath();
+    swData.forEach((p,i)=>{ const y=Y(p.th[S.tk]); i?gS.lineTo(X(i),y):gS.moveTo(X(i),y); });
+    gS.stroke();
+    gS.fillStyle=S.col;
+    swData.forEach((p,i)=>{ const m=measAt(p.m); if(!m.has||m[S.k]===null) return;
+      gS.beginPath(); gS.arc(X(i),Y(m[S.k]),3.4,0,6.2832); gS.fill(); });
+  }
+  // 轴与刻度
+  gS.strokeStyle='#bbb'; gS.lineWidth=1;
+  gS.beginPath(); gS.moveTo(L,T); gS.lineTo(L,y0); gS.lineTo(L+PW,y0); gS.stroke();
+  gS.fillStyle='#777'; gS.font='9.5px Menlo'; gS.textAlign='right';
+  for(const v of [0,.2,.4,.6,.8,1]) gS.fillText(v.toFixed(1),L-5,Y(v)+3);
+  gS.textAlign='center'; gS.font='10px Menlo';
+  swData.forEach((p,i)=>{
+    if(swMode==='b'){ gS.fillText((p.x*100).toFixed(0)+'%',X(i),y0+13);
+      gS.fillStyle='#2b5fb8'; gS.fillText('n='+p.n,X(i),y0+24); gS.fillStyle='#777'; }
+    else gS.fillText(swMode==='n'?String(p.x):p.x.toFixed(1),X(i),y0+14); });
+  gS.fillStyle='#555'; gS.font='11px Arial';
+  const ttl = swMode==='n' ? `样本量 n （固定 真实效应 μ−μ₀=${effOf().toFixed(2)}σ、α=${ALPHA.toFixed(3)}、π=${(priOf()*100).toFixed(0)}%）`
+    : swMode==='d' ? `真实效应 μ−μ₀（σ 为单位） （固定 n=${nOf()}、α=${ALPHA.toFixed(3)}、π=${(priOf()*100).toFixed(0)}%）`
+    : `你想要的 β（蓝字是为它反解出的 n）　设计用 d=${dzOf().toFixed(2)}、真实效应=${effOf().toFixed(2)}σ、α=${ALPHA.toFixed(3)}、π=${(priOf()*100).toFixed(0)}%`;
+  gS.fillText(ttl, L+PW/2, y0+(swMode==='b'?36:30));
+  // 图例
+  gS.textAlign='left'; gS.font='11px Arial';
+  legendBox=[];
+  SER.forEach((S,i)=>{ const y=T+14+i*19, c=S.on?S.col:'#c8c8c8';
+    gS.strokeStyle=c; gS.lineWidth=2;
+    gS.beginPath(); gS.moveTo(L+PW+14,y-4); gS.lineTo(L+PW+34,y-4); gS.stroke();
+    gS.fillStyle=c; gS.beginPath(); gS.arc(L+PW+24,y-4,3.4,0,6.2832); gS.fill();
+    gS.fillStyle=S.on?'#333':'#aaa'; gS.fillText(S.name, L+PW+40, y);
+    if(!S.on){ const w=gS.measureText(S.name).width;   // 关掉的划一道删除线
+      gS.strokeStyle='#aaa'; gS.lineWidth=1;
+      gS.beginPath(); gS.moveTo(L+PW+40,y-4); gS.lineTo(L+PW+40+w,y-4); gS.stroke(); }
+    legendBox.push({i, x0:L+PW+10, y0:y-14, x1:L+PW+140, y1:y+5});
+  });
+  gS.fillStyle='#999'; gS.font='10px Arial';
+  gS.fillText('（点图例可隐藏/显示该条）', L+PW+14, T+14+5*19-9);
+  gS.fillStyle='#888'; gS.font='10px Arial';
+  gS.fillText('— 线=理论(非中心t)', L+PW+14, T+14+5*19+4);
+  gS.fillText('● 点=实测', L+PW+14, T+14+5*19+18);
+  gS.fillStyle='#c0392b'; gS.fillText('虚线 α='+ALPHA, L+PW+14, T+14+5*19+34);
+  gS.fillStyle='#2a6b2a';
+  gS.fillText(swMode==='b' ? '绿线 你声称的功效 1−β' : '虚线 目标功效 '+(TARGET*100).toFixed(0)+'%',
+    L+PW+14, T+14+5*19+48);
+  if(swMode==='b'){ gS.fillStyle='#555';
+    gS.fillText('功效点落在绿线上 ⟺', L+PW+14, T+14+5*19+64);
+    gS.fillText('设计用 d 猜对了', L+PW+14, T+14+5*19+78); }
+}
+
+/* ════════ 读数 + 2×2 ════════ */
+function drawStat(){
+  const n=nOf(), eff=effOf(), dz=dzOf(), pi=priOf(), a=ALPHA, delta=eff*Math.sqrt(n);
+  $('nsV').textContent='n='+n; $('effV').textContent=muOf().toFixed(2)+'σ';   // ①行滑块是真实均值, 不是效应
+  $('dzV').textContent='d='+dz.toFixed(2); $('priV').textContent='π='+(pi*100).toFixed(0)+'%';
+  $('mu0V').textContent=mu0Of().toFixed(2)+'σ';
+  $('alV').textContent='α='+(a*100).toFixed(1)+'%';
+  $('btV').innerHTML=`β=<b>${((1-powerExact(n,dz))*100).toFixed(1)}%</b>`
+    + `<span style="opacity:.65;font-size:11px"> @d=${dz.toFixed(2)}</span>`;
+  const powTh=powerExact(n,eff);
+  const pc=(a,b)=>b>0?(a/b*100).toFixed(2)+'%':'—';
+  const h0 = Math.abs(eff)<1e-9;
+  $('swprog').textContent = (swIdx>=0 && swIdx<swData.length)
+    ? `跑扫描… 第 ${swIdx+1}/${swData.length} 点（${swMode}=${swData[swIdx].x}），本点还剩 ${swRemain.toLocaleString()}`
+    : (swData.length && swData.some(p=>p.m.n>0) ? `扫描已完成，每点 ${SW_M.toLocaleString()} 次` : '（只有理论曲线，点「跑扫描」加实测点）');
+  $('prog').textContent = remain>0
+    ? '跑到 '+nA.toLocaleString()+'，还剩 '+remain.toLocaleString()
+    : (nA>0 ? '已跑完 '+nA.toLocaleString()+' 次' : '（未开始）');
+  $('st').innerHTML =
+    `总体 <b>${POPNAME}</b>` + (isCauchy?' <span class="r">(方差无限)</span>':`　偏度 <b>${pop.skew.toFixed(2)}</b>`)
+    + `　n=<b>${n}</b>　α=<b>${ALPHA}</b>　t_crit=<b>±${tcrit.toFixed(3)}</b>`
+    + `　真实均值 μ=<b>${muOf().toFixed(2)}</b>σ　你的假设 μ₀=<b>${mu0Of().toFixed(2)}</b>σ`
+    + `　→ 真实效应 μ−μ₀=<b>${eff.toFixed(2)}</b>σ　δ=<b>${delta.toFixed(2)}</b>`
+    + `　H₀ ${h0?'<span class="g">为真</span>':'<span class="y">为假</span>'}`
+    + `<br><b style="color:#ffd27f">【凡人视角·真做一次检验】</b>只用这 n 个样本，不看真相：　x̄=<b>${snap.mean.toFixed(4)}</b>　s=<b>${snap.sd.toFixed(4)}</b>　SE=<b>${snap.se.toFixed(4)}</b>`
+    + `　t=<b>${snap.t.toFixed(3)}</b>　p=<b class="${snap.p<ALPHA?'r':'g'}">${snap.p.toFixed(4)}</b>`
+    + ` → ${snap.p<ALPHA?'<span class="r">拒绝 H₀</span>':'<span class="g">不拒绝</span>'}`
+    + `　CI=<b>[${(snap.t-tcrit).toFixed(2)}, ${(snap.t+tcrit).toFixed(2)}]</b>`
+    + `<br><b style="color:#7fd3c4">【上帝视角·核对】</b>把上面这件事重复很多次：　累计 <b>${nA.toLocaleString()}</b> 次${remain>0?` <span class="y">【还剩 ${remain.toLocaleString()} 次】</span>`:' <span class="g">【已跑完】</span>'}`
+    + `　实测拒绝率=<b>${pc(rej,nA)}</b> `
+    + (h0 ? `<span class="g">← H₀ 真, 这就是实付的 α（承诺 ${(ALPHA*100).toFixed(0)}%）</span>`
+          : `<span class="y">← H₀ 假, 这就是功效（理论 ${(powTh*100).toFixed(1)}%）</span>`)
+    + `　CI 覆盖率=<b>${pc(cover,nA)}</b> <span class="g">(承诺 ${((1-ALPHA)*100).toFixed(0)}%)</span>`
+
+
+  { /* 用当前 α、功效、π 现算一遍 1000 个假设的账，让 π 的作用具体化 */
+    const pwx=Math.abs(eff)>1e-9?powerExact(n,eff):a;
+    const real=1000*pi, dud=1000-real, hit=real*pwx, fa=dud*a, rj=hit+fa;
+    $('priNote').innerHTML = `照当前设置算 1000 个假设：真有效应 <b>${real.toFixed(0)}</b> 个 → 抓到 `
+      + `<b style="color:#27713d">${hit.toFixed(0)}</b> 个；没效应 ${dud.toFixed(0)} 个 → 误报 `
+      + `<b style="color:#c0392b">${fa.toFixed(0)}</b> 个。拒绝的 ${rj.toFixed(0)} 个里有 `
+      + `<b style="color:#c0392b">${rj>0?(fa/rj*100).toFixed(0):'—'}%</b> 是错的（FDR）。`
+      + `<span style="opacity:.75">把 π 往小拖 —— α 和功效一动不动，这个比例却会飙上去。</span>`; }
+  const H0f=TP+FN, H0t=FP+TN, RJ=TP+FP, AC=FN+TN;
+  { /* ── 左表：凡人视角，只放现实里真能拿到的东西 ── */
+    const pwC=powerExact(n,dz), sq=Math.sqrt(n);
+    const hd=t=>`<tr><th colspan="2" style="text-align:left">${t}</th></tr>`;
+    const r=(k,v)=>`<tr><td class="lb">${k}</td><td style="text-align:left">${v}</td></tr>`;
+    $('t1').innerHTML =
+      hd('抽样<b>前</b>你定死的')
+      + r('显著性 α', `<b>${(a*100).toFixed(2)}%</b>`)
+      + r('样本量 n', `<b>${n}</b>`)
+      + r('设计用 d', `<b>${dz.toFixed(2)}σ</b> <span style="opacity:.7">（你假设的效应）</span>`)
+      + r('→ 声称功效 / β', `<b style="color:#27713d">${(pwC*100).toFixed(1)}%</b> / <b style="color:#c98a20">${((1-pwC)*100).toFixed(1)}%</b>`
+          + `<br><span style="font-size:10.5px;opacity:.8">条件话："若效应真是 ${dz.toFixed(2)}σ"</span>`)
+      + hd('抽样<b>后</b>你数得出来的')
+      + r('跑了多少次', `<b>${nB.toLocaleString()}</b>`)
+      + r('拒绝', `<b>${RJ.toLocaleString()}</b>　${pc(RJ,nB)}`)
+      + r('不拒绝', `<b>${AC.toLocaleString()}</b>　${pc(AC,nB)}`)
+      + (snap? r('这一次 p', `<b style="color:${snap.p<a?'#c0392b':'#27713d'}">${snap.p.toFixed(4)}</b> → ${snap.p<a?'拒绝':'不拒绝'}`)
+             + r('这一次 CI', `[${(snap.mean-tcrit*snap.sd/sq).toFixed(3)}, ${(snap.mean+tcrit*snap.sd/sq).toFixed(3)}] σ`) : '')
+      + hd('<span style="color:#c0392b">你<b>看不到</b>的</span>')
+      + r(`那 ${RJ.toLocaleString()} 次拒绝里<br>几次是误报？`,
+          `<b style="color:#c0392b">无从知道</b><br><span style="font-size:10.5px;opacity:.8">要知道真相才能拆 → 看右表</span>`)
+      + r('真实效应 / 真实功效', `<b style="color:#c0392b">未知</b>`);
+  }
+  /* ── 每个格子的理论预期：用当前 α、真实功效、π 直接算 ── */
+  const pwT = Math.abs(eff)>1e-9 ? powerExact(n,eff) : a;
+  { /* 设计 d 与真相不一致时，「预期」必然不等于你声称的功效 —— 说在表格前面 */
+    const pwC = powerExact(n,dz);
+    $('t2warn').innerHTML = (Math.abs(dz-Math.abs(eff))<5e-3) ? '' :
+      `<b>⚠ 这张表里的「预期」是按<span style="color:#1f3a6e">真实效应 ${eff.toFixed(2)}σ</span> 算的，`
+      + `不是按你声称的那个功效。</b><br>你在②里设计用 d=<b>${dz.toFixed(2)}</b>，`
+      + `于是声称功效 <b>${(pwC*100).toFixed(1)}%</b>（β=${((1-pwC)*100).toFixed(1)}%）——`
+      + `那是一句条件话："<i>如果</i>效应是 ${dz.toFixed(2)}σ，我有这么大把握"。`
+      + `但真相是 ${eff.toFixed(2)}σ，所以真正的功效是 <b>${(pwT*100).toFixed(1)}%</b>，表里按它算。`
+      + `<br>表里同时给了两套预期：<span style="color:#777"><b>／预期</b> = 按真相算（需要上帝视角，实测会收敛到它）</span>、`
+      + `<span style="color:#7a3fa0"><b>／你以为</b> = 按你的假设 d 算（凡人抽样前自己就能写下来）</span>。`
+      + `两者之差就是"你猜错了多少"。<b>注意左列（H₀ 真）两套完全一样</b> —— 它只依赖你定死的 α，猜不错。`
+      + `<br><span style="opacity:.8">想让两套重合：把②里的「设计用 d」拖到 ${Math.abs(eff).toFixed(2)}，`
+      + `或把①里的真实均值拖到 μ₀+${dz.toFixed(2)}。</span>`; }
+  const thT = theoryAt(n,eff,pi);
+  const eH0t=nB*(1-pi), eH0f=nB*pi;
+  const eFP=eH0t*a, eTN=eH0t*(1-a), eTP=eH0f*pwT, eFN=eH0f*(1-pwT);
+  const eRJ=eFP+eTP, eAC=eFN+eTN;
+  const E=v=>Math.round(v).toLocaleString();
+  const ep=(x,y)=>y>0?(x/y*100).toFixed(2)+'%':'—';
+  const gray='font-size:10.5px;opacity:.85', exp='color:#777;font-weight:400',
+        clm='color:#7a3fa0;font-weight:400';
+  /* 第二套预期：按你②里假设的 d 算 —— 凡人抽样前自己就能写下来 */
+  const pwC = powerExact(n,dz), thC = theoryAt(n,dz,pi), gap = Math.abs(dz-Math.abs(eff))>=5e-3;
+  const cTP=eH0f*pwC, cFN=eH0f*(1-pwC), cRJ=eFP+cTP, cAC=cFN+eTN;
+  const C=(v,unit)=>gap?`<span style="${clm}"> ／你以为 ${unit==='n'?E(v):(v*100).toFixed(2)+'%'}</span>`:'';
+  const cell=(lab,v,ev,cv,colTot,eColTot,eColC,rowTot,eRowTot,eRowC,col,tag)=>
+    `<td style="color:${col}"><b>${lab} ${v.toLocaleString()}</b>`
+    + `<span style="${exp}"> ／预期 ${E(ev)}</span>${cv==null?'':C(cv,'n')}`
+    + `<br><span style="${gray}">列内 ${pc(v,colTot)}${tag?' = '+tag:''}`
+    + `<span style="${exp}"> ／预期 ${ep(ev,eColTot)}</span>`
+    + `${cv==null?'':C(eColC>0?cv/eColC:0)}</span>`
+    + `<br><span style="${gray}">行内 ${pc(v,rowTot)}`
+    + `<span style="${exp}"> ／预期 ${ep(ev,eRowTot)}</span>`
+    + `${cv==null?'':C(eRowC>0?cv/eRowC:0)}</span></td>`;
+  $('t2').innerHTML =
+    `<tr><th></th><th>H₀ 真　μ=μ₀<br><span style="font-weight:400">${pc(H0t,nB)} 的实验</span></th>`
+    + `<th>H₀ 假　μ−μ₀=${eff.toFixed(2)}σ ≠ 0<br><span style="font-weight:400">${pc(H0f,nB)} 的实验</span></th><th>行和</th></tr>`
+    + `<tr><td class="lb">拒绝<br><span style="font-size:10.5px">p &lt; ${ALPHA}</span></td>`
+    + cell('FP',FP,eFP,null,H0t,eH0t,eH0t,RJ,eRJ,cRJ,'#c0392b','α')
+    + cell('TP',TP,eTP,cTP,H0f,eH0f,eH0f,RJ,eRJ,cRJ,'#27713d','功效')
+    + `<td>${RJ.toLocaleString()}<span style="${exp}"> ／预期 ${E(eRJ)}</span>${C(cRJ,'n')}`
+    + `<br><span style="${gray}">占全部 ${pc(RJ,nB)}<span style="${exp}"> ／预期 ${ep(eRJ,nB)}</span></span></td></tr>`
+    + `<tr><td class="lb">不拒绝<br><span style="font-size:10.5px">p ≥ ${ALPHA}</span></td>`
+    + cell('TN',TN,eTN,null,H0t,eH0t,eH0t,AC,eAC,cAC,'#555','1−α')
+    + cell('FN',FN,eFN,cFN,H0f,eH0f,eH0f,AC,eAC,cAC,'#c98a20','β')
+    + `<td>${AC.toLocaleString()}<span style="${exp}"> ／预期 ${E(eAC)}</span>${C(cAC,'n')}`
+    + `<br><span style="${gray}">占全部 ${pc(AC,nB)}<span style="${exp}"> ／预期 ${ep(eAC,nB)}</span></span></td></tr>`
+    + `<tr><td class="lb">列内合计</td>`
+    + `<td>${H0t.toLocaleString()}　100%<span style="${exp}"> ／预期 ${E(eH0t)}</span></td>`
+    + `<td>${H0f.toLocaleString()}　100%<span style="${exp}"> ／预期 ${E(eH0f)}</span></td>`
+    + `<td>${nB.toLocaleString()}</td></tr>`
+    + `<tr><td class="lb">列内的率<br><span style="font-size:10.5px">给定真相</span></td>`
+    + `<td>α = <b style="color:#c0392b">${pc(FP,H0t)}</b><span style="${exp}"> ／预期 ${(a*100).toFixed(2)}%</span>`
+    + `　1−α = ${pc(TN,H0t)}<span style="${exp}"> ／预期 ${((1-a)*100).toFixed(2)}%</span></td>`
+    + `<td>功效 = <b style="color:#27713d">${pc(TP,H0f)}</b><span style="${exp}"> ／预期 ${(pwT*100).toFixed(2)}%</span>${C(pwC)}`
+    + `　β = <b style="color:#c98a20">${pc(FN,H0f)}</b><span style="${exp}"> ／预期 ${((1-pwT)*100).toFixed(2)}%</span>${C(1-pwC)}`
+    + `<br><span style="font-size:10.5px;opacity:.8">按<b>真实效应 ${eff.toFixed(2)}σ</b> 数出来的`
+    + (Math.abs(dz-Math.abs(eff))<5e-3 ? '（正好等于你假设的 d）' : `，不是你按 d=${dz.toFixed(2)} 声称的 ${(powerExact(n,dz)*100).toFixed(1)}%`)
+    + `</span></td><td></td></tr>`
+    + `<tr><td class="lb">行内的率<br><span style="font-size:10.5px">给定你的判定<br>这才是"靠得住吗"</span></td>`
+    + `<td>拒绝里 <b style="color:#c0392b">${pc(FP,RJ)}</b> 是误报 (FDR)`
+    + `<span style="${exp}"> ／预期 ${(thT.fdr*100).toFixed(2)}%</span>${C(thC.fdr)}<br>`
+    + `<span style="opacity:.85">另 ${pc(TP,RJ)} 是真发现<span style="${exp}"> ／预期 ${((1-thT.fdr)*100).toFixed(2)}%</span></span></td>`
+    + `<td>不拒绝里 <b style="color:#c98a20">${pc(FN,AC)}</b> 是漏报 (FOR)`
+    + `<span style="${exp}"> ／预期 ${(thT.fo*100).toFixed(2)}%</span>${C(thC.fo)}<br>`
+    + `<span style="opacity:.85">另 ${pc(TN,AC)} 判对了<span style="${exp}"> ／预期 ${((1-thT.fo)*100).toFixed(2)}%</span></span></td><td></td></tr>`
+    + `<tr><td class="lb">Type S 符号错</td>`
+    + `<td colspan="3" style="text-align:left">真有效应且被拒绝的 ${TP.toLocaleString()} 次里，`
+    + `<b>${typeS.toLocaleString()}</b> 次 x̄ 落在 μ₀ 左边（方向反）= <b style="color:#7a3fa0">${pc(typeS,TP)}</b>`
+    + `<span style="${exp}"> ／预期 ${E(eTP*thT.ts)} 次 = ${(thT.ts*100).toFixed(2)}%</span></td></tr>`;
+}
+
+/* ════════ 核对表：理论 vs 实测 ════════ */
+function drawChk(){
+  const n=nOf(), eff=effOf(), pi=priOf(), a=ALPHA;
+  const th=theoryAt(n,eff,pi), pw=th.pw, bt=1-pw;
+  const cum=x=>{ if(!nA) return null; const k=Math.min(CB,Math.round(x*CB));
+    let s=0; for(let i=0;i<k;i++) s+=cHist[i]; return s/nA; };
+  const rows=[], R=(name,thv,msv,note)=>rows.push({name,thv,msv,note});
+  const h0 = Math.abs(eff)<1e-9;
+  R(h0?'拒绝率（真实效应=0，即 μ=μ₀ → 这就是 α）':'拒绝率（真实效应≠0 → 这就是功效）',
+    h0?a:pw, nA?rej/nA:null, h0?'理论 = 你定的 α':'理论 = 非中心 t 积分');
+  if(!h0) R('β = 1 − 功效', bt, nA?1-rej/nA:null, '漏掉真效应的概率');
+  R('CI 覆盖率', 1-a, nA?cover/nA:null, '理论 = 1−α；和 p 值判定是同一件事的两种说法');
+  R('P(p < 0.25)', rejAt(n,eff,0.25), cum(0.25), h0?'H₀ 真时 p~U(0,1)，所以应 = 0.25':'理论 = α 换成 0.25 时的拒绝概率');
+  R('P(p < 0.50)', rejAt(n,eff,0.50), cum(0.50), h0?'同上，应 = 0.50':'同上，α 换成 0.50');
+  const H0f=TP+FN, H0t=FP+TN, RJ=TP+FP, AC=FN+TN;
+  R('α（混合流中 H₀ 真那批的拒绝率）', a, H0t?FP/H0t:null, '第二条流');
+  if(!h0) R('功效（混合流中 H₀ 假那批的拒绝率）', pw, H0f?TP/H0f:null, '第二条流');
+  R('FDR = P(H₀ 真 │ 拒绝)', th.fdr, RJ?FP/RJ:null,
+    h0 ? 'μ 恰好等于 μ₀ → 根本没有真效应，拒绝必然全是误报，所以恒 = 100%'
+       : `α(1−π)/[α(1−π)+功效·π]，π=${(pi*100).toFixed(0)}%`);
+  R('FOR = P(H₀ 假 │ 不拒绝)', th.fo, AC?FN/AC:null,
+    h0 ? '同理，没有真效应可漏，恒 = 0%' : 'β·π/[β·π+(1−α)(1−π)]');
+  if(!h0) R('Type S 率（拒绝里方向反的）', th.ts, TP?typeS/TP:null, '左尾/(左尾+右尾)');
+
+  const f=v=>v==null?'—':(v*100).toFixed(2)+'%';
+  const dif=(t,m)=>{ if(m==null) return '<span style="opacity:.45">未跑</span>';
+    /* 次数太少时容差会大到什么都能过, 那时打 ✓ 是骗人的 —— 直接不判 */
+    if(nA<300) return `<span style="opacity:.5">${((m-t)*100>=0?'+':'')}${((m-t)*100).toFixed(2)} pt 次数太少</span>`;
+    const d=(m-t)*100, tol=Math.max(0.5, 320/Math.sqrt(nA));
+    const ok=Math.abs(d)<=tol;
+    return `<span style="color:${ok?'#27713d':'#c0392b'}">${d>=0?'+':''}${d.toFixed(2)} pt ${ok?'✓':'✗'}</span>`; };
+  const norm = POPNAME==='正态';
+  $('chknote').innerHTML =
+    `<b>怎么读</b>：<span style="color:#27713d">✓</span> = 差在蒙特卡洛噪声内 → 理论被实测证实；`
+    + `<span style="color:#c0392b">✗</span> = 差超出噪声 → 理论在这个设置下<b>真的不成立</b>，不是本页算错了。`
+    + `<br>t 检验的理论前提是<b>数据近正态</b>（或 n 大到中心极限定理接管）。`
+    + (norm
+       ? `　当前是<b>正态</b>总体 —— 这一列应该全是 ✓，这就是"理论正确"的演示。`
+         + ` 接着换成<b>强偏态</b>或<b>柯西</b>总体，同一套公式就会开始 ✗。`
+       : (isCauchy
+          ? `　当前是<b>柯西</b>总体：均值和方差都不存在，中心极限定理失效，t 检验从根上不适用 —— ✗ 是应该出现的。`
+          : `　当前是<b style="color:#c0392b">${POPNAME}</b>总体，违背了正态前提：n 小时 ✗ 会很明显（实付 α 偏离你定的 α、CI 覆盖率不到 1−α）。`
+            + ` 把 n 调大，✗ 会逐个变回 ✓ —— 那就是中心极限定理在救场。`))
+    + `<br>“未跑”表示该量在当前设置下没有样本（例如 μ=μ₀ 时不存在“H₀ 假”的那批）。`;
+  $('chk').innerHTML =
+    `<tr><th style="text-align:left">量</th><th>理论预言</th><th>实测</th><th>差</th>`
+    + `<th style="text-align:left">理论从哪来</th></tr>`
+    + rows.map(r=>`<tr><td class="lb">${r.name}</td>`
+        + `<td><b>${f(r.thv)}</b></td><td><b>${f(r.msv)}</b></td><td>${dif(r.thv,r.msv)}</td>`
+        + `<td class="lb" style="font-size:11px;opacity:.8">${r.note}</td></tr>`).join('');
+}
+
+/* ════════ 事后功效陷阱：observed power 只是 p 值的单调变换 ════════ */
+function drawOP(){
+  const n=nOf(), a=ALPHA, tc=tcrit, sq=Math.sqrt(n);
+  const to = snap? Math.abs(snap.t) : 0;
+  const pOf = t => 2*(1-tCDF(t,n-1));
+  const opOf= t => powerExact(n, t/sq);              // 把观测效应量当真值代回去
+  const pts = [0.5,1,1.5,2,tc,3,4].filter(x=>x>0).sort((x,y)=>x-y);
+  const row=(t,tag,hl)=>`<tr${hl?' style="background:#fff6e5"':''}>`
+    + `<td class="lb">${tag}</td><td>${t.toFixed(3)}</td>`
+    + `<td><b>${pOf(t).toFixed(4)}</b></td>`
+    + `<td><b style="color:#7a3fa0">${(opOf(t)*100).toFixed(1)}%</b></td></tr>`;
+  $('op').innerHTML =
+    `<tr><th style="text-align:left">　</th><th>|t_obs|</th><th>p 值</th>`
+    + `<th>observed power<br><span style="font-weight:400">（把 d̂ 当真值算出来的）</span></th></tr>`
+    + pts.map(t=>row(t, Math.abs(t-tc)<1e-9?`临界值 t_crit（p 恰好 = α）`:'', Math.abs(t-tc)<1e-9)).join('')
+    + (snap? `<tr style="background:#eef4ee"><td class="lb"><b>这一次实验</b></td>`
+        + `<td>${to.toFixed(3)}</td><td><b>${snap.p.toFixed(4)}</b></td>`
+        + `<td><b style="color:#7a3fa0">${(opOf(to)*100).toFixed(1)}%</b></td></tr>` : '');
+  const eff=effOf(), truePw = Math.abs(eff)>1e-9?powerExact(n,eff):a;
+  $('opNote').innerHTML =
+    `<b>怎么读</b>：p 越小 observed power 越大，<b>严格一一对应</b> —— 它没带来任何 p 值之外的信息。`
+    + `最能说明问题的是黄色那行：<b>只要 p 恰好等于 α，observed power 必然 ≈ ${(opOf(tc)*100).toFixed(0)}%</b>，`
+    + `跟你实验做得好不好完全无关。所以"我不显著，是因为功效低"若用 observed power 来论证，是循环论证。`
+    + `<br><b>对照</b>：这一次的 observed power = <b style="color:#7a3fa0">${snap?(opOf(to)*100).toFixed(1):'—'}%</b>，`
+    + `而<b>真实功效</b>（上帝视角，按真实效应 ${eff.toFixed(2)}σ 算）= <b style="color:#27713d">${(truePw*100).toFixed(1)}%</b>。`
+    + `连按几次③里的「<b>1</b>」—— observed power 会跟着 p 值乱跳，真实功效一动不动。`
+    + `<br><b>该怎么办</b>：不显著时报<b>置信区间</b>，它直接告诉你这次排除掉了多大的效应`
+    + (snap? `（本次 CI = [${(snap.mean-tcrit*snap.sd/sq).toFixed(3)}, ${(snap.mean+tcrit*snap.sd/sq).toFixed(3)}] σ）`:'')
+    + `；设计阶段则把 d 声明成 <b>MDE</b>（"小于这个我就不在乎"），把猜测变成决策。`;
+}
+
+/* ════════ 主循环：两条实验流 ════════ */
+const MAIN={ get n(){return nB;}, set n(v){nB=v;},
+             get TP(){return TP;}, set TP(v){TP=v;}, get FN(){return FN;}, set FN(v){FN=v;},
+             get FP(){return FP;}, set FP(v){FP=v;}, get TN(){return TN;}, set TN(v){TN=v;},
+             get TS(){return typeS;}, set TS(v){typeS=v;} };
+function oneMixed(n,eff,pi,A){                        // eff = 真实效应；跑一次"混合 H₀真/H₀假"的实验
+  const m0=mu0Of(), hasEff = Math.abs(eff)>1e-9 && rng()<pi;
+  const m = hasEff ? m0+eff : m0;                     // H₀ 真 ⟺ 真实均值恰好就是 μ₀
+  let u=0,u2=0; for(let i=0;i<n;i++){ const v=smp(rng,m); u+=v; u2+=v*v; }
+  const mean=u/n, sd=Math.sqrt(Math.max((u2-n*mean*mean)/(n-1),0)), dv=mean-m0;
+  const rj=tP(dv,sd,n)<ALPHA;
+  A.n++;
+  if(hasEff){ if(rj){ A.TP++; if(dv*eff<0) A.TS++; } else A.FN++; }
+  else { if(rj) A.FP++; else A.TN++; }
+}
+
+/* ════════ 扫描: 横轴 n 或 d, 五个指标的理论曲线 + 实测点 ════════ */
+const SW_N=[5,8,10,15,20,30,50,100,200,500];
+const SW_D=[0,0.1,0.2,0.3,0.4,0.5,0.7,1.0,1.5,2.0];
+const SW_B=[0.50,0.40,0.30,0.25,0.20,0.15,0.10,0.05,0.02,0.01];
+let swMode='n', SW_M=8000, swData=[], swIdx=-1, swRemain=0;
+function theoryAt(n,d,pi){
+  const tc=tcOf(n), dl=Math.abs(d)*Math.sqrt(n);
+  const t=nctTails(tc,n-1,dl,500);
+  const pw=t.R+t.Lf, bt=1-pw, a=ALPHA;
+  /* d=0 时"H₀ 假的那批"效应也是 0, 本质上仍是 H₀ 真 ——
+     于是每个拒绝都是误报(FDR=1), 不存在漏报(FOR=0), Type S 无定义。 */
+  if(Math.abs(d)<1e-9) return { pw:a, a, ts:0, fdr:1, fo:0, degenerate:true };   // ts 取 0 只为让扫描图能画线
+  return { pw, a, ts: pw>1e-12?t.Lf/pw:0, degenerate:false,
+    fdr:(a*(1-pi)+pw*pi)>0 ? a*(1-pi)/(a*(1-pi)+pw*pi) : 0,
+    fo :(bt*pi+(1-a)*(1-pi))>0 ? bt*pi/(bt*pi+(1-a)*(1-pi)) : 0 };
+}
+function swBuild(){
+  const pi=priOf(), xs = swMode==='n'?SW_N:(swMode==='d'?SW_D:SW_B);
+  swData = xs.map(x=>{
+    let n, d, claim=null;
+    if(swMode==='n'){ n=x; d=effOf(); }
+    else if(swMode==='d'){ n=nOf(); d=x; }
+    else {
+      /* 扫 β：把 x 当成"你想要的 β"，按设计用 d 反解所需 n，
+         再看在那个 n 上、对着真实效应，各项指标实际是多少。 */
+      const need=minN(dzOf(),1-x);
+      n = need==null ? 1000 : Math.min(1000,need);
+      d = effOf(); claim = 1-x;          // 你声称能拿到的功效
+    }
+    return { x, n, d, claim, th:theoryAt(n,d,pi), m:{n:0,TP:0,FN:0,FP:0,TN:0,TS:0} };
+  });
+  swIdx=-1; swRemain=0; dirty=true;
+}
+function swStart(){ swBuild(); swIdx=0; swRemain=SW_M; }
+
+function frame(){
+  const n=nOf(), eff=effOf(), pi=priOf();
+  if(pop && remain>0){
+    const B=Math.min(remain, Math.max(300, Math.floor(60000/n)));   // 分块跑, 不卡界面
+    const mu=muOf(), m0=mu0Of();
+    for(let b=0;b<B;b++){
+      let s=0,s2=0; for(let i=0;i<n;i++){ const v=smp(rng,mu); s+=v; s2+=v*v; }
+      let mean=s/n, sd=Math.sqrt(Math.max((s2-n*mean*mean)/(n-1),0));
+      const p=tP(mean-m0,sd,n); nA++;
+      pHist[Math.min(PB-1,Math.floor(p*PB))]++; cHist[Math.min(CB-1,Math.floor(p*CB))]++;
+      if(p<ALPHA) rej++;
+      const half=tcrit*sd/Math.sqrt(n), ok=(mean-half<=mu && mu<=mean+half);   // CI 要盖住真实均值
+      if(ok) cover++;
+      if(ciList.length>=120) ciList.shift();
+      ciList.push([mean-half,mean+half,ok]);
+
+      oneMixed(n,eff,pi,MAIN);
+    }
+    remain-=B; dirty=true;
+  }
+  if(pop && swIdx>=0 && swIdx<swData.length){        // 扫描: 一个点一个点地跑
+    const S=swData[swIdx];
+    const B=Math.min(swRemain, Math.max(300, Math.floor(50000/S.n)));
+    for(let b=0;b<B;b++) oneMixed(S.n,S.d,pi,S.m);
+    swRemain-=B;
+    if(swRemain<=0){ swIdx++; swRemain = swIdx<swData.length?SW_M:0; }
+    dirty=true;
+  }
+  if(dirty){ drawPop(); drawMain(); drawPHist(); drawCI(); drawSweep(); drawStat(); drawChk(); drawOP(); dirty=false; }
   requestAnimationFrame(frame);
 }
-function draw(n, mu0) {
-  // 总体
-  gD.fillStyle = '#fff'; gD.fillRect(0, 0, dcv.width, dcv.height);
-  const DW = dcv.width, DH = dcv.height;
-  if (useCauchy) {
-    gD.strokeStyle = '#1f3a6e'; gD.lineWidth = 2; gD.beginPath();
-    for (let px = 0; px <= DW; px++) {
-      const x = px / DW, d = 0.06 / (Math.PI * (0.0036 + (x - 0.5) ** 2));
-      const y = DH - d / (1 / (Math.PI * 0.06)) * (DH - 20) - 2;
-      px ? gD.lineTo(px, y) : gD.moveTo(px, y);
-    }
-    gD.stroke();
-    gD.fillStyle = '#888'; gD.font = '12px Menlo';
-    gD.fillText('柯西(中心 0.5, 尾巴伸到画布外±∞): 均值不存在 —— t 检验连"真值"都没有', 12, 16);
-  } else {
-    gD.fillStyle = 'rgba(31,58,110,0.25)'; gD.strokeStyle = '#1f3a6e'; gD.lineWidth = 1.5;
-    gD.beginPath(); gD.moveTo(0, DH);
-    for (let i = 0; i < K; i++) gD.lineTo((i + 0.5) / K * DW, DH - fvals[i] * (DH - 12));
-    gD.lineTo(DW, DH); gD.closePath(); gD.fill(); gD.stroke();
-  }
-  if (pop) {
-    if (isFinite(pop.mu)) {
-      gD.strokeStyle = '#1f3a6e'; gD.lineWidth = 2;
-      gD.beginPath(); gD.moveTo(pop.mu * DW, 0); gD.lineTo(pop.mu * DW, DH); gD.stroke();
-    }
-    gD.strokeStyle = '#27713d'; gD.lineWidth = 2;
-    gD.beginPath(); gD.moveTo(pop.median * DW, 0); gD.lineTo(pop.median * DW, DH); gD.stroke();
-    gD.strokeStyle = '#c0392b'; gD.setLineDash([5, 4]); gD.lineWidth = 2;
-    gD.beginPath(); gD.moveTo(mu0 * DW, 0); gD.lineTo(mu0 * DW, DH); gD.stroke();
-    gD.setLineDash([]);
-  }
-  // p 值直方图
-  gP.fillStyle = '#fff'; gP.fillRect(0, 0, pcv.width, pcv.height);
-  let mx = 0;
-  for (let i = 0; i < PB; i++) mx = Math.max(mx, pHist[i]);
-  const uni = nSim / PB;
-  mx = Math.max(mx, uni) || 1;
-  gP.fillStyle = 'rgba(31,58,110,0.55)';
-  for (let i = 0; i < PB; i++) {
-    const h = pHist[i] / mx * (pcv.height - 40);
-    gP.fillRect(i / PB * pcv.width + 1, pcv.height - 20 - h, pcv.width / PB - 2, h);
-  }
-  gP.strokeStyle = '#999'; gP.setLineDash([5, 4]);
-  const uy = pcv.height - 20 - uni / mx * (pcv.height - 40);
-  gP.beginPath(); gP.moveTo(0, uy); gP.lineTo(pcv.width, uy); gP.stroke(); gP.setLineDash([]);
-  // α 线
-  gP.strokeStyle = '#c0392b';
-  gP.beginPath(); gP.moveTo(ALPHA * pcv.width, pcv.height - 20); gP.lineTo(ALPHA * pcv.width, 8); gP.stroke();
-  gP.fillStyle = '#c0392b'; gP.font = '11px Menlo';
-  gP.fillText('α=' + ALPHA, ALPHA * pcv.width + 4, 16);
-  gP.fillStyle = '#888';
-  gP.fillText('0', 4, pcv.height - 6); gP.fillText('p=1', pcv.width - 30, pcv.height - 6);
-  // CI 带
-  gC.fillStyle = '#fff'; gC.fillRect(0, 0, ccv.width, ccv.height);
-  if (ciList.length) {
-    const truth = pop && isFinite(pop.mu) ? pop.mu : 0.5;
-    let lo = truth, hi = truth;
-    for (const [a, b] of ciList) { lo = Math.min(lo, a); hi = Math.max(hi, b); }
-    const pad = (hi - lo) * 0.08 + 1e-9;
-    const Y = v => ccv.height - 14 - (v - (lo - pad)) / (hi - lo + 2 * pad) * (ccv.height - 28);
-    gC.strokeStyle = '#111'; gC.lineWidth = 1;
-    gC.beginPath(); gC.moveTo(0, Y(truth)); gC.lineTo(ccv.width, Y(truth)); gC.stroke();
-    ciList.forEach(([a, b, ok], i) => {
-      const x = (i + 0.5) / 120 * ccv.width;
-      gC.strokeStyle = ok ? 'rgba(39,113,61,0.7)' : '#c0392b';
-      gC.lineWidth = ok ? 1.6 : 2.4;
-      gC.beginPath(); gC.moveTo(x, Y(a)); gC.lineTo(x, Y(b)); gC.stroke();
-    });
-  }
-  // 读数
-  if (!pop) { $('stat1').textContent = '画布是空的, 先画个总体'; $('stat2').textContent = ''; return; }
-  const muTxt = isFinite(pop.mu) ? pop.mu.toFixed(4) : '不存在(柯西)';
-  const h0t = isFinite(pop.mu) ? (Math.abs(mu0 - pop.mu) < 0.002 ? '真' : '假') : '—';
-  const h0s = Math.abs(mu0 - pop.median) < 0.002 ? '真' : '假';
-  $('stat1').textContent = `总体真值: μ = ${muTxt}, 中位数 = ${pop.median.toFixed(4)}　H₀(μ=${mu0.toFixed(3)}): 对 t 检验为${h0t}, 对符号检验为${h0s}`;
-  const fr = v => nSim ? (v / nSim).toFixed(4) : '—';
-  $('stat2').textContent = `已做 ${nSim.toLocaleString()} 次实验(每次抽 ${n} 个)`
-    + `　t 拒绝率 = ${fr(rejT)}${h0t === '真' ? ` (承诺 α=${ALPHA})` : h0t === '假' ? ' (= 功效)' : ''}`
-    + `　符号拒绝率 = ${fr(rejS)}${h0s === '真' ? ` (承诺 ≤ ${ALPHA}, 离散偏保守)` : ' (= 功效)'}`
-    + `　CI 覆盖率 = ${fr(cover)} (承诺 ${(1 - ALPHA).toFixed(2)}${isFinite(pop.mu) ? '' : ', 参照中心 0.5'})`;
+
+/* ════════ 事件 ════════ */
+document.body.addEventListener('click',e=>{
+  const d=e.target.dataset||{};
+  if(d.p){ document.querySelectorAll('button[data-p]').forEach(b=>b.classList.toggle('on',b===e.target));
+    isCauchy = d.p==='cauchy'; POPNAME=PNAME[d.p];
+    if(!isCauchy) for(let i=0;i<K;i++) fvals[i]=PRESETS[d.p](i);
+    buildPop(); resetAcc(); }
+  if(d.r){ RUNS=+d.r; document.querySelectorAll('button[data-r]').forEach(b=>b.classList.toggle('on',b===e.target));
+    clearAcc(); reroll(); remain=RUNS; }        // 点一下 = 清空并按这个次数重跑一次
+  if(d.sw){ swMode=d.sw; document.querySelectorAll('button[data-sw]').forEach(b=>b.classList.toggle('on',b===e.target));
+    swBuild(); }
+  if(d.m){ SW_M=+d.m; document.querySelectorAll('button[data-m]').forEach(b=>b.classList.toggle('on',b===e.target));
+    markDirty(); }
+});
+/* 给定 α、β 和设计用 d，把 n 设成达标所需的最小可选值 */
+/* ── d、n、β 被一条方程绑住（给定 α），只有两个自由度。
+      勾「自动算出」的那个是因变量，其余三个都固定。 ── */
+let FIXED='n';                       // 被钉死的那一个；另外两个互变
+const setBeta=()=>{ const b=1-powerExact(nOf(),dzOf()); TARGET=1-b;
+  $('bt').value=Math.round(Math.min(0.99,Math.max(0.001,b))*1000); };
+const setN=()=>{ const need=minN(dzOf(),TARGET);
+  if(need!=null) $('ns').value=Math.min(1000,Math.max(2,need)); };
+const setD=()=>{ $('dz').value=Math.min(250,Math.max(0,Math.ceil(minD(nOf(),TARGET)*100))); };
+/* 给定 α，β、n、d 被一条方程锁住（2 自由度）。勾「固定」的那个钉死，
+   剩下两个互变：拖其中一个，另一个被方程唯一确定。
+   若去拖被钉死的那个，则按 β→d→n 的次序从另两个里挑一个来承接。 */
+/* α 永远是你定死的，不参与反解。β、n、d 三个里恒定 2 个固定、1 个自动算出。 */
+const SOLVE_ORDER=['b','d','n'];
+function solveFor(dragged){
+  const others = SOLVE_ORDER.filter(k=>k!==FIXED);
+  const dep = (dragged===FIXED) ? others[0] : others.find(k=>k!==dragged);
+  if(dep==='b') setBeta(); else if(dep==='d') setD(); else if(dep==='n') setN();
 }
-PRESETS.skew();
-rebuildPop();
-frame();
+const LBOF={b:'lbB',n:'lbN',d:'lbD'};
+function applyFix(){
+  document.querySelectorAll('.fxc').forEach(cb=>{
+    const isFix = cb.dataset.k===FIXED;
+    cb.checked = isFix;                          // 只勾一个 = 它被钉死
+    cb.closest('label').classList.toggle('on', isFix);
+    $(LBOF[cb.dataset.k]).classList.toggle('auto', !isFix);   // 另两个互变
+  });
+  solveFor('');                                  // 换钉死对象后把三者拉回自洽
+  resetAcc();
+}
+/* 拖 α 时不看单选：一律当作 n 和 β 已经定死，由 d 承接 */
+$('al').addEventListener('input',()=>{ ALPHA=+$('al').value/1000; tcCache.clear();
+  setD(); resetAcc(); });
+$('bt').addEventListener('input',()=>{ TARGET=1-+$('bt').value/1000; solveFor('b'); resetAcc(); });
+/* 四个量里恒定 3 个被固定、1 个自动算出。
+   取消某个的「固定」→ 它成为自动算出的那个；勾上自动算出的那个 → 因变量顺延给下一个。 */
+/* 三个里恰好钉死一个；取消当前那个的勾会弹回（必须有一个被钉死） */
+document.querySelectorAll('.fxc').forEach(cb=>cb.addEventListener('change',()=>{
+  if(cb.checked) FIXED=cb.dataset.k;
+  applyFix();
+}));
+$('dz').addEventListener('input',()=>{ solveFor('d'); resetAcc(); });
+$('ns').addEventListener('input',()=>{ solveFor('n'); resetAcc(); });
+$('eff').addEventListener('input',resetAcc);
+$('mu0').addEventListener('input',resetAcc);
+$('pri').addEventListener('input',()=>{ TP=FN=FP=TN=typeS=nB=0; remain=RUNS; swBuild(); });
+$('swrun').addEventListener('click',swStart);
+/* 图例点击：隐藏/显示对应曲线 */
+const legendHit=e=>{ const r=swv.getBoundingClientRect();
+  const x=(e.clientX-r.left)*swv.width/r.width, y=(e.clientY-r.top)*swv.height/r.height;
+  return legendBox.find(b=>x>=b.x0&&x<=b.x1&&y>=b.y0&&y<=b.y1); };
+swv.addEventListener('click',e=>{ const h=legendHit(e);
+  if(h){ SER[h.i].on=!SER[h.i].on; markDirty(); } });
+swv.addEventListener('mousemove',e=>{ swv.style.cursor = legendHit(e)?'pointer':'default'; });
+
+for(let i=0;i<K;i++) fvals[i]=PRESETS.normal(i);
+buildPop(); applyFix(); frame();
 </script>
 <script>
-(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
-  const b = document.createElement('button');
-  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+(function(){ const b=document.createElement('button');
+  b.style.cssText='position:fixed;top:6px;right:6px;z-index:999;opacity:.92;';
   document.body.appendChild(b);
-  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
-  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
-  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
-  sync();
-})();
+  const s=()=>b.textContent=document.body.classList.contains('ctl-collapsed')?'⚙ 展开':'⚙ 收起';
+  b.addEventListener('click',()=>{document.body.classList.toggle('ctl-collapsed');s();});
+  if(innerHeight>innerWidth) document.body.classList.add('ctl-collapsed'); s(); })();
 </script>
 </body>
 </html>
