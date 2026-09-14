@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>中心极限定理 —— 样本均值为什么总会变成正态</title>
+<style>
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+         margin:14px 16px; color:#222; }
+  h1 { font-size:17px; margin:0 0 8px; }
+  canvas { border:1px solid #ddd; display:block; background:#fff; }
+  button { font-size:12.5px; padding:2px 9px; margin:0; border:1px solid #bbb;
+           background:#fafafa; border-radius:4px; cursor:pointer; }
+  button.on { background:#1a63d8; border-color:#1a63d8; color:#fff; font-weight:600; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12.5px; margin:5px 0; }
+  .cap { font-size:11.5px; color:#555; margin:3px 0 7px; }
+  .hint { color:#777; font-size:11px; }
+  .mono { font-family:Menlo,Consolas,monospace; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  .grid { display:grid; gap:5px 10px; align-items:center;
+          grid-template-columns:104px 250px 96px minmax(0,1fr); }
+  .grid input[type=range] { width:100%; margin:0; }
+  .st { font-family:Menlo,Consolas,monospace; font-size:12.5px; background:#0f1522; color:#dfe6f3;
+        padding:6px 10px; border-radius:4px; margin:5px 0; line-height:1.95; }
+  .st b { color:#7fd3c4; } .st .r { color:#ff8f7a; } .st .g { color:#8fe09a; } .st .y { color:#ffd27f; }
+  table.t2 { border-collapse:collapse; font-size:12px; }
+  table.t2 td, table.t2 th { border:1px solid #ccc; padding:3px 8px; text-align:right;
+    font-family:Menlo,Consolas,monospace; white-space:nowrap; }
+  table.t2 th { background:#eef1f6; text-align:center; font-family:inherit; }
+  table.t2 td.lb { text-align:left; font-family:inherit; background:#f7f8fa; }
+  .note { background:#f6f7fa; border-left:3px solid #9aa6bd; padding:6px 10px;
+          font-size:11.5px; color:#444; line-height:1.7; max-width:1090px; margin:8px 0; }
+</style>
+</head>
+<body>
+<h1>中心极限定理 —— <b>样本均值为什么总会变成正态</b>
+  <span style="font-size:12.5px;font-weight:400;color:#555">
+  从任意总体（可手绘）反复抽 n 个求平均 → 看平均值自己的分布</span></h1>
+
+<div class="bar">
+  <b>① 总体</b><span class="hint">想画什么形状都行</span>
+  <button data-p="normal">正态</button>
+  <button data-p="uniform" class="on">均匀</button>
+  <button data-p="exp">指数(偏态)</button>
+  <button data-p="lognorm">对数正态(强偏态)</button>
+  <button data-p="bimodal">双峰</button>
+  <button data-p="bern">伯努利 p=0.15(离散)</button>
+  <button data-p="dice">骰子(离散均匀)</button>
+  <button data-p="cauchy">柯西(反例)</button>
+</div>
+<div class="bar">
+  <div class="grid">
+    <span class="mono">样本量 n</span>
+    <input type="range" id="ns" min="1" max="500" step="1" value="1">
+    <span class="mono" id="nsV"></span>
+    <span class="hint">每次抽 n 个求平均；n=1 就是总体本身</span>
+  </div>
+</div>
+<div class="bar">
+  <b>② 抽多少次</b><span class="hint">点哪个就按哪个次数重跑</span>
+  <button data-r="100">100</button>
+  <button data-r="1000">1千</button>
+  <button data-r="10000">1万</button>
+  <button data-r="50000" class="on">5万</button>
+  <button data-r="200000">20万</button>
+  <span class="mono" id="prog"></span>
+</div>
+
+<canvas id="pop" width="1100" height="130"></canvas>
+<div class="cap"><b>总体分布</b>（<b>可拖动手绘</b>，离散总体画成竖条）　
+  <span style="color:#c0392b">▎μ</span>　<span style="color:#888">┆ μ±σ</span></div>
+
+<canvas id="main" width="1100" height="330"></canvas>
+<div class="cap"><b>样本均值的分布</b>，横轴已标准化成 <b>z = (x̄ − μ)/(σ/√n)</b>　
+  <span style="color:#1f3a6e">蓝柱 = 实测</span>　<span style="color:#c0392b">红线 = 标准正态</span>
+  　<span class="hint">标准化之后才能和同一条正态曲线比；不标准化的话它只是越来越窄</span></div>
+
+<div class="st" id="st"></div>
+
+<div class="row">
+  <div>
+    <div class="cap" style="margin:0 0 4px"><b>收敛的量化检查</b>　实测 vs 理论</div>
+    <table class="t2" id="chk"></table>
+  </div>
+  <div style="flex:1 1 0;min-width:360px">
+    <div class="bar" style="margin:0 0 4px">
+      <b>③ 收敛速度</b><span class="hint">KS 距离随 n 怎么降</span>
+      <button id="swrun">▶ 跑扫描</button>
+      <span class="mono" id="swprog"></span>
+    </div>
+    <canvas id="sw" width="620" height="250"></canvas>
+    <div class="cap">横轴 n（对数），纵轴 <b>KS 距离</b>= 实测 CDF 与标准正态 CDF 的最大偏离。
+      <span style="color:#c0392b">红虚线 = 斜率 −1/2 的参考线</span>，贴上去就说明误差按 <b>1/√n</b> 收敛（Berry–Esseen）。<br>
+      <span style="color:#888">灰虚线 = 蒙特卡洛噪声地板</span>：每点只抽有限次，即使总体<b>本来就是</b>正态，
+      KS 也有 ≈0.886/√次数 的随机起伏。<b>蓝线压到灰线附近就别再往下读了</b> —— 那是在测噪声，不是测收敛。</div>
+  </div>
+</div>
+
+<div class="note">
+  <b>这个 demo 不作弊</b>：正态曲线不是抽出来的，是拿公式画的；蓝柱全部来自对<b>你选的那个总体</b>反复抽样求平均。
+  程序里没有调用任何正态随机数生成器 —— 正态是<b>涌现</b>出来的。<br>
+  <b>CLT 说的是什么</b>：只要总体的方差有限，样本均值 x̄ 的分布在标准化后 → 标准正态，<b>与总体长什么样无关</b>。
+  收敛快慢由总体的<b>偏度</b>决定：skew(x̄) = γ₁/√n，超额峰度 = γ₂/n。所以强偏态总体需要更大的 n。<br>
+  <b>柯西是反例</b>：它的均值和方差都不存在，CLT 前提不满足。此时 x̄ 的分布<b>和单个观测完全一样</b>，
+  n 加到 500 也纹丝不动 —— 平均不再能降噪。<br>
+  <b>离散总体（伯努利、骰子）不是反例</b>，它照样服从 CLT。只是 n 个整数之和仍是整数，
+  标准化后 z 只能落在间隔 Δz=1/(σ√n) 的<b>格点</b>上，经验 CDF 是条<b>阶梯</b>，
+  与光滑曲线的最大偏离天然有个下限 Δz·φ(0)/2。所以 <b>KS 看着大，但它测的是"阶梯"不是"形状错"</b> ——
+  证据是 <b>KS·√n 恒为常数</b>（伯努利 p=0.15 实测：n=10/30/100/400 时都是 0.68），
+  而<b>偏度</b>那一行逐个精确匹配 γ₁/√n。教科书给二项做正态近似时要加<b>连续性校正</b>，治的就是这个阶梯。
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const pcv=$('pop'), gP=pcv.getContext('2d');
+const mcv=$('main'), gM=mcv.getContext('2d');
+const scv=$('sw'),  gS=scv.getContext('2d');
+
+/* ── 随机数：只有一个均匀发生器，其它全靠它推出来 ── */
+function mul32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296; }; }
+const rng=mul32(20260914);
+
+const erf=x=>{ const s=x<0?-1:1; x=Math.abs(x);
+  const t=1/(1+0.3275911*x);
+  const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
+  return s*y; };
+const ncdf=x=>0.5*(1+erf(x/Math.SQRT2));
+const npdf=x=>Math.exp(-x*x/2)/Math.sqrt(2*Math.PI);
+
+/* ── 总体：连续的用 K 格密度（可手绘），离散的单列 ── */
+const K=256;
+const PRE={
+  normal:  i=>{const z=(i/K-0.5)*7; return Math.exp(-z*z/2);},
+  uniform: i=>1,                       // 真正的 U[0,1]: σ=1/√12=0.2887, γ₂=−1.2
+  exp:     i=>Math.exp(-(i/K)*6),
+  lognorm: i=>{const x=i/K*4+0.02; const l=Math.log(x)+0.9; return Math.exp(-l*l/0.6)/x;},
+  bimodal: i=>{const a=(i/K-0.26)*11,b=(i/K-0.76)*11; return Math.exp(-a*a/2)+0.8*Math.exp(-b*b/2);},
+};
+const DISC={
+  bern: {name:'伯努利 p=0.15', xs:[0,1], ps:[0.85,0.15]},
+  dice: {name:'骰子', xs:[1,2,3,4,5,6], ps:[1/6,1/6,1/6,1/6,1/6,1/6]},
+};
+let mode='uniform', fv=new Float64Array(K), POP=null;
+
+function momentsOf(xs,ps){
+  let m=0,w=0; for(let i=0;i<xs.length;i++){ w+=ps[i]; m+=ps[i]*xs[i]; } m/=w;
+  let v=0,s3=0,s4=0;
+  for(let i=0;i<xs.length;i++){ const d=xs[i]-m;
+    v+=ps[i]*d*d; s3+=ps[i]*d*d*d; s4+=ps[i]*d*d*d*d; }
+  v/=w; s3/=w; s4/=w; const sd=Math.sqrt(Math.max(v,1e-300));
+  return {mu:m, sd, skew:s3/(sd**3), kurt:s4/(sd**4)-3};
+}
+function buildPop(){
+  if(mode==='cauchy'){
+    POP={ kind:'cauchy', name:'柯西', mu:NaN, sd:NaN, skew:NaN, kurt:NaN,
+          sample:r=>Math.tan(Math.PI*(r()-0.5)) };
+    return;
+  }
+  if(DISC[mode]){
+    const d=DISC[mode], mo=momentsOf(d.xs,d.ps);
+    const cdf=[]; let acc=0; for(const p of d.ps){ acc+=p; cdf.push(acc); }
+    POP={ kind:'disc', name:d.name, xs:d.xs, ps:d.ps, ...mo,
+          sample:r=>{ const u=r(); for(let i=0;i<cdf.length;i++) if(u<=cdf[i]) return d.xs[i];
+                      return d.xs[d.xs.length-1]; } };
+    return;
+  }
+  let w=0; for(let i=0;i<K;i++) w+=fv[i];
+  if(w<=1e-12){ for(let i=0;i<K;i++) fv[i]=PRE.normal(i); return buildPop(); }
+  const xs=[], ps=[];
+  for(let i=0;i<K;i++){ xs.push((i+0.5)/K); ps.push(fv[i]/w); }
+  const mo=momentsOf(xs,ps);
+  const cdf=new Float64Array(K); let acc=0;
+  for(let i=0;i<K;i++){ acc+=ps[i]; cdf[i]=acc; }
+  POP={ kind:'cont', name:NAME[mode]||'手绘', ...mo,
+        sample:r=>{ const u=r(); let lo=0,hi=K-1;
+          while(lo<hi){ const m=(lo+hi)>>1; if(cdf[m]<u) lo=m+1; else hi=m; }
+          return (lo+r())/K; } };
+}
+const NAME={normal:'正态',uniform:'均匀',exp:'指数(偏态)',lognorm:'对数正态(强偏态)',
+            bimodal:'双峰',bern:'伯努利 p=0.15',dice:'骰子',cauchy:'柯西'};
+
+/* ── 累积器 ── */
+const ZLO=-4.5, ZHI=4.5, HB=90, FB=12000;     // 显示分箱 / 细分箱(算 KS)
+const hist=new Float64Array(HB), fine=new Float64Array(FB);
+let nA=0, loOut=0, hiOut=0, s1=0, s2=0, s3=0, s4=0;
+/* 离散总体的和一定落在格点上。按固定宽度分箱会产生梳齿假象，
+   所以直接用「整数和」当索引精确计数。 */
+let lat=null, latMin=0, latDz=1;
+let RUNS=50000, remain=0, dirty=true;
+const markDirty=()=>{dirty=true;};
+function clearAcc(){ hist.fill(0); fine.fill(0); nA=0; loOut=hiOut=0; s1=s2=s3=s4=0; remain=0; dirty=true;
+  if(POP&&POP.kind==='disc'){ const n=nOf(), a=Math.min(...POP.xs), b=Math.max(...POP.xs);
+    latMin=a*n; lat=new Int32Array((b-a)*n+1); latDz=1/(POP.sd*Math.sqrt(n)); }
+  else lat=null; }
+const nOf=()=>+$('ns').value;
+
+function pushZ(z,S){
+  nA++; s1+=z; s2+=z*z; s3+=z*z*z; s4+=z*z*z*z;
+  if(lat!=null && S!==undefined){ lat[S-latMin]++; return; }   // 离散：精确落格点
+  if(z<ZLO){ loOut++; return; } if(z>=ZHI){ hiOut++; return; }
+  const t=(z-ZLO)/(ZHI-ZLO);
+  hist[Math.min(HB-1,Math.floor(t*HB))]++;
+  fine[Math.min(FB-1,Math.floor(t*FB))]++;
+}
+const zOfSum=(S,n)=>(S/n-POP.mu)/(POP.sd/Math.sqrt(n));
+/* 抽 n 个求平均，标准化。柯西没有 μ/σ，直接给 x̄（刻意不除 √n，好看出它不收敛） */
+function oneMean(n,want){
+  let s=0; for(let i=0;i<n;i++) s+=POP.sample(rng);
+  const m=s/n;
+  const z = POP.kind==='cauchy' ? m : (m-POP.mu)/(POP.sd/Math.sqrt(n));
+  return want==='both' ? {z, S:POP.kind==='disc'? Math.round(s):undefined} : z;
+}
+/* KS：实测 CDF 与 Φ 的最大偏离（细分箱近似，误差 ~1e-4） */
+function ksDist(){
+  if(!nA) return NaN;
+  if(lat!=null){ const n=nOf(); let c=0, mx=0;
+    for(let i=0;i<lat.length;i++){ if(!lat[i]) continue;
+      const z=zOfSum(latMin+i,n), F=ncdf(z);
+      mx=Math.max(mx, Math.abs(c/nA-F));          // 跳跃前
+      c+=lat[i];
+      mx=Math.max(mx, Math.abs(c/nA-F)); }        // 跳跃后
+    return mx; }
+  let c=loOut, mx=0;
+  for(let i=0;i<FB;i++){ c+=fine[i];
+    const z=ZLO+(i+1)/FB*(ZHI-ZLO);
+    const d=Math.abs(c/nA-ncdf(z)); if(d>mx) mx=d; }
+  return mx;
+}
+
+/* ── 总体图 ── */
+function drawPop(){
+  const W=pcv.width,H=pcv.height,L=60,R=40,PW=W-L-R;
+  gP.fillStyle='#fff'; gP.fillRect(0,0,W,H);
+  if(POP.kind==='cauchy'){
+    const LO=-6,HI=6, X=v=>L+(v-LO)/(HI-LO)*PW;
+    gP.strokeStyle='#1f3a6e'; gP.lineWidth=1.8; gP.beginPath();
+    for(let px=0;px<=PW;px++){ const v=LO+(HI-LO)*px/PW, d=1/(Math.PI*(1+v*v));
+      const y=H-14-d*3.2*(H-30); px?gP.lineTo(L+px,y):gP.moveTo(L+px,y); }
+    gP.stroke();
+    gP.fillStyle='#a03030'; gP.font='11.5px Menlo';
+    gP.fillText('柯西：均值与方差都不存在 → CLT 前提不成立', L+8, 18);
+    axis(gP,L,PW,H,LO,HI); return;
+  }
+  if(POP.kind==='disc'){
+    const lo=Math.min(...POP.xs)-0.8, hi=Math.max(...POP.xs)+0.8, X=v=>L+(v-lo)/(hi-lo)*PW;
+    const mx=Math.max(...POP.ps);
+    POP.xs.forEach((x,i)=>{ const h=POP.ps[i]/mx*(H-34);
+      gP.fillStyle='rgba(31,58,110,.35)'; gP.strokeStyle='#1f3a6e'; gP.lineWidth=1.4;
+      gP.fillRect(X(x)-9,H-14-h,18,h); gP.strokeRect(X(x)-9,H-14-h,18,h); });
+    marks(X,H); axis(gP,L,PW,H,lo,hi); return;
+  }
+  const lo=0, hi=1, X=v=>L+(v-lo)/(hi-lo)*PW;
+  let mx=0; for(let i=0;i<K;i++) mx=Math.max(mx,fv[i]); mx=mx||1;
+  gP.fillStyle='rgba(31,58,110,.22)'; gP.strokeStyle='#1f3a6e'; gP.lineWidth=1.5;
+  gP.beginPath(); gP.moveTo(X(0),H-14);
+  for(let i=0;i<K;i++) gP.lineTo(X((i+0.5)/K), H-14-fv[i]/mx*(H-34));
+  gP.lineTo(X(1),H-14); gP.closePath(); gP.fill(); gP.stroke();
+  marks(X,H); axis(gP,L,PW,H,lo,hi);
+  gP.fillStyle='#888'; gP.font='10.5px Arial'; gP.textAlign='right';
+  gP.fillText('可拖动手绘', pcv.width-44, 16); gP.textAlign='left';
+}
+function marks(X,H){
+  gP.strokeStyle='#c0392b'; gP.lineWidth=2;
+  gP.beginPath(); gP.moveTo(X(POP.mu),8); gP.lineTo(X(POP.mu),H-14); gP.stroke();
+  gP.strokeStyle='#999'; gP.lineWidth=1; gP.setLineDash([4,3]);
+  for(const s of [-1,1]){ gP.beginPath(); gP.moveTo(X(POP.mu+s*POP.sd),12);
+    gP.lineTo(X(POP.mu+s*POP.sd),H-14); gP.stroke(); }
+  gP.setLineDash([]);
+}
+function axis(g,L,PW,H,lo,hi){
+  g.strokeStyle='#bbb'; g.lineWidth=1; const y=H-14+0.5;
+  g.beginPath(); g.moveTo(L,y); g.lineTo(L+PW,y); g.stroke();
+  g.fillStyle='#777'; g.font='10px Menlo'; g.textAlign='center';
+  for(let k=0;k<=5;k++){ const v=lo+(hi-lo)*k/5, x=Math.round(L+PW*k/5)+0.5;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x,y+4); g.stroke();
+    g.fillText(v.toFixed(2),x,y+14); }
+  g.textAlign='left';
+}
+
+/* ── 主图：标准化样本均值 + 标准正态 ── */
+function drawMain(){
+  const W=mcv.width,H=mcv.height,L=60,R=40,T=16,B=38,PW=W-L-R,PH=H-T-B, y0=T+PH;
+  gM.fillStyle='#fff'; gM.fillRect(0,0,W,H);
+  const cauchy=POP.kind==='cauchy';
+  const lo=cauchy?-6:ZLO, hi=cauchy?6:ZHI;
+  const X=v=>L+(Math.max(lo,Math.min(hi,v))-lo)/(hi-lo)*PW;
+  /* 密度化：柱面积 = 频率，好与 pdf 同尺度 */
+  const bw=(ZHI-ZLO)/HB;
+  let peak=npdf(0);
+  if(lat!=null && nA){ const nn=nOf(), m=Math.max(1, Math.ceil(((ZHI-ZLO)/100)/latDz)), w=m*latDz;
+    for(let i0=0;i0<lat.length;i0+=m){ let c=0;
+      for(let j=i0;j<Math.min(i0+m,lat.length);j++) c+=lat[j];
+      peak=Math.max(peak, c/nA/w); } }
+  else for(let i=0;i<HB;i++) peak=Math.max(peak, nA? hist[i]/nA/bw : 0);
+  const Y=d=>y0-d/(peak*1.08)*PH;
+  gM.strokeStyle='#eee'; gM.lineWidth=1;
+  for(let k=1;k<=4;k++){ const y=y0-PH*k/4; gM.beginPath(); gM.moveTo(L,y); gM.lineTo(L+PW,y); gM.stroke(); }
+  if(nA && lat!=null){
+    /* 每根柱恰好盖 m 个格点 → 宽度是 Δz 的整数倍，不会再有梳齿 */
+    const nn=nOf(), m=Math.max(1, Math.ceil(((ZHI-ZLO)/100)/latDz));
+    const w=m*latDz;
+    gM.fillStyle='rgba(31,58,110,.55)';
+    for(let i0=0;i0<lat.length;i0+=m){
+      let c=0; for(let j=i0;j<Math.min(i0+m,lat.length);j++) c+=lat[j];
+      if(!c) continue;
+      const zc=zOfSum(latMin+i0+(m-1)/2, nn), d=c/nA/w;
+      const xa=X(zc-w/2), xb=X(zc+w/2);
+      if(xb<=L||xa>=L+PW) continue;
+      gM.fillRect(xa+0.5, Y(d), Math.max(1,xb-xa-1), y0-Y(d));
+    }
+  } else if(nA){ gM.fillStyle='rgba(31,58,110,.55)';
+    for(let i=0;i<HB;i++){ const d=hist[i]/nA/bw; if(d<=0) continue;
+      const x0=X(ZLO+i*bw), x1=X(ZLO+(i+1)*bw);
+      gM.fillRect(x0+0.5, Y(d), Math.max(1,x1-x0-1), y0-Y(d)); } }
+  gM.strokeStyle='#c0392b'; gM.lineWidth=2; gM.beginPath();
+  for(let px=0;px<=PW;px++){ const v=lo+(hi-lo)*px/PW, y=Y(npdf(v));
+    px?gM.lineTo(L+px,y):gM.moveTo(L+px,y); }
+  gM.stroke();
+  gM.strokeStyle='#bbb'; gM.lineWidth=1;
+  gM.beginPath(); gM.moveTo(L,y0+0.5); gM.lineTo(L+PW,y0+0.5); gM.stroke();
+  gM.fillStyle='#777'; gM.font='10px Menlo'; gM.textAlign='center';
+  for(let v=Math.ceil(lo);v<=hi;v++){ gM.beginPath(); gM.moveTo(X(v),y0); gM.lineTo(X(v),y0+4); gM.stroke();
+    gM.fillText(String(v),X(v),y0+15); }
+  gM.fillStyle='#555'; gM.font='11px Arial';
+  gM.fillText(cauchy? 'x̄ 本身（柯西没有 σ，无法标准化）' : 'z = (x̄ − μ)/(σ/√n)', L+PW/2, y0+30);
+  gM.textAlign='left'; gM.font='12px Arial'; gM.fillStyle='#c0392b';
+  gM.fillText('红线 = 标准正态 N(0,1)', L+8, T+14);
+  if(loOut+hiOut>0){ gM.fillStyle='#999'; gM.font='10.5px Arial';
+    gM.fillText(`超出画面 ${(100*(loOut+hiOut)/Math.max(nA,1)).toFixed(2)}%`, L+8, T+30); }
+  if(lat!=null){ const m=Math.max(1, Math.ceil(((ZHI-ZLO)/100)/latDz));
+    gM.fillStyle='#a86b1a'; gM.font='10.5px Arial';
+    gM.fillText(`离散总体：柱宽已对齐格点（Δz=${latDz.toFixed(4)}，每柱 ${m} 个格点），避免梳齿假象`, L+8, T+30); }
+}
+
+/* ── 读数 + 检查表 ── */
+function drawStat(){
+  const n=nOf(); $('nsV').textContent='n='+n;
+  $('prog').textContent = remain>0 ? `跑到 ${nA.toLocaleString()}，还剩 ${remain.toLocaleString()}`
+    : (nA? `已跑完 ${nA.toLocaleString()} 次` : '（未开始）');
+  const cauchy=POP.kind==='cauchy';
+  const m=nA?s1/nA:0, v=nA?s2/nA-m*m:0, sd=Math.sqrt(Math.max(v,0));
+  const g1=nA&&sd>0? (s3/nA-3*m*v-m*m*m)/(sd**3) : 0;
+  const mu4=nA? s4/nA-4*m*(s3/nA)+6*m*m*(s2/nA)-3*m*m*m*m : 0;
+  const g2=sd>0? mu4/(sd**4)-3 : 0;
+  $('st').innerHTML =
+    `总体 <b>${POP.name}</b>　` + (cauchy
+      ? `<span class="r">μ、σ 都不存在 → CLT 不适用</span>`
+      : `μ=<b>${POP.mu.toFixed(4)}</b>　σ=<b>${POP.sd.toFixed(4)}</b>　偏度 γ₁=<b>${POP.skew.toFixed(3)}</b>　超额峰度 γ₂=<b>${POP.kurt.toFixed(3)}</b>`)
+    + `<br>样本量 <b>${n}</b>　` + (cauchy? '' :
+        `x̄ 的理论标准差 σ/√n = <b>${(POP.sd/Math.sqrt(n)).toFixed(5)}</b>　`
+      + `理论偏度 γ₁/√n = <b>${(POP.skew/Math.sqrt(n)).toFixed(4)}</b>　`
+      + `理论超额峰度 γ₂/n = <b>${(POP.kurt/n).toFixed(4)}</b>`)
+    + `<br>已抽 <b>${nA.toLocaleString()}</b> 次${remain>0?` <span class="y">（还剩 ${remain.toLocaleString()}）</span>`:''}`
+    + `　KS 距离 = <b class="${ksDist()<0.01?'g':'y'}">${nA?ksDist().toFixed(4):'—'}</b>`;
+
+  const row=(k,meas,th,tol,note)=>{
+    const ok=th==null? null : Math.abs(meas-th)<=tol;
+    return `<tr><td class="lb">${k}</td><td><b>${meas.toFixed(4)}</b></td>`
+      + `<td>${th==null?'—':th.toFixed(4)}</td>`
+      + `<td>${ok==null?'<span style="opacity:.5">不适用</span>'
+          :`<span style="color:${ok?'#27713d':'#c0392b'}">${(meas-th>=0?'+':'')}${(meas-th).toFixed(4)} ${ok?'✓':'✗'}</span>`}</td>`
+      + `<td class="lb" style="font-size:11px;opacity:.8">${note}</td></tr>`; };
+  const tol=nA? Math.max(0.012, 4/Math.sqrt(nA)) : 1;
+  $('chk').innerHTML =
+    `<tr><th style="text-align:left">z = (x̄−μ)/(σ/√n) 的</th><th>实测</th><th>理论</th><th>差</th>`
+    + `<th style="text-align:left">理论从哪来</th></tr>`
+    + row('均值', m, cauchy?null:0, tol, 'E[x̄]=μ，标准化后为 0')
+    + row('标准差', sd, cauchy?null:1, tol, 'sd(x̄)=σ/√n，标准化后为 1')
+    + row('偏度', g1, cauchy?null:POP.skew/Math.sqrt(n), Math.max(0.03,9/Math.sqrt(Math.max(nA,1))), 'γ₁/√n —— 决定收敛快慢')
+    + row('超额峰度', g2, cauchy?null:POP.kurt/n, Math.max(0.08,40/Math.sqrt(Math.max(nA,1))), 'γ₂/n')
+    + `<tr><td class="lb">KS 距离</td><td><b>${nA?ksDist().toFixed(4):'—'}</b></td><td>→ 0</td>`
+    + `<td colspan="2" class="lb" style="font-size:11px;opacity:.8">与标准正态 CDF 的最大偏离，按 1/√n 缩小</td></tr>`
+    + (POP.kind==='disc' ? (()=>{        // 离散总体：KS 有个纯粹由「阶梯」造成的下限
+        const dz=1/(POP.sd*Math.sqrt(n)), floor=dz*npdf(0)/2;
+        return `<tr><td class="lb" style="color:#a86b1a">├ 其中格点造成的下限</td>`
+          + `<td colspan="4" class="lb" style="font-size:11px">格点步长 Δz = 1/(σ√n) = <b>${dz.toFixed(4)}</b>　`
+          + `→ KS 至少 Δz·φ(0)/2 = <b>${floor.toFixed(4)}</b>　`
+          + `<b style="color:#a86b1a">实测 KS 的 ${(ksDist()/floor).toFixed(2)} 倍就是它</b> —— `
+          + `这部分是"阶梯 vs 光滑"，不是形状不对</td></tr>`; })() : '');
+}
+
+/* ── 收敛速度扫描 ── */
+const SW_N=[1,2,3,5,8,12,20,35,60,100,200,400];
+let swData=[], swIdx=-1, swRemain=0, SW_M=20000;
+function swBuild(){ swData=SW_N.map(n=>({n, ks:null, acc:{fine:new Float64Array(FB), lo:0, hi:0, n:0}}));
+  swIdx=-1; swRemain=0; dirty=true; }
+function swStart(){ swBuild(); swIdx=0; swRemain=SW_M; }
+function swPush(A,z){ A.n++;
+  if(z<ZLO){ A.lo++; return; } if(z>=ZHI){ A.hi++; return; }
+  A.fine[Math.min(FB-1,Math.floor((z-ZLO)/(ZHI-ZLO)*FB))]++; }
+function swKS(A){ if(!A.n) return NaN; let c=A.lo, mx=0;
+  for(let i=0;i<FB;i++){ c+=A.fine[i]; const z=ZLO+(i+1)/FB*(ZHI-ZLO);
+    const d=Math.abs(c/A.n-ncdf(z)); if(d>mx) mx=d; } return mx; }
+function drawSweep(){
+  const W=scv.width,H=scv.height,L=52,R=14,T=14,B=40,PW=W-L-R,PH=H-T-B,y0=T+PH;
+  gS.fillStyle='#fff'; gS.fillRect(0,0,W,H);
+  if(!swData.length) swBuild();
+  const lx=Math.log(1), hx=Math.log(400);
+  const ly=Math.log(0.0008), hy=Math.log(0.6);
+  const X=n=>L+(Math.log(n)-lx)/(hx-lx)*PW;
+  const Y=k=>y0-(Math.log(Math.max(k,1e-6))-ly)/(hy-ly)*PH;
+  gS.strokeStyle='#eee';
+  for(const k of [0.001,0.01,0.1]){ const y=Y(k); gS.beginPath(); gS.moveTo(L,y); gS.lineTo(L+PW,y); gS.stroke(); }
+  const done=swData.filter(p=>p.ks!=null);
+  if(done.length){                                   // 斜率 −1/2 参考线，过第一个实测点
+    const a=done[0]; gS.strokeStyle='#c0392b'; gS.setLineDash([5,4]); gS.lineWidth=1.3;
+    gS.beginPath();
+    for(let i=0;i<=60;i++){ const n=Math.exp(lx+(hx-lx)*i/60), k=a.ks*Math.sqrt(a.n/n);
+      const x=X(n),y=Y(k); i?gS.lineTo(x,y):gS.moveTo(x,y); }
+    gS.stroke(); gS.setLineDash([]);
+  }
+  { /* 蒙特卡洛噪声地板：完美正态样本的 KS 期望 ≈ 0.886/√M。低于它就是在测噪声 */
+    const floor=0.886/Math.sqrt(SW_M), y=Y(floor);
+    gS.strokeStyle='#999'; gS.setLineDash([2,3]); gS.lineWidth=1;
+    gS.beginPath(); gS.moveTo(L,y); gS.lineTo(L+PW,y); gS.stroke(); gS.setLineDash([]);
+    gS.fillStyle='#888'; gS.font='10px Arial'; gS.textAlign='left';
+    gS.fillText('噪声地板 0.886/√'+SW_M.toLocaleString()+' = '+floor.toFixed(4), L+6, y-4); }
+  gS.strokeStyle='#1a63d8'; gS.lineWidth=2; gS.beginPath();
+  done.forEach((p,i)=>{ const x=X(p.n),y=Y(p.ks); i?gS.lineTo(x,y):gS.moveTo(x,y); });
+  gS.stroke();
+  gS.fillStyle='#1a63d8';
+  done.forEach(p=>{ gS.beginPath(); gS.arc(X(p.n),Y(p.ks),3.2,0,6.2832); gS.fill(); });
+  gS.strokeStyle='#bbb'; gS.lineWidth=1;
+  gS.beginPath(); gS.moveTo(L,y0+0.5); gS.lineTo(L+PW,y0+0.5); gS.moveTo(L+0.5,T); gS.lineTo(L+0.5,y0); gS.stroke();
+  gS.fillStyle='#777'; gS.font='10px Menlo'; gS.textAlign='center';
+  for(const n of [1,3,10,30,100,400]) gS.fillText(String(n),X(n),y0+14);
+  gS.textAlign='right';
+  for(const k of [0.001,0.01,0.1]) gS.fillText(k.toString(),L-5,Y(k)+3);
+  gS.textAlign='center'; gS.fillStyle='#555'; gS.font='11px Arial';
+  gS.fillText('样本量 n（对数轴）',L+PW/2,y0+30);
+  gS.textAlign='left';
+  $('swprog').textContent = (swIdx>=0&&swIdx<swData.length)
+    ? `跑扫描… 第 ${swIdx+1}/${swData.length} 点（n=${swData[swIdx].n}）`
+    : (done.length? `扫描完成，每点 ${SW_M.toLocaleString()} 次` : '（点「跑扫描」）');
+}
+
+/* ── 手绘 ── */
+let drawing=false,lastI=null;
+const paint=e=>{
+  if(POP.kind!=='cont') return;
+  const r=pcv.getBoundingClientRect(), L=60,R=40;
+  const px=(e.clientX-r.left)/r.width*pcv.width;
+  const t=(px-L)/(pcv.width-L-R); if(t<0||t>1) return;
+  const i=Math.max(0,Math.min(K-1,Math.floor(t*K)));
+  const h=Math.max(0,Math.min(1,1-(e.clientY-r.top)/r.height*1.12));
+  if(lastI!==null&&Math.abs(i-lastI[0])>1){ const [i0,h0]=lastI, d=i-i0, s=Math.sign(d);
+    for(let k=1;k<=Math.abs(d);k++) fv[i0+s*k]=h0+(h-h0)*k/Math.abs(d); }
+  else fv[i]=h;
+  lastI=[i,h]; dirty=true;
+};
+pcv.addEventListener('pointerdown',e=>{ if(POP.kind!=='cont') return;
+  drawing=true; pcv.setPointerCapture(e.pointerId); paint(e); });
+pcv.addEventListener('pointermove',e=>{ if(drawing) paint(e); });
+pcv.addEventListener('pointerup',()=>{ if(drawing){ drawing=false; lastI=null;
+  mode='custom'; document.querySelectorAll('button[data-p]').forEach(b=>b.classList.remove('on'));
+  buildPop(); reset(); } });
+
+/* ── 事件 ── */
+function reset(){ buildPop(); clearAcc(); remain=RUNS; swBuild(); }
+document.body.addEventListener('click',e=>{
+  const d=e.target.dataset||{};
+  if(d.p){ mode=d.p;
+    document.querySelectorAll('button[data-p]').forEach(b=>b.classList.toggle('on',b===e.target));
+    if(PRE[mode]) for(let i=0;i<K;i++) fv[i]=PRE[mode](i);
+    buildPop(); reset(); }
+  if(d.r){ RUNS=+d.r;
+    document.querySelectorAll('button[data-r]').forEach(b=>b.classList.toggle('on',b===e.target));
+    clearAcc(); remain=RUNS; }
+});
+$('ns').addEventListener('input',()=>{ clearAcc(); remain=RUNS; });
+$('swrun').addEventListener('click',swStart);
+
+/* ── 主循环 ── */
+function frame(){
+  const n=nOf();
+  if(remain>0){
+    const B=Math.min(remain, Math.max(200, Math.floor(120000/n)));
+    for(let b=0;b<B;b++){ const o=oneMean(n,'both'); pushZ(o.z,o.S); }
+    remain-=B; dirty=true;
+  }
+  if(swIdx>=0&&swIdx<swData.length){
+    const S=swData[swIdx];
+    const B=Math.min(swRemain, Math.max(200, Math.floor(120000/S.n)));
+    for(let b=0;b<B;b++) swPush(S.acc, oneMean(S.n));
+    swRemain-=B;
+    if(swRemain<=0){ S.ks=swKS(S.acc); swIdx++; swRemain = swIdx<swData.length?SW_M:0; }
+    dirty=true;
+  }
+  if(dirty){ drawPop(); drawMain(); drawStat(); drawSweep(); dirty=false; }
+  requestAnimationFrame(frame);
+}
+for(let i=0;i<K;i++) fv[i]=PRE.uniform(i);
+buildPop(); reset(); frame();
+</script>
+</body>
+</html>
