@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>CLT 的证明发生在频域 —— 特征函数视角</title>
+<style>
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; margin:14px 16px; color:#222; }
+  h1 { font-size:17px; margin:0 0 8px; }
+  canvas { border:1px solid #ddd; display:block; background:#fff; }
+  button { font-size:12.5px; padding:2px 9px; border:1px solid #bbb; background:#fafafa;
+           border-radius:4px; cursor:pointer; }
+  button.on { background:#1a63d8; border-color:#1a63d8; color:#fff; font-weight:600; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12.5px; margin:5px 0; }
+  .cap { font-size:11.5px; color:#555; margin:3px 0 9px; }
+  .hint { color:#777; font-size:11px; }
+  .mono { font-family:Menlo,Consolas,monospace; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  .col { flex:0 0 545px; max-width:545px; }     /* 列宽钉死, 图注再长也不会把图挤换行 */
+  .grid { display:grid; gap:5px 10px; align-items:center;
+          grid-template-columns:104px 300px 90px minmax(0,1fr); }
+  .grid input[type=range] { width:100%; margin:0; }
+  .st { font-family:Menlo,Consolas,monospace; font-size:12.5px; background:#0f1522; color:#dfe6f3;
+        padding:6px 10px; border-radius:4px; margin:5px 0; line-height:1.95; }
+  .st b { color:#7fd3c4; } .st .r { color:#ff8f7a; } .st .g { color:#8fe09a; } .st .y { color:#ffd27f; }
+  table.t2 { border-collapse:collapse; font-size:12px; }
+  table.t2 td, table.t2 th { border:1px solid #ccc; padding:3px 8px; text-align:right;
+    font-family:Menlo,Consolas,monospace; white-space:nowrap; }
+  table.t2 th { background:#eef1f6; text-align:center; font-family:inherit; }
+  table.t2 td.lb { text-align:left; font-family:inherit; background:#f7f8fa; }
+  .note { background:#f6f7fa; border-left:3px solid #9aa6bd; padding:7px 11px;
+          font-size:11.5px; color:#444; line-height:1.75; max-width:1120px; margin:8px 0; }
+  .step { background:#eef3fb; border-left:3px solid #2b5fb8; padding:6px 10px; font-size:12px;
+          margin:6px 0; line-height:1.7; max-width:1120px; }
+  .warn { background:#fff4e5; border:1px solid #e0b070; border-radius:4px; padding:6px 10px;
+          font-size:12px; line-height:1.65; max-width:1120px; margin:6px 0; }
+</style>
+</head>
+<body>
+<h1>中心极限定理的证明<b>发生在频域</b> —— 特征函数视角
+  <span style="font-size:12.5px;font-weight:400;color:#555">
+  把 φ(t)=E[e<sup>itX</sup>] 的那几步逐个画出来看</span></h1>
+
+<div class="step">
+  <b>记号</b>：<b>φ<sub>Y</sub>(u)=E[e<sup>iuY</sup>]</b> 是<b>单个</b>观测的特征函数，u 是频率、无量纲，恒有 φ<sub>Y</sub>(0)=1、|φ<sub>Y</sub>|≤1。
+  <b>t</b> 是<b>和</b> S<sub>n</sub> 的特征函数 φ<sub>Sₙ</sub>(t) 的自变量，两者由 <b>u = t/√n</b> 相联。
+  <b>T=10</b> 是我们关心的频率范围（重建 N(0,1) 只需 |t|≲8）。<br><br>
+  <b>把「精确」和「近似」分开看 —— 这是本页的全部用意：</b><br>
+  <span style="color:#1a6c3a"><b>① → ④ 全部精确，一点近似都没有。</b></span>
+  ①标准化密度 → ②求特征函数 φ<sub>Y</sub>（傅里叶变换）→ ③独立相加⟹相乘取幂
+  <b>φ<sub>Sₙ</sub>(t)=[φ<sub>Y</sub>(t/√n)]<sup>n</sup></b> → ④逆变换回 S<sub>n</sub> 的密度。
+  <b>到④为止 S<sub>n</sub> 的分布已被完全确定</b>，这跟 CLT 还没关系。<br>
+  <span style="color:#a8481a"><b>⑤ → ⑥ 才引入近似。</b></span>
+  ⑤把 φ<sub>Y</sub> 在原点<b>截断到前两项</b> 1−u²/2 → ⑥截断版取 n 次幂得
+  <b>[1−t²/2n]<sup>n</sup> → e<sup>−t²/2</sup></b>，再回头和③的精确曲线比。<br>
+  <b>CLT 的内容就是</b>：③那条精确曲线自己趋向 e<sup>−t²/2</sup>；而⑤的截断误差<b>即使被 n 次幂放大</b>也仍然趋于 0
+  —— 所以近似只是<b>证明的手段</b>，结论是精确的。最后由 Lévy 连续性定理把频域收敛翻回分布收敛。<br><br>
+  <b>哪些是精确算的、哪些是数值积分</b>（别把数值误差当成理论误差）：<br>
+  ·&nbsp;<span style="color:#1a6c3a"><b>精确</b></span>：<b>手绘的形状不是"被近似"，而是被当作总体的定义</b> ——
+  你画的 200 根柱子定义了一个<b>分段均匀密度</b>（第 j 格 = 宽 h=1/200、高 w<sub>j</sub>/h 的一段均匀分布）。
+  一旦这么定义，下面全是<b>闭式</b>，没有任何求积：<br>
+  &nbsp;&nbsp;μ = Σw<sub>j</sub>c<sub>j</sub>，
+  σ² = Σw<sub>j</sub>[(c<sub>j</sub>−μ)²+<b>h²/12</b>]，
+  m₃ = Σw<sub>j</sub>[(c<sub>j</sub>−μ)³+3(c<sub>j</sub>−μ)h²/12]，
+  m₄ = Σw<sub>j</sub>[(c<sub>j</sub>−μ)⁴+6(c<sub>j</sub>−μ)²h²/12+h⁴/80]（h²/12 是<b>格内</b>那段均匀自己的方差）<br>
+  &nbsp;&nbsp;<b>φ<sub>Y</sub>(u) = sinc(u·h/2σ) · Σ<sub>j</sub> w<sub>j</sub> e<sup>iuz<sub>j</sub></sup></b>
+  ——&nbsp;前面那个 sinc 正是"每格是一段均匀"贡献的因子，后面是有限和。<br>
+  &nbsp;&nbsp;<span class="hint">自检：均匀预设此时就是<b>精确</b>的 U[0,1] —— 程序算出 σ=0.28867513（=1/√12）、
+  超额峰度 =−1.200000、偏度 =2×10<sup>−15</sup>；φ 与解析式 sin(√3u)/(√3u) 偏差 1.6×10<sup>−15</sup>。
+  伯努利那档是真原子（h=0 ⟹ sinc≡1），偏度 1.960392、超额峰度 1.843137，与解析值完全相同。</span><br>
+  φ<sub>Sₙ</sub>=[φ<sub>Y</sub>]<sup>n</sup> 走极坐标 + 相角 unwrap，与直接复数连乘对照偏差仅 10<sup>−15</sup>；
+  μ、σ、偏度、峰度都是有限和；e<sup>−t²/2</sup>、1−u²/2、正态密度都是解析式。
+  伯努利那档有解析特征函数，程序值与它偏差 <b>0.0</b>。<br>
+  ·&nbsp;<span style="color:#a8481a"><b>数值积分只有一处</b></span>：④的逆变换（以及基于它的 KS）。
+  求积误差已收敛（网格加密 4 倍后变化 10<sup>−15</sup>）；<b>截断误差只在 n 很小时才可见</b>
+  —— n=1 时把 T 加倍会让密度变 5×10<sup>−3</sup>（φ<sub>Y</sub> 衰减慢，丢掉 |t|&gt;T 会有 Gibbs 振铃），
+  n=9 时降到 3×10<sup>−9</sup>，n=100 时 9×10<sup>−16</sup>。
+</div>
+
+<div class="bar">
+  <b>总体</b><span class="hint">想画什么都行；柯西是反例</span>
+  <button data-p="uniform" class="on">均匀</button>
+  <button data-p="exp">指数</button>
+  <button data-p="lognorm">对数正态</button>
+  <button data-p="bimodal">双峰</button>
+  <button data-p="bern">伯努利 p=0.15</button>
+  <button data-p="normal">正态</button>
+  <button data-p="cauchy">柯西(反例)</button>
+</div>
+<div class="bar">
+  <div class="grid">
+    <span class="mono">样本量 n</span>
+    <input type="range" id="ns" min="0" max="27" step="1" value="9">
+    <span class="mono" id="nsV"></span>
+    <span class="hint">档位：1–10 逐个 → 10–20 每 2 个 → 25/30/35/40/50/75/100/150/200/250/300/350/400。
+      拖动它：③④ 是精确结果在变，⑤⑥ 是近似在变好</span>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col">
+    <canvas id="c1" width="545" height="215"></canvas>
+    <div class="cap"><b>① 时域 · 精确</b>　你画的总体密度（<b>可拖动手绘，笔画就落在光标处</b>）。
+      横轴 x 是它的<b>原始坐标</b>，纵轴密度（按峰值归一，只看形状）。
+      <span style="color:#c0392b">▎μ</span>　<span style="color:#888">┆ μ±σ</span><br>
+      ②～⑥ 用的都是<b>标准化后</b>的 Y=(X−μ)/σ（于是 E[Y]=0、E[Y²]=1），
+      μ 和 σ 就标在这张图上。<br>
+      <b>你画的就是总体本身</b>：这 200 根柱子被定义成一个分段均匀密度，所有矩和特征函数都有闭式，
+      不存在"用离散去近似连续"这回事。</div>
+  </div>
+  <div class="col">
+    <canvas id="c2" width="545" height="215"></canvas>
+    <div class="cap"><b>② 频域 · 精确</b>　把①做傅里叶变换得 <b>φ<sub>Y</sub>(u)</b>，由
+      Σ<sub>j</sub>w<sub>j</sub>e<sup>iuz<sub>j</sub></sup> <b>精确求和</b>，无任何近似。<br>
+      横轴 <b>u</b>（频率），纵轴 φ<sub>Y</sub> 的值。
+      <span style="color:#1f3a6e">■ 实部</span>／<span style="color:#7aa0d8">■ 虚部</span>（总体对称时恒 0）／
+      <span style="color:#888">■ 模 |φ<sub>Y</sub>|</span>。注意 φ<sub>Y</sub>(0)=1。</div>
+  </div>
+</div>
+<div class="row">
+  <div class="col">
+    <canvas id="c3" width="545" height="215"></canvas>
+    <div class="cap"><b>③ 相乘取幂 · 精确</b>　<b>φ<sub>Sₙ</sub>(t) = [φ<sub>Y</sub>(t/√n)]<sup>n</sup></b>
+      —— 这一步来自<b>独立性</b>，是恒等式，不是近似。<br>
+      横轴 t（|t|≤T=10），纵轴取值。<span style="color:#1f3a6e">■ 蓝 = 精确 Re φ<sub>Sₙ</sub></span>／
+      <span style="color:#c0392b">■ 红虚 = e<sup>−t²/2</sup></span>（目标）。
+      <span style="color:#7aa0d8">■ 细虚 = Im φ<sub>Sₙ</sub></span>（偏度住在这里）。
+      <b>蓝线自己贴向红线、细虚线自己压平，这件事就是 CLT。</b></div>
+  </div>
+  <div class="col">
+    <canvas id="c4" width="545" height="215"></canvas>
+    <div class="cap"><b>④ 逆变换 · <span style="color:#a8481a">全页唯一的数值积分</span></b>　
+      把③那条曲线逆傅里叶变换，得 <b>S<sub>n</sub> 的真实密度</b>：
+      f(x)=(1/2π)∫<sub>−T</sub><sup>T</sup>φ<sub>Sₙ</sub>(t)e<sup>−itx</sup>dt，梯形法 2401 点。<br>
+      横轴 x（同①的单位），纵轴密度。<span style="color:#1f3a6e">■ 蓝 = S<sub>n</sub> 精确密度</span>／
+      <span style="color:#c0392b">■ 红虚 = 标准正态密度</span>。
+      <span class="hint">一个样本都没抽 —— 这是算出来的，不是抽出来的。</span><br>
+      <b>n=1 时这条蓝线就是①那条密度本身</b>，只是横轴换成了标准化单位 (x−μ)/σ。
+      对照两图时把<b>左右两端概率为 0 的空白裁掉</b>，形状应当完全重合
+      （①的横轴是原始 [0,1]，本图是 ±4.5σ，所以本图两侧会多出一大片零）。
+      例：均匀总体此时是个方块，高 1/(2√3)=0.2887、宽 ±√3=±1.732。
+      两点留意：傅里叶积分在<b>跳跃处必然取两侧极限的平均</b>（方块的竖边会"切角"，这是对的，不是误差）；
+      n 小时 φ 只按 1/t 衰减、截断会留波纹 —— 本图对 n≤8 单独用 T=120 把波纹从 0.016 压到 0.0013。
+      <span id="trunc"></span></div>
+  </div>
+</div>
+<div class="row">
+  <div class="col">
+    <canvas id="c5" width="545" height="244"></canvas>
+    <div class="cap"><b>⑤ 近似登场</b>　把②的 φ<sub>Y</sub> 在原点<b>截断到前两项</b>：φ<sub>Y</sub>(u) ≈ 1−u²/2。<br>
+      横轴 u，橙色那排是对应的 t=u·√n。
+      <span style="color:#1f3a6e">■ 蓝 = 精确 Re φ<sub>Y</sub></span>／
+      <span style="color:#c0392b">■ 红虚 = 截断的 1−u²/2</span>／
+      <span style="background:#ffe9c7">■ 黄底 = 当前 n <b>真正用到</b>的窗口 |u|≤T/√n</span>。<br>
+      <b>拖大 n → 黄窗口按 1/√n 收缩 → 窗口内两线越来越贴。</b>
+      窗口外贴不贴无关紧要，那里的 u 永远不会被代入。</div>
+  </div>
+  <div class="col">
+    <canvas id="c6" width="545" height="244"></canvas>
+    <div class="cap"><b>⑥ 近似的后果</b>　把⑤那条截断版取 n 次幂：<b>[1−t²/2n]<sup>n</sup></b>，与③的精确曲线并排。<br>
+      <span style="color:#1f3a6e">■ 蓝 = 精确 φ<sub>Sₙ</sub></span>／
+      <span style="color:#a8481a">■ 橙 = 截断版 [1−t²/2n]<sup>n</sup></span>（实值）／
+      <span style="color:#c0392b">■ 红虚 = e<sup>−t²/2</sup></span>／
+      <span style="color:#7aa0d8">■ 细虚 = Im φ<sub>Sₙ</sub></span>。<br>
+      <b>偏度只影响虚部</b>（展开的 −iγ₁u³/6 是纯虚的），所以比较必须用<b>复模</b> ——
+      只看实部会把 γ₁ 那一项整个漏掉，误判成收敛更快。<br>
+      <b>两件事同时发生</b>：橙线 →红线（这是 (1+a/n)<sup>n</sup>→e<sup>a</sup> 的初等极限）；
+      橙线也→蓝线（截断误差被 n 次幂放大后仍趋 0）。夹在中间的蓝线因此被逼向红线。<br>
+      <span class="hint">灰竖线 = |t|=√(2n)：截断多项式在此变负，超出它近似彻底失效 —— 这也是小 n 时 ⑤⑥ 难看的原因。</span></div>
+  </div>
+</div>
+
+<div class="st" id="st"></div>
+<div id="warn"></div>
+
+<div class="row">
+  <div>
+    <div class="cap" style="margin:0 0 4px"><b>各步的量化残差</b></div>
+    <table class="t2" id="err"></table>
+  </div>
+  <div style="flex:1 1 0;min-width:400px">
+    <div class="cap" style="margin:0 0 4px"><b>残差随 n</b>　双对数</div>
+    <canvas id="c7" width="560" height="230"></canvas>
+    <div class="cap">
+      <span style="color:#c0392b">红 = 展开残差×n</span>（步骤③，γ₁≠0 时按 1/√n、对称总体按 1/n 降）／
+      <span style="color:#1a63d8">蓝 = 频域残差 max<sub>t</sub>|φ<sub>Sₙ</sub>−e<sup>−t²/2</sup>|</span>（步骤④）／
+      <span style="color:#27713d">绿 = 时域 KS 距离</span>（步骤⑤）。
+      <b>斜率取决于偏度</b>：γ₁≠0 时 −1/2，γ₁=0（均匀、对称双峰）时首阶项消失、斜率变 −1
+      —— Berry–Esseen 的 O(n<sup>−1/2</sup>) 只是<b>上界</b>。<br>
+      <span class="hint">红线（③）只在 <b>n ≳ T²/2 ≈ 50</b> 之后才进入渐近区：更小的 n 时比较多项式
+      1−t²/2n 本身已经跑出单位圆，|z<sup>n</sup>−w<sup>n</sup>| ≤ n|z−w| 这个界非常松。
+      蓝绿两条（④⑤）才是真正要看的量，它们全程干净。</span></div>
+  </div>
+</div>
+
+<div class="cap" style="margin:12px 0 4px"><b>"n 十几个就能当正态吗？" —— 中心和尾部是两回事</b>　
+  下表对<b>当前总体</b>精确算 P(S<sub>n</sub> &gt; z)，和正态的 1−Φ(z) 比<b>相对误差</b>（不抽样，走傅里叶路线）。</div>
+<table class="t2" id="tail"></table>
+<div class="cap" id="tailnote" style="margin-top:4px"></div>
+
+<div class="note" id="note"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const C=id=>{const c=$(id); return [c,c.getContext('2d')];};
+const [c1,g1]=C('c1'), [c2,g2]=C('c2'), [c3,g3]=C('c3'), [c4,g4]=C('c4'),
+      [c5,g5]=C('c5'), [c6,g6]=C('c6'), [c7,g7]=C('c7');
+
+const npdf=x=>Math.exp(-x*x/2)/Math.sqrt(2*Math.PI);
+const erf=x=>{ const s=x<0?-1:1; x=Math.abs(x); const t=1/(1+0.3275911*x);
+  return s*(1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x)); };
+const ncdf=x=>0.5*(1+erf(x/Math.SQRT2));
+
+/* ═══ 图1：标准化后的总体（离散测度：原子 z_j，权重 w_j） ═══ */
+const K=200;
+const PRE={ uniform:i=>1, exp:i=>Math.exp(-(i/K)*6),
+  lognorm:i=>{const x=i/K*4+0.02,l=Math.log(x)+0.9; return Math.exp(-l*l/0.6)/x;},
+  bimodal:i=>{const a=(i/K-0.26)*11,b=(i/K-0.76)*11; return Math.exp(-a*a/2)+0.8*Math.exp(-b*b/2);},
+  normal:i=>{const z=(i/K-0.5)*7; return Math.exp(-z*z/2);} };
+const PN={uniform:'均匀',exp:'指数',lognorm:'对数正态',bimodal:'双峰',
+          bern:'伯努利 p=0.15',normal:'正态',cauchy:'柯西'};
+let mode='uniform', fv=new Float64Array(K);
+let Z=null, Wt=null, skew=0, kurt=0, isCauchy=false;
+let HW=0;      // 标准化后每个格子的半宽（离散总体为 0）。分段均匀 ⟹ φ 多一个 sinc 因子
+
+/* 手绘的那 200 根柱子被当成【分段均匀密度】：第 j 格是宽 h、高 w_j/h 的一段均匀分布。
+   这不是"近似你画的东西"，而是把总体【定义】成它。于是所有量都有精确闭式：
+     μ  = Σ w_j c_j
+     σ² = Σ w_j[(c_j−μ)² + h²/12]                     ← 加上格内方差
+     m₃ = Σ w_j[(c_j−μ)³ + 3(c_j−μ)h²/12]
+     m₄ = Σ w_j[(c_j−μ)⁴ + 6(c_j−μ)²h²/12 + h⁴/80]
+     φ_Y(u) = sinc(u·h/2σ) · Σ w_j e^{iuz_j}          ← sinc 就是格内均匀那一段的贡献
+   全是有限和 / 初等函数，没有任何求积或截断。（伯努利是真原子, h=0 ⟹ sinc≡1） */
+function buildPop(){
+  isCauchy = (mode==='cauchy');
+  if(isCauchy){ Z=null; Wt=null; skew=NaN; kurt=NaN; HW=0; return; }
+  let cs=[], ps=[], h;
+  if(mode==='bern'){ cs=[0,1]; ps=[0.85,0.15]; h=0; }          // 真离散：两个原子
+  else { let w=0; for(let i=0;i<K;i++) w+=fv[i];
+    if(w<=1e-12){ for(let i=0;i<K;i++) fv[i]=PRE.normal(i); return buildPop(); }
+    for(let i=0;i<K;i++){ if(fv[i]<=0) continue; cs.push((i+0.5)/K); ps.push(fv[i]/w); }
+    h=1/K; }
+  let sw=0,m=0; for(let i=0;i<ps.length;i++){ sw+=ps[i]; m+=ps[i]*cs[i]; } m/=sw;
+  const q=h*h/12, q4=h*h*h*h/80;
+  let v=0,s3=0,s4=0;
+  for(let i=0;i<ps.length;i++){ const d=cs[i]-m, p=ps[i]/sw;
+    v  += p*(d*d + q);
+    s3 += p*(d*d*d + 3*d*q);
+    s4 += p*(d*d*d*d + 6*d*d*q + q4); }
+  const sd=Math.sqrt(v);
+  skew=s3/sd**3; kurt=s4/sd**4-3;
+  Z=new Float64Array(cs.length); Wt=new Float64Array(ps.length);
+  for(let i=0;i<cs.length;i++){ Z[i]=(cs[i]-m)/sd; Wt[i]=ps[i]/sw; }
+  HW = h/(2*sd);                                                // 标准化后的格子半宽
+}
+/* φ_Y(u) = Σ w_j e^{i u z_j}。柯西走解析式 e^{−|u|}（它没有二阶矩，画不出抛物线） */
+function phi(u){
+  if(isCauchy) return [Math.exp(-Math.abs(u)), 0];
+  let re=0,im=0;
+  for(let j=0;j<Z.length;j++){ const a=u*Z[j]; re+=Wt[j]*Math.cos(a); im+=Wt[j]*Math.sin(a); }
+  const x=u*HW, sc = Math.abs(x)<1e-12 ? 1 : Math.sin(x)/x;     // 格内均匀 ⟹ sinc 因子
+  return [re*sc, im*sc];
+}
+/* φ_{S_n}(t) = [φ_Y(t/√n)]^n。复数幂用极坐标, 相角沿 t 连续 unwrap */
+/* n 的档位：1–10 逐个，10–20 每 2 个，之后按需要跳大。默认停在 n=10（下标 9） */
+const NLAD=[1,2,3,4,5,6,7,8,9,10, 12,14,16,18,20,
+            25,30,35,40,50,75,100,150,200,250,300,350,400];
+const TMAX=10, NT=1200;   // 重建 N(0,1) 只需 |t|≲8；T 小一点让 ③ 的渐近区提前到 n≳T²/2
+function phiSnAt(n,T,M){
+  const re=new Float64Array(2*M+1), im=new Float64Array(2*M+1);
+  const sq=Math.sqrt(n);
+  let prev=0;                                  // t=0 处相角为 0
+  for(let k=0;k<=2*M;k++){
+    const t=-T+k*T/M;
+    const [a,b]=phi(t/sq);
+    const r=Math.hypot(a,b);
+    let th=Math.atan2(b,a);
+    if(k>0){ while(th-prev> Math.PI) th-=2*Math.PI;
+             while(th-prev<-Math.PI) th+=2*Math.PI; }
+    prev=th;
+    const R=Math.pow(r,n), A=n*th;
+    re[k]=R*Math.cos(A); im[k]=R*Math.sin(A);
+  }
+  return {re,im,T,M};
+}
+const phiSn = n => phiSnAt(n,TMAX,NT);
+/* n 小时 φ_Sₙ 只按 1/t 衰减（均匀总体是 sinc），截断在 |t|≤10 会留下 ~0.016 的波纹。
+   图4 的显示曲线单独用更大的积分范围把它压掉 —— 只影响这一条曲线怎么画。 */
+const phiForPlot = n => n<=8 ? phiSnAt(n,120,12000) : phiSn(n);
+/* 数值逆变换：f(x) = (1/2π)∫ φ(t) e^{−itx} dt（梯形） */
+function invFT(P,xs){
+  const T=P.T||TMAX, M=P.M||NT;
+  const dt=T/M, out=new Float64Array(xs.length);
+  for(let q=0;q<xs.length;q++){
+    const x=xs[q]; let s=0;
+    for(let k=0;k<=2*M;k++){
+      const t=-T+k*dt, w=(k===0||k===2*M)?0.5:1;
+      s += w*(P.re[k]*Math.cos(t*x)+P.im[k]*Math.sin(t*x));
+    }
+    out[q]=s*dt/(2*Math.PI);
+  }
+  return out;
+}
+
+/* ═══ 可点击图例（所有图共用） ═══ */
+const VIS={}, HIT={};
+const on = k => VIS[k]!==false;
+function legend(g,c,id,items){
+  HIT[id]=[]; g.font='10px Arial'; g.textAlign='right';
+  items.forEach((it,i)=>{
+    const y=13+i*13, vis=on(it.key), col=vis?it.col:'#c9c9c9';
+    const tw=g.measureText(it.name).width, tx=c.width-10, sx=tx-tw-26;
+    g.fillStyle=vis?'#333':'#b0b0b0'; g.fillText(it.name,tx,y);
+    g.strokeStyle=col; g.lineWidth=it.lw||2;
+    if(it.dash) g.setLineDash(it.dash);
+    g.beginPath(); g.moveTo(sx,y-4); g.lineTo(sx+18,y-4); g.stroke(); g.setLineDash([]);
+    if(!vis){ g.strokeStyle='#b0b0b0'; g.lineWidth=1;
+      g.beginPath(); g.moveTo(tx-tw,y-3); g.lineTo(tx,y-3); g.stroke(); }
+    HIT[id].push({key:it.key, x0:sx-4, y0:y-11, x1:tx+4, y1:y+3});
+  });
+  g.textAlign='left';
+}
+function hitLegend(id,c,e){
+  const r=c.getBoundingClientRect();
+  const x=(e.clientX-r.left)*c.width/r.width, y=(e.clientY-r.top)*c.height/r.height;
+  return (HIT[id]||[]).find(b=>x>=b.x0&&x<=b.x1&&y>=b.y0&&y<=b.y1);
+}
+function bindLegend(c,id,skipPaint){
+  c.addEventListener('click',e=>{ const h=hitLegend(id,c,e);
+    if(h){ VIS[h.key]=!on(h.key); render(); } });
+  c.addEventListener('mousemove',e=>{ c.style.cursor = hitLegend(id,c,e)?'pointer'
+    : (skipPaint?'crosshair':'default'); });
+}
+
+/* ═══ 通用坐标轴 ═══ */
+function frame(g,c,lo,hi,ylo,yhi,xl,B){
+  B=B||30;
+  const W=c.width,H=c.height,L=44,R=14,T=12,PW=W-L-R,PH=H-T-B;
+  g.fillStyle='#fff'; g.fillRect(0,0,W,H);
+  const X=v=>L+(v-lo)/(hi-lo)*PW, Y=v=>T+PH-(v-ylo)/(yhi-ylo)*PH;
+  g.strokeStyle='#eee'; g.lineWidth=1;
+  for(let i=0;i<=4;i++){ const y=T+PH*i/4; g.beginPath(); g.moveTo(L,y); g.lineTo(L+PW,y); g.stroke(); }
+  g.strokeStyle='#bbb';
+  g.beginPath(); g.moveTo(L,Y(0)+0.5); g.lineTo(L+PW,Y(0)+0.5); g.stroke();
+  g.beginPath(); g.moveTo(L+0.5,T); g.lineTo(L+0.5,T+PH); g.stroke();
+  g.fillStyle='#777'; g.font='9.5px Menlo'; g.textAlign='center';
+  for(let i=0;i<=6;i++){ const v=lo+(hi-lo)*i/6;
+    g.fillText(Math.abs(v)<1e-9?'0':v.toFixed(Math.abs(hi-lo)>8?0:1), X(v), T+PH+13); }
+  g.textAlign='right';
+  for(const v of [ylo,0,yhi]) if(v>=ylo&&v<=yhi) g.fillText(v.toFixed(1), L-4, Y(v)+3);
+  g.textAlign='center'; g.fillStyle='#555'; g.font='10.5px Arial';
+  g.fillText(xl, L+PW/2, T+PH+B-5); g.textAlign='left';
+  return {X,Y,L,PW,T,PH,B};
+}
+const curve=(g,ax,f,lo,hi,col,lw,dash)=>{
+  g.strokeStyle=col; g.lineWidth=lw; if(dash) g.setLineDash(dash);
+  g.beginPath();
+  for(let px=0;px<=ax.PW;px++){ const v=lo+(hi-lo)*px/ax.PW, y=ax.Y(f(v));
+    px?g.lineTo(ax.L+px,y):g.moveTo(ax.L+px,y); }
+  g.stroke(); g.setLineDash([]);
+};
+
+/* ═══ 四张图 ═══ */
+/* ① 按【原始坐标】显示 —— 这样笔画精确落在光标底下（画布横轴 = fv 的下标轴）。
+   ②～⑥ 用的是标准化后的 Y=(X−μ)/σ，μ、σ 在本图上用红线/灰虚线标出。 */
+function draw1(){
+  if(isCauchy){
+    const ax=frame(g1,c1,-4,4,0,1.15,'y（柯西无法标准化，这里画的是它本身）');
+    curve(g1,ax,v=>1/(Math.PI*(1+v*v))*2.6,-4,4,'#1f3a6e',1.8);
+    g1.fillStyle='#a03030'; g1.font='11px Menlo';
+    g1.fillText('柯西：无 μ、无 σ，无法标准化', ax.L+8, 24);
+    return;
+  }
+  if(mode==='bern'){
+    const ax=frame(g1,c1,-0.5,1.5,0,1.15,'x（伯努利只取 0 和 1）');
+    g1.fillStyle='rgba(31,58,110,.45)'; g1.strokeStyle='#1f3a6e'; g1.lineWidth=1.5;
+    for(const [x,p] of [[0,0.85],[1,0.15]]){ const h=p/0.85;
+      g1.fillRect(ax.X(x)-11, ax.Y(h), 22, ax.Y(0)-ax.Y(h));
+      g1.strokeRect(ax.X(x)-11, ax.Y(h), 22, ax.Y(0)-ax.Y(h)); }
+    mk(ax); info(ax); return;
+  }
+  const ax=frame(g1,c1,0,1,0,1.15,'x（你画的那条密度的原始坐标）');
+  if(on('1.d')){
+    let mx=0; for(let i=0;i<K;i++) mx=Math.max(mx,fv[i]); mx=mx||1;
+    g1.fillStyle='rgba(31,58,110,.45)'; g1.strokeStyle='#1f3a6e'; g1.lineWidth=1.5;
+    g1.beginPath(); g1.moveTo(ax.X(0),ax.Y(0));
+    for(let i=0;i<K;i++) g1.lineTo(ax.X((i+0.5)/K), ax.Y(fv[i]/mx));
+    g1.lineTo(ax.X(1),ax.Y(0)); g1.closePath(); g1.fill(); g1.stroke(); }
+  mk(ax); info(ax);
+  legend(g1,c1,'c1',[{key:'1.d',name:'密度',col:'#1f3a6e'},
+    {key:'1.m',name:'μ',col:'#c0392b'},{key:'1.s',name:'μ±σ',col:'#999',dash:[4,3],lw:1}]);
+}
+/* μ 与 μ±σ 的标记（原始坐标） */
+function mk(ax){
+  if(!on('1.m')&&!on('1.s')) return;
+  let m=0,w=0;
+  if(mode==='bern'){ m=0.15; }
+  else { for(let i=0;i<K;i++){ w+=fv[i]; m+=fv[i]*(i+0.5)/K; } m/=w; }
+  let sd;
+  if(mode==='bern') sd=Math.sqrt(0.15*0.85);
+  else { let v=0; for(let i=0;i<K;i++){ const d=(i+0.5)/K-m; v+=fv[i]*d*d; } sd=Math.sqrt(v/w); }
+  if(on('1.m')){ g1.strokeStyle='#c0392b'; g1.lineWidth=2;
+    g1.beginPath(); g1.moveTo(ax.X(m),ax.T); g1.lineTo(ax.X(m),ax.Y(0)); g1.stroke();
+    g1.fillStyle='#c0392b'; g1.font='9.5px Menlo'; g1.textAlign='center';
+    g1.fillText('μ='+m.toFixed(3), ax.X(m), ax.T+9); g1.textAlign='left'; }
+  if(on('1.s')){ g1.strokeStyle='#999'; g1.lineWidth=1; g1.setLineDash([4,3]);
+    for(const t of [-1,1]){ g1.beginPath(); g1.moveTo(ax.X(m+t*sd),ax.T+8);
+      g1.lineTo(ax.X(m+t*sd),ax.Y(0)); g1.stroke(); }
+    g1.setLineDash([]);
+    g1.fillStyle='#888'; g1.font='9.5px Menlo';
+    g1.fillText('σ='+sd.toFixed(3), ax.L+4, ax.T+9); }
+}
+function info(ax){
+  g1.fillStyle='#555'; g1.font='10.5px Menlo';
+  g1.fillText(`偏度 ${skew.toFixed(2)}　超额峰度 ${kurt.toFixed(2)}`, ax.L+6, 11);
+  g1.fillStyle='#888'; g1.font='10px Arial'; g1.textAlign='right';
+  g1.fillText('可拖动手绘', c1.width-16, 11); g1.textAlign='left';
+}
+/* ② 精确的 φ_Y：实部、虚部、模。这一步没有任何近似 */
+function draw2(){
+  const UMAX=6;
+  const ax=frame(g2,c2,-UMAX,UMAX,-0.45,1.15,'u ＝ φ_Y 的自变量（频率）');
+  if(on('2.ab')) curve(g2,ax,u=>Math.hypot(...phi(u)),-UMAX,UMAX,'#aaa',1.2);
+  if(on('2.im')&&!isCauchy) curve(g2,ax,u=>phi(u)[1],-UMAX,UMAX,'#7aa0d8',1.3,[3,3]);
+  if(on('2.re')){ curve(g2,ax,u=>phi(u)[0],-UMAX,UMAX,'#1f3a6e',2);
+    g2.fillStyle='#1f3a6e'; g2.beginPath(); g2.arc(ax.X(0),ax.Y(1),3.2,0,6.2832); g2.fill(); }
+  g2.fillStyle='#555'; g2.font='10.5px Menlo';
+  g2.fillText('φ_Y(0)=1　这一步精确，无近似', ax.L+6, 12);
+  legend(g2,c2,'c2',[{key:'2.re',name:'Re φ_Y',col:'#1f3a6e'},
+    {key:'2.im',name:'Im φ_Y',col:'#7aa0d8',dash:[3,3],lw:1.3},
+    {key:'2.ab',name:'|φ_Y|',col:'#aaa',lw:1.2}]);
+}
+/* ⑤ 近似登场：截断到前两项，配上「当前 n 真正用到的窗口」 */
+function draw5(n){
+  const UMAX=6;
+  const ax=frame(g5,c5,-UMAX,UMAX,-0.45,1.15,
+    'u ＝ φ_Y 的自变量；橙色那排 ＝ 对应的 t = u·√n', 50);
+  const half=TMAX/Math.sqrt(n);                   // 当前 n 实际用到的窗口
+  const w0=Math.max(-UMAX,-half), w1=Math.min(UMAX,half);
+  if(on('5.w')&&w1>w0){ g5.fillStyle='rgba(255,200,90,.28)';
+    g5.fillRect(ax.X(w0), ax.T, ax.X(w1)-ax.X(w0), ax.PH);
+    g5.strokeStyle='#d8a040'; g5.lineWidth=1.2;
+    for(const e of [w0,w1]){ g5.beginPath(); g5.moveTo(ax.X(e),ax.T); g5.lineTo(ax.X(e),ax.Y(0)); g5.stroke(); } }
+  if(on('5.p')) curve(g5,ax,u=>1-u*u/2,-UMAX,UMAX,'#c0392b',1.6,[5,4]);   // 截断：前两项
+  if(on('5.re')) curve(g5,ax,u=>phi(u)[0],-UMAX,UMAX,'#1f3a6e',2);        // 精确：Re φ_Y
+
+  /* 第二排刻度：同一个位置对应的 t = u·√n */
+  const sq=Math.sqrt(n);
+  g5.fillStyle='#a86b1a'; g5.font='9px Menlo'; g5.textAlign='center';
+  for(let i=0;i<=6;i++){ const u=-UMAX+2*UMAX*i/6, t=u*sq;
+    g5.fillText((Math.abs(t)>999?(t/1000).toFixed(1)+'k':t.toFixed(1)), ax.X(u), ax.T+ax.PH+26); }
+  g5.textAlign='left';
+  g5.fillStyle='#555'; g5.font='10.5px Menlo';
+  g5.fillText(`纵轴 = φ_Y 的值（无量纲）　黄窗口 |u| ≤ T/√n = ${half.toFixed(3)}`, ax.L+6, 10);
+  if(isCauchy){ g5.fillStyle='#a03030';
+    g5.fillText('柯西的 φ 在 0 处有尖点（不可二阶可导）→ 抛物线贴不上', ax.L+6, 36); }
+  legend(g5,c5,'c5',[{key:'5.re',name:'精确 Re φ_Y',col:'#1f3a6e'},
+    {key:'5.p',name:'截断 1−u²/2',col:'#c0392b',dash:[5,4],lw:1.6},
+    {key:'5.w',name:'用到的窗口',col:'#e0b050',lw:6}]);
+}
+function draw3(P){
+  const ax=frame(g3,c3,-TMAX,TMAX,-0.35,1.15,'t　＝ 和 Sₙ 的特征函数的自变量　（|t| ≤ T = '+TMAX+'）');
+  if(on('3.g')) curve(g3,ax,t=>Math.exp(-t*t/2),-TMAX,TMAX,'#c0392b',1.6,[5,4]);
+  if(on('3.im')){ g3.strokeStyle='#7aa0d8'; g3.lineWidth=1.3; g3.setLineDash([3,3]); g3.beginPath();
+    for(let k=0;k<=2*NT;k++){ const t=-TMAX+k*TMAX/NT, x=ax.X(t), y=ax.Y(P.im[k]);
+      k?g3.lineTo(x,y):g3.moveTo(x,y); }
+    g3.stroke(); g3.setLineDash([]); }
+  if(on('3.re')){ g3.strokeStyle='#1f3a6e'; g3.lineWidth=2; g3.beginPath();
+    for(let k=0;k<=2*NT;k++){ const t=-TMAX+k*TMAX/NT, x=ax.X(t), y=ax.Y(P.re[k]);
+      k?g3.lineTo(x,y):g3.moveTo(x,y); }
+    g3.stroke(); }
+  legend(g3,c3,'c3',[{key:'3.re',name:'精确 Re φ_Sn',col:'#1f3a6e'},
+    {key:'3.im',name:'Im φ_Sn',col:'#7aa0d8',dash:[3,3],lw:1.3},
+    {key:'3.g',name:'e^(−t²/2)',col:'#c0392b',dash:[5,4],lw:1.6}]);
+  { let mi=0; for(let k=0;k<=2*NT;k++) mi=Math.max(mi,Math.abs(P.im[k]));
+    g3.fillStyle='#5a7fb8'; g3.font='10px Menlo';
+    g3.fillText(`虚部（细虚线）max|Im| = ${mi.toExponential(2)}　—— 偏度就住在这里，按 γ₁/√n 消失`, ax.L+4, 12); }
+}
+/* ⑥ 截断版的 n 次幂：[1 − t²/2n]^n。注意 |t|>√(2n) 时底数变负、近似彻底失效。 */
+function drawTrunc(n,P){
+  const ax=frame(g6,c6,-TMAX,TMAX,-0.35,1.15,'t ＝ φ_Sₙ 的自变量（|t| ≤ T='+TMAX+'）');
+  const brk=Math.sqrt(2*n);
+  if(on('6.b')&&brk<TMAX){ g6.strokeStyle='#bbb'; g6.lineWidth=1; g6.setLineDash([3,3]);
+    for(const e of [-brk,brk]){ g6.beginPath(); g6.moveTo(ax.X(e),ax.T); g6.lineTo(ax.X(e),ax.Y(-0.35)); g6.stroke(); }
+    g6.setLineDash([]);
+    g6.fillStyle='#888'; g6.font='9.5px Menlo'; g6.textAlign='center';
+    g6.fillText('|t|=√(2n)='+brk.toFixed(1), ax.X(brk), ax.T+10); g6.textAlign='left'; }
+  if(on('6.g')) curve(g6,ax,t=>Math.exp(-t*t/2),-TMAX,TMAX,'#c0392b',1.6,[5,4]);   // 目标
+  if(on('6.tr')){   /* 截断版：只在落入画面的区段画 */
+    g6.strokeStyle='#a8481a'; g6.lineWidth=2; g6.beginPath();
+    let started=false;
+    for(let px=0;px<=ax.PW;px++){ const t=-TMAX+2*TMAX*px/ax.PW, base=1-t*t/(2*n);
+      const v=Math.pow(base,n);
+      if(!isFinite(v)||v<-0.35||v>1.15){ started=false; continue; }
+      const y=ax.Y(v); started?g6.lineTo(ax.L+px,y):g6.moveTo(ax.L+px,y); started=true; }
+    g6.stroke(); }
+  if(on('6.im')){ g6.strokeStyle='#7aa0d8'; g6.lineWidth=1.3; g6.setLineDash([3,3]); g6.beginPath();
+    for(let k=0;k<=2*NT;k++){ const t=-TMAX+k*TMAX/NT;
+      const x=ax.X(t), y=ax.Y(P.im[k]); k?g6.lineTo(x,y):g6.moveTo(x,y); }
+    g6.stroke(); g6.setLineDash([]); }
+  if(on('6.re')){ g6.strokeStyle='#1f3a6e'; g6.lineWidth=2; g6.beginPath();          // 精确实部
+    for(let k=0;k<=2*NT;k++){ const t=-TMAX+k*TMAX/NT;
+      const x=ax.X(t), y=ax.Y(P.re[k]); k?g6.lineTo(x,y):g6.moveTo(x,y); }
+    g6.stroke(); }
+  legend(g6,c6,'c6',[{key:'6.re',name:'精确 Re φ_Sn',col:'#1f3a6e'},
+    {key:'6.tr',name:'截断 [1−t²/2n]ⁿ',col:'#a8481a'},
+    {key:'6.g',name:'e^(−t²/2)',col:'#c0392b',dash:[5,4],lw:1.6},
+    {key:'6.im',name:'Im φ_Sn',col:'#7aa0d8',dash:[3,3],lw:1.3},
+    {key:'6.b',name:'|t|=√(2n)',col:'#bbb',dash:[3,3],lw:1}]);
+  /* 量化：橙 vs 蓝、橙 vs 红，都只在 |t|<√(2n) 内比较 */
+  /* 必须用复模：偏度项 −iγ₁u³/6 是纯虚的，只比实部会把它整个漏掉 */
+  let d1=0,d2=0;
+  for(let k=0;k<=2*NT;k++){ const t=-TMAX+k*TMAX/NT; if(Math.abs(t)>=brk) continue;
+    const v=Math.pow(1-t*t/(2*n),n);
+    d1=Math.max(d1, Math.hypot(v-P.re[k], P.im[k]));
+    d2=Math.max(d2, Math.abs(v-Math.exp(-t*t/2))); }
+  g6.fillStyle='#555'; g6.font='10px Menlo';
+  g6.fillText(`|橙−蓝|复模 ≤ ${d1.toExponential(2)}（截断误差, ~γ₁/√n）　`
+    + `|橙−红| ≤ ${d2.toExponential(2)}（初等极限, ~1/n）`, ax.L+4, 12);
+  return {d1,d2};
+}
+
+let X4=null, XK=null;      // X4 画图用；XK 更密, 算 KS 用
+let nOfCur=1;
+function draw4(P){
+  const ax=frame(g4,c4,-4.5,4.5,-0.06,0.52,'x　＝ Sₙ 的取值（已标准化，同图1 的横轴单位）');
+  if(!X4){ X4=new Float64Array(181); for(let i=0;i<181;i++) X4[i]=-4.5+9*i/180; }
+  const f=invFT(phiForPlot(nOfCur),X4);
+  if(on('4.g')) curve(g4,ax,x=>npdf(x),-4.5,4.5,'#c0392b',1.6,[5,4]);
+  if(on('4.f')){ g4.strokeStyle='#1f3a6e'; g4.lineWidth=2; g4.beginPath();
+    for(let i=0;i<181;i++){ const x=ax.X(X4[i]), y=ax.Y(f[i]); i?g4.lineTo(x,y):g4.moveTo(x,y); }
+    g4.stroke(); }
+  legend(g4,c4,'c4',[{key:'4.f',name:'Sn 精确密度',col:'#1f3a6e'},
+    {key:'4.g',name:'标准正态密度',col:'#c0392b',dash:[5,4],lw:1.6}]);
+  return ksOf(P);
+}
+/* CDF 用梯形累积（左端点求和会留下 f·dx/2 ≈ 1e-2 的假地板），网格取 dx=0.01 */
+const NK=1201, KLO=-6, KHI=6;
+function ksOf(P){
+  if(!XK){ XK=new Float64Array(NK); for(let i=0;i<NK;i++) XK[i]=KLO+(KHI-KLO)*i/(NK-1); }
+  const f=invFT(P,XK), dx=(KHI-KLO)/(NK-1);
+  let c=0, ks=Math.abs(0-ncdf(XK[0]));
+  for(let i=1;i<NK;i++){ c+=(f[i-1]+f[i])/2*dx; ks=Math.max(ks, Math.abs(c-ncdf(XK[i]))); }
+  return ks;
+}
+
+/* ═══ 残差 ═══ */
+/* 真正控制最终误差的是「被 n 次幂放大后」的残差：
+   |z^n − w^n| ≤ n·|z−w|（模长≤1），所以看 n·max_t |φ(t/√n) − (1 − t²/2n)|。
+   理论阶：γ₁≠0 时 O(γ₁T³/6·n^{−1/2})；对称总体退到 O(n^{−1})。 */
+function taylorResid(n){
+  if(isCauchy) return NaN;
+  const sq=Math.sqrt(n); let mx=0;
+  for(let i=0;i<=400;i++){ const t=-TMAX+2*TMAX*i/400, u=t/sq;
+    const [re,im]=phi(u);
+    mx=Math.max(mx, Math.hypot(re-(1-t*t/(2*n)), im)); }
+  return n*mx;
+}
+function freqResid(P){ let mx=0;
+  for(let k=0;k<=2*NT;k++){ const t=-TMAX+k*TMAX/NT;
+    mx=Math.max(mx, Math.hypot(P.re[k]-Math.exp(-t*t/2), P.im[k])); }
+  return mx; }
+
+/* ═══ 残差扫描 ═══ */
+const SW=[1,2,3,4,6,8,10,14,20,30,40,75,150,300,400];   // 取自 NLAD 的子集
+let swd=[];
+function sweep(){
+  swd=SW.map(n=>{ const P=phiSn(n);
+    return {n, ta:taylorResid(n), fq:freqResid(P), ks:draw4hidden(P)}; });
+}
+const draw4hidden=P=>ksOf(P);
+function drawResid(){
+  const W=c7.width,H=c7.height,L=52,R=14,T=12,B=34,PW=W-L-R,PH=H-T-B,y0=T+PH;
+  g7.fillStyle='#fff'; g7.fillRect(0,0,W,H);
+  const lx=Math.log(1),hx=Math.log(400), ly=Math.log(1e-4),hy=Math.log(2);
+  const X=n=>L+(Math.log(n)-lx)/(hx-lx)*PW;
+  const Y=v=>y0-(Math.log(Math.max(v,1e-6))-ly)/(hy-ly)*PH;
+  g7.strokeStyle='#eee';
+  for(const v of [1e-3,1e-2,1e-1,1]){ const y=Y(v); g7.beginPath(); g7.moveTo(L,y); g7.lineTo(L+PW,y); g7.stroke(); }
+  const line=(key,col)=>{ const pts=swd.filter(p=>isFinite(p[key]));
+    if(!pts.length) return;
+    g7.strokeStyle=col; g7.lineWidth=2; g7.beginPath();
+    pts.forEach((p,i)=>{ const x=X(p.n),y=Y(p[key]); i?g7.lineTo(x,y):g7.moveTo(x,y); }); g7.stroke();
+    g7.fillStyle=col; pts.forEach(p=>{ g7.beginPath(); g7.arc(X(p.n),Y(p[key]),3,0,6.2832); g7.fill(); }); };
+  if(on('7.ta')) line('ta','#c0392b');
+  if(on('7.fq')) line('fq','#1a63d8');
+  if(on('7.ks')) line('ks','#27713d');
+  legend(g7,c7,'c7',[{key:'7.ta',name:'③ 展开残差×n',col:'#c0392b'},
+    {key:'7.fq',name:'④ 频域残差',col:'#1a63d8'},
+    {key:'7.ks',name:'⑤ 时域 KS',col:'#27713d'}]);
+  g7.strokeStyle='#bbb'; g7.lineWidth=1;
+  g7.beginPath(); g7.moveTo(L,y0+0.5); g7.lineTo(L+PW,y0+0.5); g7.moveTo(L+0.5,T); g7.lineTo(L+0.5,y0); g7.stroke();
+  g7.fillStyle='#777'; g7.font='9.5px Menlo'; g7.textAlign='center';
+  for(const n of [1,3,10,30,100,400]) g7.fillText(String(n),X(n),y0+13);
+  g7.textAlign='right';
+  for(const v of [1e-3,1e-2,1e-1,1]) g7.fillText(v.toString(),L-4,Y(v)+3);
+  g7.textAlign='center'; g7.fillStyle='#555'; g7.font='10.5px Arial';
+  g7.fillText('样本量 n（对数轴）',L+PW/2,y0+27); g7.textAlign='left';
+}
+
+/* ═══ 手绘 ═══ */
+let drawing=false,lastI=null;
+function paint(e){
+  if(isCauchy||mode==='bern') return;
+  const r=c1.getBoundingClientRect(), L=44,R=14;
+  const px=(e.clientX-r.left)/r.width*c1.width;
+  const t=(px-L)/(c1.width-L-R); if(t<0||t>1) return;
+  const i=Math.max(0,Math.min(K-1,Math.round(t*(K-1))));   // 画布横轴就是 fv 的下标轴
+  const h=Math.max(0,Math.min(1,1-(e.clientY-r.top)/r.height*1.15));
+  if(lastI!==null&&Math.abs(i-lastI[0])>1){ const [i0,h0]=lastI,d=i-i0,s=Math.sign(d);
+    for(let k=1;k<=Math.abs(d);k++) fv[i0+s*k]=h0+(h-h0)*k/Math.abs(d); }
+  else fv[i]=h;
+  lastI=[i,h]; buildPop(); render();
+}
+c1.addEventListener('pointerdown',e=>{
+  if(hitLegend('c1',c1,e)) return;                 // 点图例不当成画笔
+  if(isCauchy||mode==='bern') return;
+  drawing=true; c1.setPointerCapture(e.pointerId); paint(e); });
+/* 只有真的按着才画。e.buttons 反映物理按键状态 —— 万一 pointerup 丢了
+   （窗口外松手 / pointercancel / 指针捕获被抢），drawing 会卡在 true，
+   那时光标一飘过去就会乱画。这道守卫把它堵死。 */
+c1.addEventListener('pointermove',e=>{
+  if(!drawing) return;
+  if(e.buttons===0){ finishDraw(); return; }
+  paint(e); });
+function finishDraw(){
+  if(!drawing) return;
+  drawing=false; lastI=null;
+  mode='custom'; document.querySelectorAll('button[data-p]').forEach(b=>b.classList.remove('on'));
+  buildPop(); sweep(); render(); tailTable();
+}
+c1.addEventListener('pointerup',finishDraw);
+c1.addEventListener('pointercancel',finishDraw);
+c1.addEventListener('lostpointercapture',finishDraw);
+window.addEventListener('blur',finishDraw);
+
+bindLegend(c1,'c1',true); bindLegend(c2,'c2'); bindLegend(c3,'c3');
+bindLegend(c4,'c4'); bindLegend(c5,'c5'); bindLegend(c6,'c6'); bindLegend(c7,'c7');
+
+/* ═══ 尾部精度表：KS 是绝对偏差, 会掩盖尾部的相对误差 ═══ */
+/* 上尾概率用 Gil–Pelaez：P(X>z) = 1/2 − (1/π)∫₀^T Im[e^{−itz}φ(t)]/t dt。
+   一个 z 只要一条积分, 比"先求密度再累积"快两个数量级。
+   这张表只看固定的 n=10/30/100, 与 n 滑块无关 ⟹ 只在总体变化时重算。 */
+function tailTable(){
+  const ZS=[0,1.2816,1.6449,2.3263], NOM=['50%','10%','5%','1%'];
+  const rows=[];
+  for(const nn of [10,30,100]){
+    const T=60, M=6000, P=phiSnAt(nn,T,M), dt=T/M;
+    /* 被积函数在 t→0 处的极限是 −z（因为标准化后 E[Y]=0 ⟹ φ(t)=1−t²/2+O(t³)，
+       Im[e^{−itz}φ(t)] ≈ −tz）。漏掉这个端点会留下 ~dt·z/π 的系统偏差。 */
+    const sf=z=>{ let acc=0.5*(-z);                           // t=0 端点
+      for(let k=M+1;k<=2*M;k++){ const t=-T+k*dt;             // 只取 t>0 那半边
+        const im = P.re[k]*(-Math.sin(t*z)) + P.im[k]*Math.cos(t*z);
+        acc += (k===2*M?0.5:1)*im/t; }
+      return 0.5 + acc*dt/Math.PI; };        // 生存函数 S(z)=1−F(z)
+    let ks=0;
+    for(let i=0;i<=240;i++){ const z=-6+12*i/240; ks=Math.max(ks, Math.abs((1-sf(z))-ncdf(z))); }
+    const cell=z=>{ const got=sf(z), th=1-ncdf(z);
+      const rel=(got/th-1)*100;
+      const col=Math.abs(rel)<5?'#27713d':(Math.abs(rel)<20?'#c98a20':'#c0392b');
+      return `<td>${(got*100).toFixed(2)}%<br><span style="font-size:10.5px;opacity:.8">名义 ${(th*100).toFixed(2)}%</span>`
+        + `<br><span style="color:${col};font-weight:700">${rel>=0?'+':''}${rel.toFixed(0)}%</span></td>`; };
+    rows.push(`<tr><td class="lb">n=${nn}</td><td>${ks.toFixed(4)}</td>`+ZS.map(cell).join('')+`</tr>`);
+  }
+  $('tail').innerHTML =
+    `<tr><th style="text-align:left">样本量</th><th>KS<br><span style="font-weight:400">(绝对偏差)</span></th>`
+    + ZS.map((z,i)=>`<th>上尾 ${NOM[i]}<br><span style="font-weight:400">z=${z.toFixed(2)}</span></th>`).join('')
+    + `</tr>` + rows.join('');
+  const sym = Math.abs(skew)<0.5;
+  $('tailnote').innerHTML =
+    `每格三行：<b>精确值</b> / 正态名义值 / <b>相对误差</b>（绿 &lt;5%，黄 &lt;20%，红 ≥20%）。`
+    + `<br><b>关键</b>：KS 是<b>绝对</b>偏差，尾部概率本身就小，所以 KS 看着小的时候尾部<b>相对</b>误差可能还很大。`
+    + (sym
+      ? `　当前总体偏度 γ₁=${skew.toFixed(2)} 很小，所以连 1% 尾都很快就准了 —— <b>这种情况下"十几个就够"成立</b>。
+         换成<b>指数</b>或<b>对数正态</b>看看，1% 尾那一列会变红。`
+      : `　<b style="color:#c0392b">当前总体偏度 γ₁=${skew.toFixed(2)} 较大，1% 尾那一列就是"n>30 够用"这条经验法则失效的地方。</b>
+         这也正是强偏态数据下 t 检验实付 α 会偏离名义值的原因 —— 假设检验用的恰恰是尾部。`)
+    + `<br><span class="hint">"n>30 就够"是对<b>中等偏度、且只关心中心或中等分位</b>的经验法则，不是定理。</span>`;
+}
+
+/* ═══ 渲染 ═══ */
+function render(){
+  const n=NLAD[+$('ns').value]; nOfCur=n;
+  $('nsV').textContent='n='+n+'　('+(+$('ns').value+1)+'/'+NLAD.length+')';
+  const P=phiSn(n);
+  draw1(); draw2(); draw3(P); const ks=draw4(P); draw5(n); const dd=drawTrunc(n,P); drawResid();
+  const ta=taylorResid(n), fq=freqResid(P);
+  const nm = mode==='custom'?'手绘':PN[mode];
+  $('st').innerHTML =
+    `总体 <b>${nm}</b>　` + (isCauchy? `<span class="r">μ、σ 都不存在</span>`
+      : `偏度 γ₁=<b>${skew.toFixed(3)}</b>　超额峰度 γ₂=<b>${kurt.toFixed(3)}</b>`)
+    + `　样本量 <b>n=${n}</b>`
+    + `<br>步骤③ 窗口 |u| ≤ T/√n = <b>${(TMAX/Math.sqrt(n)).toFixed(4)}</b>`
+　+ `　展开残差×n = <b class="${ta<0.05?'g':'y'}">${isFinite(ta)?ta.toExponential(2):'—'}</b>`
+    + `<br>步骤④ 频域残差 max|φ_Sₙ − e^(−t²/2)| = <b class="${fq<0.02?'g':'y'}">${fq.toFixed(5)}</b>`
+    + `　步骤⑤ 时域 KS = <b class="${ks<0.02?'g':'y'}">${ks.toFixed(5)}</b>`;
+  $('trunc').innerHTML = (!isCauchy && n<=8)
+    ? `<br><span style="color:#a8481a">当前 n=${n} ≤ 8，本图用 T=120 积分（其余各图仍用 T=${TMAX}）。</span>` : '';
+  $('warn').innerHTML = isCauchy
+    ? `<div class="warn"><b>柯西：证明在步骤③就断了。</b>
+       它的 φ(u)=e<sup>−|u|</sup> 在 0 处只有尖点、<b>二阶不可导</b>，所以
+       "φ(u)=1−u²/2+o(u²)" 这一行根本写不出来（图2 里蓝线贴不上红抛物线）。<br>
+       用 √n 标准化会得到 φ<sub>Sₙ</sub>(t)=[e<sup>−|t|/√n</sup>]<sup>n</sup>=e<sup>−√n|t|</sup>，
+       n 增大时它在 t≠0 处 <b>→0</b>、在 t=0 处恒 =1 —— 极限函数<b>在 0 处不连续</b>，
+       Lévy 定理的前提不满足，所以不收敛到任何分布（概率跑向无穷远）。图3 里那条蓝线会塌成一根钉子。<br>
+       <span class="hint">顺带：若改用 1/n 标准化，则 [e<sup>−|t|/n</sup>]<sup>n</sup>=e<sup>−|t|</sup> 恒定不变
+       —— 柯西是稳定律的另一个不动点，这正是 CLT demo 里 n=1/30/500 三条曲线重合的解析原因。</span></div>`
+    : '';
+  /* 实际收敛阶取决于偏度：γ₁≠0 时首阶 Edgeworth 项 ~γ₁/√n；γ₁=0 时它整个消失, 退到 1/n。
+     Berry–Esseen 的 O(n^{-1/2}) 只是上界。 */
+  const sym = !isCauchy && Math.abs(skew)<1e-6;
+  const ordr = isCauchy? '不收敛' : (sym? 'O(n<sup>−1</sup>)' : 'O(n<sup>−1/2</sup>)');
+  const ordWhy = isCauchy? '前提不成立'
+    : (sym? `本总体 γ₁=0 → 首阶项消失，实际是 1/n` : `本总体 γ₁=${skew.toFixed(2)}≠0 → 首阶 γ₁/√n 主导`);
+  const row=(k,v,th,note)=>`<tr><td class="lb">${k}</td><td><b>${isFinite(v)?v.toExponential(2):'—'}</b></td>`
+    + `<td>${th}</td><td class="lb" style="font-size:11px;opacity:.8">${note}</td></tr>`;
+  $('err').innerHTML =
+    `<tr><th style="text-align:left">残差</th><th>当前 n</th><th>理论量级</th><th style="text-align:left">对应步骤</th></tr>`
+    + row('③ 展开残差 ×n', ta,
+        (isCauchy||Math.abs(skew)<1e-6)?'O(n<sup>−1</sup>)':'O(n<sup>−1/2</sup>)',
+        `n·max|φ(t/√n)−(1−t²/2n)|　${(isCauchy||Math.abs(skew)<1e-6)?'γ₁=0 → 退到 1/n':'首阶 γ₁T³/6·n^(−1/2)'}`)
+    + row('④ 频域 max|Δφ|', fq, ordr, `max|φ_Sₙ(t) − e^(−t²/2)|　${ordWhy}`)
+    + row('⑤ 时域 KS', ks, ordr, `Berry–Esseen 只给上界 O(n^(−1/2))；${ordWhy}`)
+    + `<tr><td class="lb">窗口半宽 T/√n</td><td><b>${(TMAX/Math.sqrt(n)).toFixed(4)}</b></td>`
+    + `<td>O(n<sup>−1/2</sup>)</td><td class="lb" style="font-size:11px;opacity:.8">② 宗量收缩的尺度</td></tr>`;
+  $('note').innerHTML =
+    `<b>这一页一个样本都没抽。</b>图2、图3、图4 全是对图1 那条密度做<b>确定性变换</b>：`
+    + `φ 由 Σw<sub>j</sub>e<sup>iuz<sub>j</sub></sup> 精确求和得到，图3 是它的 n 次幂，图4 是数值逆傅里叶变换。`
+    + `所以这里看到的不是"抽样碰巧像正态"，而是<b>证明本身的每一步</b>。`
+    + `<br><b>整个证明的机关只有一处</b>：<b>φ<sub>Sₙ</sub>(t)=[φ<sub>Y</sub>(t/√n)]<sup>n</sup></b> 这个式子`
+    + `把两件相反的事锁在一起 —— 宗量按 √n <b>收缩</b>（图2 的黄窗口越来越窄，于是只有前两阶矩存活，`
+    + `总体的个性被丢掉），幂次按 n <b>放大</b>（把窗口里那点二次行为撑成 e<sup>−t²/2</sup>）。`
+    + `两者精确抵消：n·o(1/n)→0。<b>√n 这个标准化尺度就是被这个抵消唯一定下来的</b>。`
+    + `<br><b>所以"函数近似"只是手段，不是结论</b>：近似只发生在频域原点的一个<b>收缩到零</b>的邻域里，`
+    + `而结论是整个频域的逐点收敛；再由 Lévy 定理把它翻回 CDF 的收敛。近似误差从未被放过 —— `
+    + `它被 n 次幂放大后仍然趋于 0，这一点在左表"Taylor 残差 O(1/n)"那一行可以读出来。`
+    + `<br><b>动手看三件事</b>：① 拖 n，黄窗口收缩，蓝线在窗口内越来越贴红抛物线；`
+    + `② 图3 的蓝线从总体自己的形状一路变成 e<sup>−t²/2</sup>；`
+    + `③ 换成<b>偏度大</b>的总体（对数正态），三条残差曲线整体上移，但斜率不变 —— 慢的是常数，不是阶。`;
+}
+
+document.body.addEventListener('click',e=>{
+  const d=e.target.dataset||{};
+  if(d.p){ mode=d.p;
+    document.querySelectorAll('button[data-p]').forEach(b=>b.classList.toggle('on',b===e.target));
+    if(PRE[mode]) for(let i=0;i<K;i++) fv[i]=PRE[mode](i);
+    buildPop(); sweep(); render(); tailTable(); }
+});
+$('ns').addEventListener('input',render);
+
+for(let i=0;i<K;i++) fv[i]=PRE.uniform(i);
+buildPop(); sweep(); render(); tailTable();
+</script>
+</body>
+</html>
