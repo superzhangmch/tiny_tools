@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>抽样分布 —— χ²、t、F 是怎么涌现出来的</title>
+<style>
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; margin:14px 16px; color:#222; }
+  h1 { font-size:17px; margin:0 0 8px; }
+  canvas { border:1px solid #ddd; display:block; background:#fff; }
+  button { font-size:12.5px; padding:2px 9px; border:1px solid #bbb; background:#fafafa;
+           border-radius:4px; cursor:pointer; }
+  button.on { background:#1a63d8; border-color:#1a63d8; color:#fff; font-weight:600; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12.5px; margin:5px 0; }
+  .cap { font-size:11.5px; color:#555; margin:3px 0 7px; }
+  .hint { color:#777; font-size:11px; }
+  .mono { font-family:Menlo,Consolas,monospace; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  .grid { display:grid; gap:5px 10px; align-items:center;
+          grid-template-columns:112px 230px 92px minmax(0,1fr); }
+  .grid input[type=range] { width:100%; margin:0; }
+  .st { font-family:Menlo,Consolas,monospace; font-size:12.5px; background:#0f1522; color:#dfe6f3;
+        padding:6px 10px; border-radius:4px; margin:5px 0; line-height:1.95; }
+  .st b { color:#7fd3c4; } .st .r { color:#ff8f7a; } .st .g { color:#8fe09a; }
+  table.t2 { border-collapse:collapse; font-size:12px; }
+  table.t2 td, table.t2 th { border:1px solid #ccc; padding:3px 8px; text-align:right;
+    font-family:Menlo,Consolas,monospace; white-space:nowrap; }
+  table.t2 th { background:#eef1f6; text-align:center; font-family:inherit; }
+  table.t2 td.lb { text-align:left; font-family:inherit; background:#f7f8fa; }
+  .note { background:#f6f7fa; border-left:3px solid #9aa6bd; padding:6px 10px;
+          font-size:11.5px; color:#444; line-height:1.7; max-width:1090px; margin:8px 0; }
+  .warn { background:#fff4e5; border:1px solid #e0b070; border-radius:4px; padding:5px 9px;
+          font-size:12px; line-height:1.6; max-width:1090px; margin:5px 0; }
+</style>
+</head>
+<body>
+<h1>抽样分布 —— <b>χ²、t、F 是怎么涌现出来的</b>
+  <span style="font-size:12.5px;font-weight:400;color:#555">
+  三者都是「<b>对某个总体抽 n 个数，再算一个统计量</b>」。
+  规则：<b>绝不调用目标分布的生成器</b>，只从更基本的抽样里让它自己长出来</span></h1>
+
+<div class="bar">
+  <b>选一个</b>
+  <button data-m="chi2" class="on">χ² ← 正态样本的方差</button>
+  <button data-m="t">t ← 标准化的样本均值</button>
+  <button data-m="f">F ← 两组方差之比</button>
+</div>
+<div id="popwarn"></div>
+
+<div class="warn" id="recipe"></div>
+
+<div style="color:#c0392b;font-size:12.5px;font-weight:600;margin:6px 0 2px">
+  ⚠ χ²、t、F 这三个分布的理论<b>只对正态总体成立</b>。
+  <span style="font-weight:400">下面那几个<b>非正态</b>的选项（含手绘）不是摆设，
+  它们存在的唯一目的就是<b>演示这一点</b>：一换过去，蓝柱立刻离开红线，而且偏离多少是可以量出来的。
+  那时的"对不上"<b>不是 bug，正是要看的结论</b>。</span>
+</div>
+<div class="bar" id="popbar">
+  <b>抽样总体</b><span class="hint">正态＝前提成立；其余＝故意破坏前提</span>
+  <button data-p="normal" class="on">正态</button>
+  <button data-p="uniform">均匀</button>
+  <button data-p="exp">指数(偏态)</button>
+  <button data-p="lognorm">对数正态(强偏态)</button>
+  <button data-p="bimodal">双峰</button>
+  <button data-p="spike">尖峰厚尾</button>
+  <span class="hint">或者<b>直接在下面那条画布上拖着画</b>，想画什么形状都行</span>
+  <span style="color:#c0392b;font-size:11.5px">← 这些都会破坏正态前提</span>
+</div>
+<div id="popwrap">
+  <canvas id="pop" width="1100" height="112"></canvas>
+  <div class="cap"><b>抽样总体</b>（<b>可拖动手绘</b>）　<span style="color:#c0392b">▎μ</span>
+    　<span style="color:#888">┆ μ±σ</span>　<span class="hint">抽出来的数会先标准化成 μ=0、σ=1，所以只有<b>形状</b>要紧</span></div>
+</div>
+<div class="bar">
+  <div class="grid" id="parms"></div>
+</div>
+<div class="bar">
+  <b>抽多少次</b>
+  <button data-r="1000">1千</button>
+  <button data-r="10000">1万</button>
+  <button data-r="100000" class="on">10万</button>
+  <button data-r="500000">50万</button>
+  <span class="mono" id="prog"></span>
+</div>
+
+<canvas id="main" width="1100" height="340"></canvas>
+<div class="cap" id="maincap"></div>
+
+<div class="st" id="st"></div>
+
+<div class="row">
+  <div>
+    <div class="cap" style="margin:0 0 4px"><b>分位数核对</b>　实测 vs 理论（这是比"看着像"严格得多的检验）</div>
+    <table class="t2" id="q"></table>
+  </div>
+  <div style="flex:1 1 0;min-width:330px">
+    <div class="cap" style="margin:0 0 4px"><b>矩核对</b></div>
+    <table class="t2" id="mo"></table>
+    <div class="cap" id="robust" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<div class="note" id="note"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const mcv=$('main'), g=mcv.getContext('2d');
+
+/* ═══ 只有一个均匀随机数发生器 ═══ */
+function mul32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296; }; }
+const rng=mul32(20260914);
+
+/* ═══ 特殊函数（画理论曲线/算理论分位数用，不参与抽样） ═══ */
+function lgam(x){ const c=[76.18009172947146,-86.50532032941677,24.01409824083091,
+  -1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+  let y=x, t=x+5.5; t-=(x+0.5)*Math.log(t); let s=1.000000000190015;
+  for(let j=0;j<6;j++) s+=c[j]/++y; return -t+Math.log(2.5066282746310005*s/x); }
+function gammap(a,x){                       // 正则化下不完全 Γ
+  if(x<=0) return 0;
+  if(x<a+1){ let ap=a,sum=1/a,del=sum;
+    for(let i=0;i<500;i++){ ap++; del*=x/ap; sum+=del; if(Math.abs(del)<Math.abs(sum)*1e-14) break; }
+    return sum*Math.exp(-x+a*Math.log(x)-lgam(a)); }
+  let b=x+1-a,c=1e300,d=1/b,h=d;
+  for(let i=1;i<500;i++){ const an=-i*(i-a); b+=2; d=an*d+b; if(Math.abs(d)<1e-300) d=1e-300;
+    c=b+an/c; if(Math.abs(c)<1e-300) c=1e-300; d=1/d; const del=d*c; h*=del;
+    if(Math.abs(del-1)<1e-14) break; }
+  return 1-Math.exp(-x+a*Math.log(x)-lgam(a))*h;
+}
+function betacf(a,b,x){ const qab=a+b,qap=a+1,qam=a-1; let c=1,d=1-qab*x/qap;
+  if(Math.abs(d)<1e-300) d=1e-300; d=1/d; let h=d;
+  for(let m=1;m<=300;m++){ const m2=2*m;
+    let aa=m*(b-m)*x/((qam+m2)*(a+m2));
+    d=1+aa*d; if(Math.abs(d)<1e-300) d=1e-300; c=1+aa/c; if(Math.abs(c)<1e-300) c=1e-300;
+    d=1/d; h*=d*c;
+    aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2));
+    d=1+aa*d; if(Math.abs(d)<1e-300) d=1e-300; c=1+aa/c; if(Math.abs(c)<1e-300) c=1e-300;
+    d=1/d; const del=d*c; h*=del; if(Math.abs(del-1)<1e-14) break; }
+  return h; }
+function ibeta(a,b,x){ if(x<=0) return 0; if(x>=1) return 1;
+  const bt=Math.exp(lgam(a+b)-lgam(a)-lgam(b)+a*Math.log(x)+b*Math.log(1-x));
+  return x<(a+1)/(a+b+2) ? bt*betacf(a,b,x)/a : 1-bt*betacf(b,a,1-x)/b; }
+
+const chi2cdf=(x,k)=>gammap(k/2,x/2);
+const chi2pdf=(x,k)=>x<=0?0:Math.exp((k/2-1)*Math.log(x)-x/2-(k/2)*Math.LN2-lgam(k/2));
+const tcdf=(t,v)=>{ const p=0.5*ibeta(v/2,0.5,v/(v+t*t)); return t>0?1-p:p; };
+const tpdf=(t,v)=>Math.exp(lgam((v+1)/2)-lgam(v/2))/Math.sqrt(v*Math.PI)*Math.pow(1+t*t/v,-(v+1)/2);
+const fcdf=(x,a,b)=>x<=0?0:ibeta(a/2,b/2,a*x/(a*x+b));
+const fpdf=(x,a,b)=>x<=0?0:Math.exp((a/2)*Math.log(a)+(b/2)*Math.log(b)+(a/2-1)*Math.log(x)
+  -((a+b)/2)*Math.log(b+a*x)+lgam((a+b)/2)-lgam(a/2)-lgam(b/2));
+function invCDF(cdf,p,lo,hi){ for(let i=0;i<80;i++){ const m=(lo+hi)/2;
+  if(cdf(m)<p) lo=m; else hi=m; } return (lo+hi)/2; }
+
+/* ═══ 抽样总体 ═══ */
+const K=256;
+const PRE={ normal:i=>{const z=(i/K-0.5)*7; return Math.exp(-z*z/2);},
+  uniform:i=>1, exp:i=>Math.exp(-(i/K)*6),
+  lognorm:i=>{const x=i/K*4+0.02; const l=Math.log(x)+0.9; return Math.exp(-l*l/0.6)/x;},
+  bimodal:i=>{const a=(i/K-0.26)*11,b=(i/K-0.76)*11; return Math.exp(-a*a/2)+0.8*Math.exp(-b*b/2);},
+  spike:i=>{const z=(i/K-0.5)*7; return Math.exp(-Math.abs(z)*1.6)+0.012;} };
+const PNAME={normal:'正态',uniform:'均匀',exp:'指数(偏态)',lognorm:'对数正态(强偏态)',
+             bimodal:'双峰',spike:'尖峰厚尾'};
+let popMode='normal', POP=null, fv=new Float64Array(K);
+function buildPop(){
+  const f=fv;                               // 直接用可编辑的密度（预设/手绘都写进它）
+  let w=0,m=0; for(let i=0;i<K;i++){ w+=f[i]; m+=f[i]*(i+0.5)/K; }
+  if(w<=1e-12){ for(let i=0;i<K;i++) fv[i]=PRE.normal(i); return buildPop(); }
+  m/=w;
+  let v=0,s3=0,s4=0;
+  for(let i=0;i<K;i++){ const d=(i+0.5)/K-m; v+=f[i]*d*d; s3+=f[i]*d*d*d; s4+=f[i]*d*d*d*d; }
+  v/=w; s3/=w; s4/=w; const sd=Math.sqrt(v);
+  const cdf=new Float64Array(K); let acc=0; for(let i=0;i<K;i++){ acc+=f[i]/w; cdf[i]=acc; }
+  POP={ name:popMode==='custom'?'手绘':PNAME[popMode], mu:m, sd, skew:s3/sd**3, kurt:s4/sd**4-3, raw:f,
+    z:r=>{ const u=r(); let lo=0,hi=K-1;
+      while(lo<hi){ const q=(lo+hi)>>1; if(cdf[q]<u) lo=q+1; else hi=q; }
+      return (((lo+r())/K)-m)/sd; } };   // 标准化：均值 0、标准差 1
+}
+
+/* ═══ 四种模式 ═══ */
+let MODE='chi2', RUNS=100000, remain=0, dirty=true, n1=10, n2=10;
+const NB=160; let hist=new Float64Array(NB), lo=0, hi=1, over=0, nA=0, s1=0, s2=0;
+
+const M={
+  chi2:{
+    title:'χ² —— 正态样本的方差',
+    recipe:()=>`<b>配方</b>：从总体抽 n=${n1} 个数 → 算样本方差 s² → 看统计量 `
+      + `<b>W = (n−1)s²/σ²</b>。<b>断言</b>：总体正态时 W ~ χ²(n−1)，自由度 ${n1-1}。`
+      + `　<span class="hint">程序里没有 χ² 生成器，W 全靠对总体抽样算出来。</span>`,
+    df:()=>n1-1,
+    range:()=>{ const k=n1-1; return [0, Math.max(8, k+5*Math.sqrt(2*k))]; },
+    pdf:x=>chi2pdf(x,n1-1), cdf:x=>chi2cdf(x,n1-1),
+    draw:()=>{ let s=0,q=0; for(let i=0;i<n1;i++){ const v=POP.z(rng); s+=v; q+=v*v; }
+      const m=s/n1; return (q-n1*m*m); },           // σ=1 ⇒ (n−1)s²/σ² = Σ(x−x̄)²
+    mean:()=>n1-1, vari:()=>2*(n1-1),
+    xlab:()=>`W = (n−1)s²/σ²　理论 χ²(${n1-1})`,
+  },
+  t:{
+    title:'t —— 标准化的样本均值',
+    recipe:()=>`<b>配方</b>：抽 n=${n1} 个数 → 算 x̄ 和 s → 看统计量 `
+      + `<b>T = (x̄−μ)/(s/√n)</b>。<b>断言</b>：总体正态时 T ~ t(n−1)，自由度 ${n1-1}。`
+      + `　<span class="hint">注意分母用的是<b>样本</b>标准差 s，不是 σ —— 正因如此才是 t 而不是正态。</span>`,
+    df:()=>n1-1,
+    range:()=>{ const h=Math.min(12, invCDF(x=>tcdf(x,n1-1),0.9975,0,60));
+                return [-h,h]; },        // 按自由度自适应：小 df 时 t 的尾巴很重
+    pdf:x=>tpdf(x,n1-1), cdf:x=>tcdf(x,n1-1),
+    draw:()=>{ let s=0,q=0; for(let i=0;i<n1;i++){ const v=POP.z(rng); s+=v; q+=v*v; }
+      const m=s/n1, sd=Math.sqrt(Math.max((q-n1*m*m)/(n1-1),1e-300));
+      return m/(sd/Math.sqrt(n1)); },
+    mean:()=>n1-1>1?0:NaN, vari:()=>n1-1>2?(n1-1)/(n1-3):NaN,
+    xlab:()=>`T = (x̄−μ)/(s/√n)　理论 t(${n1-1})`,
+  },
+  f:{
+    title:'F —— 两组方差之比',
+    recipe:()=>`<b>配方</b>：抽两组，n₁=${n1}、n₂=${n2} → 各算样本方差 → 看 `
+      + `<b>F = s₁²/s₂²</b>。<b>断言</b>：两组都来自同一正态总体时 F ~ F(${n1-1}, ${n2-1})。`,
+    df:()=>[n1-1,n2-1],
+    range:()=>[0, Math.min(30, invCDF(x=>fcdf(x,n1-1,n2-1),0.998,0,400)*1.05)],
+    pdf:x=>fpdf(x,n1-1,n2-1), cdf:x=>fcdf(x,n1-1,n2-1),
+    draw:()=>{ const sv=n=>{ let s=0,q=0; for(let i=0;i<n;i++){ const v=POP.z(rng); s+=v; q+=v*v; }
+        return (q-s*s/n)/(n-1); };          // Σ(x−x̄)²/(n−1)
+      const a=sv(n1), b=sv(n2); return b>1e-300? a/b : NaN; },
+    mean:()=>n2-1>2? (n2-1)/(n2-3) : NaN,
+    vari:()=>{ const d1=n1-1,d2=n2-1; return d2>4? 2*d2*d2*(d1+d2-2)/(d1*(d2-2)*(d2-2)*(d2-4)) : NaN; },
+    xlab:()=>`F = s₁²/s₂²　理论 F(${n1-1}, ${n2-1})`,
+  },
+};
+
+/* ═══ 参数控件 ═══ */
+function buildParms(){
+  const m=MODE;
+  let h='';
+  const sl=(id,lab,min,max,val,hint)=>
+    `<span class="mono">${lab}</span><input type="range" id="${id}" min="${min}" max="${max}" step="1" value="${val}">`
+    + `<span class="mono" id="${id}V"></span><span class="hint">${hint}</span>`;
+  if(m==='f'){
+    h = sl('n1','第一组 n₁',3,200,n1,'')+sl('n2','第二组 n₂',3,200,n2,'');
+  } else {
+    h = sl('n1','样本量 n',3,200,n1, m==='t'?'n 越大 t 越接近正态':'自由度 = n−1');
+  }
+  $('parms').innerHTML=h;
+  $('parms').querySelectorAll('input').forEach(inp=>inp.addEventListener('input',()=>{
+    if(inp.id==='n1') n1=+inp.value; if(inp.id==='n2') n2=+inp.value;
+    reset(); }));
+
+}
+
+/* ═══ 累积 ═══ */
+function reset(){
+  const m=M[MODE]; [lo,hi]=m.range();
+  hist=new Float64Array(m.discrete? Math.round(hi)+1 : NB);
+  over=0; nA=0; s1=0; s2=0; remain=RUNS; dirty=true;
+}
+function push(x){
+  if(!isFinite(x)) return;
+  nA++; s1+=x; s2+=x*x;
+  const m=M[MODE];
+  if(m.discrete){ if(x>=0&&x<hist.length) hist[Math.round(x)]++; else over++; return; }
+  if(x<lo||x>=hi){ over++; return; }
+  hist[Math.min(hist.length-1,Math.floor((x-lo)/(hi-lo)*hist.length))]++;
+}
+
+/* ═══ 画图 ═══ */
+function draw(){
+  const m=M[MODE], W=mcv.width,H=mcv.height,L=64,R=30,T=16,B=42,PW=W-L-R,PH=H-T-B,y0=T+PH;
+  g.fillStyle='#fff'; g.fillRect(0,0,W,H);
+  const X=v=>L+(v-lo)/(hi-lo)*PW;
+  let peak=1e-9;
+  if(m.discrete){
+    for(let k=0;k<hist.length;k++) peak=Math.max(peak, m.pmf(k), nA?hist[k]/nA:0);
+  } else {
+    const bw=(hi-lo)/hist.length;
+    for(let k=0;k<hist.length;k++) peak=Math.max(peak, nA?hist[k]/nA/bw:0);
+    for(let i=0;i<=200;i++) peak=Math.max(peak, m.pdf(lo+(hi-lo)*i/200));
+  }
+  const Y=d=>y0-d/(peak*1.1)*PH;
+  g.strokeStyle='#eee'; for(let k=1;k<=4;k++){ const y=y0-PH*k/4;
+    g.beginPath(); g.moveTo(L,y); g.lineTo(L+PW,y); g.stroke(); }
+  if(m.discrete){
+    const bwpx=PW/(hist.length);
+    for(let k=0;k<hist.length;k++){
+      if(nA){ g.fillStyle='rgba(31,58,110,.55)';
+        const h=y0-Y(hist[k]/nA); g.fillRect(X(k)-bwpx*0.32, Y(hist[k]/nA), bwpx*0.64, h); }
+      g.strokeStyle='#c0392b'; g.lineWidth=2;                       // 理论 pmf：红色横杠
+      const yt=Y(m.pmf(k));
+      g.beginPath(); g.moveTo(X(k)-bwpx*0.42, yt); g.lineTo(X(k)+bwpx*0.42, yt); g.stroke();
+    }
+  } else {
+    const bw=(hi-lo)/hist.length;
+    if(nA){ g.fillStyle='rgba(31,58,110,.55)';
+      for(let k=0;k<hist.length;k++){ const d=hist[k]/nA/bw; if(d<=0) continue;
+        g.fillRect(X(lo+k*bw)+0.5, Y(d), Math.max(1,PW/hist.length-1), y0-Y(d)); } }
+    g.strokeStyle='#c0392b'; g.lineWidth=2; g.beginPath();
+    for(let px=0;px<=PW;px++){ const v=lo+(hi-lo)*px/PW, y=Y(m.pdf(v));
+      px?g.lineTo(L+px,y):g.moveTo(L+px,y); }
+    g.stroke();
+  }
+  g.strokeStyle='#bbb'; g.lineWidth=1;
+  g.beginPath(); g.moveTo(L,y0+0.5); g.lineTo(L+PW,y0+0.5); g.stroke();
+  g.fillStyle='#777'; g.font='10px Menlo'; g.textAlign='center';
+  const step=m.discrete? Math.max(1,Math.round(hist.length/14)) : (hi-lo)/10;
+  if(m.discrete){ for(let k=0;k<hist.length;k+=step){
+      g.beginPath(); g.moveTo(X(k),y0); g.lineTo(X(k),y0+4); g.stroke(); g.fillText(String(k),X(k),y0+15); } }
+  else { for(let i=0;i<=10;i++){ const v=lo+(hi-lo)*i/10;
+      g.beginPath(); g.moveTo(X(v),y0); g.lineTo(X(v),y0+4); g.stroke();
+      g.fillText(v.toFixed(Math.abs(hi-lo)>20?0:2),X(v),y0+15); } }
+  g.fillStyle='#555'; g.font='11.5px Arial'; g.fillText(m.xlab(), L+PW/2, y0+32);
+  g.textAlign='left'; g.font='12px Arial'; g.fillStyle='#c0392b';
+  g.fillText(m.discrete?'红杠 = 理论 pmf（公式画的）':'红线 = 理论 pdf（公式画的）', L+8, T+14);
+  g.fillStyle='#1f3a6e'; g.fillText('蓝柱 = 实测（抽样数出来的）', L+8, T+30);
+  if(over>0){ g.fillStyle='#999'; g.font='10.5px Arial';
+    g.fillText(`超出画面 ${(100*over/Math.max(nA,1)).toFixed(2)}%`, L+8, T+46); }
+}
+
+/* ═══ 总体画布 + 手绘 ═══ */
+const pcv=$('pop'), gp=pcv.getContext('2d');
+const PL=64, PR=30;
+function drawPopCanvas(){
+  const W=pcv.width,H=pcv.height,PW=W-PL-PR;
+  gp.fillStyle='#fff'; gp.fillRect(0,0,W,H);
+  const X=v=>PL+v*PW;
+  let mx=0; for(let i=0;i<K;i++) mx=Math.max(mx,fv[i]); mx=mx||1;
+  gp.fillStyle='rgba(31,58,110,.22)'; gp.strokeStyle='#1f3a6e'; gp.lineWidth=1.5;
+  gp.beginPath(); gp.moveTo(X(0),H-14);
+  for(let i=0;i<K;i++) gp.lineTo(X((i+0.5)/K), H-14-fv[i]/mx*(H-30));
+  gp.lineTo(X(1),H-14); gp.closePath(); gp.fill(); gp.stroke();
+  gp.strokeStyle='#c0392b'; gp.lineWidth=2;
+  gp.beginPath(); gp.moveTo(X(POP.mu),6); gp.lineTo(X(POP.mu),H-14); gp.stroke();
+  gp.strokeStyle='#999'; gp.lineWidth=1; gp.setLineDash([4,3]);
+  for(const t of [-1,1]){ const v=POP.mu+t*POP.sd; if(v<0||v>1) continue;
+    gp.beginPath(); gp.moveTo(X(v),10); gp.lineTo(X(v),H-14); gp.stroke(); }
+  gp.setLineDash([]);
+  gp.strokeStyle='#bbb'; gp.lineWidth=1; const y=H-14+0.5;
+  gp.beginPath(); gp.moveTo(PL,y); gp.lineTo(PL+PW,y); gp.stroke();
+  gp.fillStyle='#777'; gp.font='10px Menlo'; gp.textAlign='center';
+  for(let k=0;k<=5;k++){ const x=Math.round(PL+PW*k/5)+0.5;
+    gp.beginPath(); gp.moveTo(x,y); gp.lineTo(x,y+4); gp.stroke();
+    gp.fillText((k/5).toFixed(1),x,y+13); }
+  gp.textAlign='right'; gp.fillStyle='#888'; gp.font='10.5px Arial';
+  gp.fillText('可拖动手绘', W-PR, 14); gp.textAlign='left';
+  gp.fillStyle='#555'; gp.font='11px Menlo';
+  gp.fillText(`偏度 ${POP.skew.toFixed(2)}　超额峰度 ${POP.kurt.toFixed(2)}`, PL+6, 14);
+}
+let drawing=false,lastI=null;
+function paint(e){
+  const r=pcv.getBoundingClientRect();
+  const px=(e.clientX-r.left)/r.width*pcv.width;
+  const t=(px-PL)/(pcv.width-PL-PR); if(t<0||t>1) return;
+  const i=Math.max(0,Math.min(K-1,Math.floor(t*K)));
+  const h=Math.max(0,Math.min(1,1-(e.clientY-r.top)/r.height*1.12));
+  if(lastI!==null&&Math.abs(i-lastI[0])>1){ const [i0,h0]=lastI, d=i-i0, sg=Math.sign(d);
+    for(let k=1;k<=Math.abs(d);k++) fv[i0+sg*k]=h0+(h-h0)*k/Math.abs(d); }
+  else fv[i]=h;
+  lastI=[i,h]; buildPop(); dirty=true;
+}
+pcv.addEventListener('pointerdown',e=>{ drawing=true; pcv.setPointerCapture(e.pointerId); paint(e); });
+pcv.addEventListener('pointermove',e=>{ if(drawing) paint(e); });
+pcv.addEventListener('pointerup',()=>{ if(drawing){ drawing=false; lastI=null;
+  popMode='custom'; document.querySelectorAll('button[data-p]').forEach(b=>b.classList.remove('on'));
+  buildPop(); reset(); } });
+
+/* ═══ 核对表 ═══ */
+function tables(){
+  const m=M[MODE];
+  const mean=nA?s1/nA:0, vr=nA?s2/nA-mean*mean:0;
+  const tm=m.mean(), tv=m.vari();
+  const cmp=(a,b,tol)=>!isFinite(b)?'<span style="opacity:.5">不存在</span>'
+    :`<span style="color:${Math.abs(a-b)<=tol?'#27713d':'#c0392b'}">${(a-b>=0?'+':'')}${(a-b).toFixed(4)} ${Math.abs(a-b)<=tol?'✓':'✗'}</span>`;
+  $('mo').innerHTML =
+    `<tr><th style="text-align:left">量</th><th>实测</th><th>理论</th><th>差</th></tr>`
+    + `<tr><td class="lb">均值</td><td><b>${mean.toFixed(4)}</b></td>`
+    + `<td>${isFinite(tm)?tm.toFixed(4):'不存在'}</td><td>${cmp(mean,tm,Math.max(0.02,6*Math.sqrt(Math.max(vr,0)/Math.max(nA,1))))}</td></tr>`
+    + `<tr><td class="lb">方差</td><td><b>${vr.toFixed(4)}</b></td>`
+    + `<td>${isFinite(tv)?tv.toFixed(4):'不存在'}</td><td>${cmp(vr,tv,Math.max(0.05,0.06*Math.abs(tv||1)))}</td></tr>`;
+
+  const ps=[0.01,0.05,0.25,0.50,0.75,0.95,0.99];
+  let rows='';
+  if(nA){
+    if(m.discrete){
+      let c=0, idx=0; const emp=[];
+      const tot=nA;
+      for(const p of ps){ while(idx<hist.length && (c+hist[idx])/tot < p){ c+=hist[idx]; idx++; }
+        emp.push(idx); }
+      let cc=0; const tcum=[]; let ti=0;
+      for(const p of ps){ let s=0,k=0; while(k<hist.length){ s+=m.pmf(k); if(s>=p) break; k++; } tcum.push(k); }
+      ps.forEach((p,i)=>{ rows+=`<tr><td class="lb">${(p*100).toFixed(0)}% 分位</td>`
+        + `<td><b>${emp[i]}</b></td><td>${tcum[i]}</td>`
+        + `<td>${emp[i]===tcum[i]?'<span style="color:#27713d">一致 ✓</span>':'<span style="color:#c0392b">差 '+(emp[i]-tcum[i])+'</span>'}</td></tr>`; });
+    } else {
+      const bw=(hi-lo)/hist.length; let c=0, k=0;
+      ps.forEach(p=>{
+        while(k<hist.length && (c+hist[k])/nA<p){ c+=hist[k]; k++; }
+        const frac = hist[k]>0 ? (p*nA-c)/hist[k] : 0;
+        const e = lo + (k+Math.min(1,Math.max(0,frac)))*bw;
+        const th = invCDF(m.cdf,p,lo-2,hi+2);
+        const tol = Math.max(0.02, 3/(Math.sqrt(nA)*Math.max(m.pdf(th),1e-3)));
+        rows+=`<tr><td class="lb">${(p*100).toFixed(0)}% 分位</td><td><b>${e.toFixed(4)}</b></td>`
+          + `<td>${th.toFixed(4)}</td><td>${cmp(e,th,tol)}</td></tr>`;
+      });
+    }
+  }
+  $('q').innerHTML = `<tr><th style="text-align:left">分位</th><th>实测</th><th>理论</th><th>差</th></tr>`+rows;
+}
+
+/* ═══ 读数 ═══ */
+function stat(){
+  const m=M[MODE];
+  $('recipe').innerHTML = m.recipe();
+  $('prog').textContent = remain>0? `跑到 ${nA.toLocaleString()}，还剩 ${remain.toLocaleString()}`
+    : (nA? `已跑完 ${nA.toLocaleString()} 次` : '（未开始）');
+  $('parms').querySelectorAll('input').forEach(inp=>{
+    const v=$(inp.id+'V'); if(v) v.textContent=(inp.id==='n1'?'n₁=':'n₂=')+inp.value; });
+  const norm = popMode==='normal';
+  $('st').innerHTML = `<b>${m.title}</b>　`
+    + `总体 <b>${POP.name}</b>（已标准化成 μ=0、σ=1）　偏度 <b>${POP.skew.toFixed(3)}</b>`
+    + `　已抽 <b>${nA.toLocaleString()}</b> 次`
+    + (norm? ` <span class="g">← 理论前提成立</span>` : ` <span class="r">← 非正态总体，理论前提不成立</span>`);
+  $('maincap').innerHTML = m.xlab();
+  $('robust').innerHTML = (popMode==='normal'
+      ? `<b>现在总体是正态，理论前提成立，所以处处对得上。</b>换成偏态总体再看 —— 下面这张表是实测的：`+ROB
+      : `<b>⚠ 当前总体是「${POP.name}」，不是正态，看分位数那一列偏成什么样。</b>`+ROB);
+  /* 非正态时在图上方直接横幅说明，免得被当成 bug */
+  $('popwarn').innerHTML = norm ? '' :
+    `<div class="warn"><b>⚠ 蓝柱和红线现在本来就该错开。</b>`
+    + `χ²、t、F 的理论<b>只对正态总体成立</b>，而当前总体是「<b>${POP.name}</b>」（偏度 ${POP.skew.toFixed(2)}）。`
+    + `<br>这不是 demo 算错了 —— <b>这正是要看的东西</b>：把它换回「正态」，蓝柱立刻严丝合缝地贴回红线。`
+    + `下面分位数表里的偏差幅度，就是"假定正态但其实不是"要付的代价。</div>`;
+  $('note').innerHTML =
+    `<b>不作弊的规则</b>：红色理论曲线全部由公式画出，蓝柱全部由抽样数出；`
+    + `程序中<b>没有任何 χ²、t、F 的随机数生成器</b>，只有一个均匀分布发生器。`
+    + `<br><b>为什么这类 demo 有意义</b>：它给出的是<b>确定性结论</b> —— 断言要么对上要么对不上，`
+    + `你能直接把它数出来核对。这和假设检验那种"凡人永远看不到真相"的情形正好相反。`
+    + `<br><b>三者的血缘</b>：Z ~ N(0,1)、W ~ χ²(k) 且独立 ⇒ `
+    + `<b>T = Z/√(W/k) ~ t(k)</b>；两个独立 χ² 之比 ⇒ <b>F</b>。所以 t 和 F 都是从 χ² 长出来的，`
+    + `而 χ² 又是正态平方和。一旦总体不正态，这条链的<b>第一环</b>就断了。`;
+}
+
+/* 名义上尾 5% 处的实际尾概率，各 50 万次实测（理想 = 5.00%）。
+   要点是<b>方向</b>：n 变大时 χ²/F 越来越糟，t 却越来越好。 */
+const ROB = `<table class="t2" style="margin-top:6px">
+  <tr><th style="text-align:left">名义 5% 上尾<br>实际是多少</th><th>正态<br>n=10</th><th>正态<br>n=100</th>
+      <th>对数正态<br>n=10</th><th>对数正态<br>n=100</th><th style="text-align:left">n 变大时</th></tr>
+  <tr><td class="lb">χ²（方差）</td><td>4.69%</td><td>5.01%</td>
+      <td style="color:#c0392b">8.19%</td><td style="color:#c0392b"><b>14.93%</b></td>
+      <td class="lb" style="color:#c0392b">越来越糟 ✗</td></tr>
+  <tr><td class="lb">t（均值）</td><td>4.68%</td><td>4.86%</td>
+      <td style="color:#c98a20">1.58%</td><td style="color:#c98a20">3.34%</td>
+      <td class="lb" style="color:#27713d">在往 5% 靠 ✓</td></tr>
+  <tr><td class="lb">F（方差比）</td><td>4.65%</td><td>4.90%</td>
+      <td style="color:#c0392b">11.69%</td><td style="color:#c0392b"><b>14.63%</b></td>
+      <td class="lb" style="color:#c0392b">越来越糟 ✗</td></tr>
+  </table>
+  <div style="margin-top:4px">这就是实践中的铁律：<b>关于均值的 t 检验，样本一大就被中心极限定理救回来</b>；
+  而<b>关于方差的 χ²、F 检验没人来救 —— 加大 n 只会让错误更笃定</b>，因为它们依赖的是
+  "平方和服从 χ²"，那一步在非正态下从根上不成立。</div>`;
+
+/* ═══ 事件 + 主循环 ═══ */
+document.body.addEventListener('click',e=>{
+  const d=e.target.dataset||{};
+  if(d.m){ MODE=d.m; document.querySelectorAll('button[data-m]').forEach(b=>b.classList.toggle('on',b===e.target));
+    buildParms(); reset(); }
+  if(d.p){ popMode=d.p; document.querySelectorAll('button[data-p]').forEach(b=>b.classList.toggle('on',b===e.target));
+    for(let i=0;i<K;i++) fv[i]=PRE[popMode](i); buildPop(); reset(); }
+  if(d.r){ RUNS=+d.r; document.querySelectorAll('button[data-r]').forEach(b=>b.classList.toggle('on',b===e.target));
+    reset(); }
+});
+function frame(){
+  if(remain>0){
+    const cost = MODE==='f'? n1+n2 : n1;
+    const B=Math.min(remain, Math.max(200, Math.floor(200000/Math.max(cost,1))));
+    for(let b=0;b<B;b++) push(M[MODE].draw());
+    remain-=B; dirty=true;
+  }
+  if(dirty){ drawPopCanvas(); draw(); stat(); tables(); dirty=false; }
+  requestAnimationFrame(frame);
+}
+for(let i=0;i<K;i++) fv[i]=PRE.normal(i);
+buildPop(); buildParms(); reset(); frame();
+</script>
+</body>
+</html>
