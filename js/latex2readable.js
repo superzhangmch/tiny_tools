@@ -470,6 +470,10 @@ var _err_out = { innerHTML: '' };   // 错误收集(沿用页面时代的 html �
 	      }
 	    function convert_one(expr) {
 		expr = do_replace(expr.trim());
+		// LaTeX 里 _ 和 ^ 只吃一个 token。f_n(x) 的下标只是 n，(x) 是函数自变量；
+		// 但语法树会把 n(x) 当成函数调用并成一个节点，导致下标把括号一起吞掉（fₙ₍ₓ₎）。
+		// 显式补花括号 f_n(x) → f_{n}(x)，语义不变而分组正确。
+		expr = expr.replace(/([_^])[ \t]*([A-Za-z0-9])[ \t]*(?=\()/g, '$1{$2}');
 		const tokens = tokenize(expr, false);
 		const syntaxTree = buildSyntaxTree(tokens, expr, false);
 		var latex = buildLatex(syntaxTree, expr);
@@ -479,7 +483,7 @@ var _err_out = { innerHTML: '' };   // 错误收集(沿用页面时代的 html �
 		latex = latex.replace(/\s*_(\s*[^\^ \t]+\s*)\^(\s*[^\^_ \t\+\-\(\)]+)(\(| |\b|$)/g, function (match, p2, p3, p4) {
 		    var p2_1 = strip_braces(p2);
 		    var p3_1 = strip_braces(p3);
-		    if (p4 == '(') p3_1 = "";
+		    // (原来这里在 p4=='(' 时放弃上标, 导致 f_n^2(x) 退化成 fₙ^{2}(x))
 		    var s = trans(m_sub, p2_1);
 		    var s1 = trans(m_sup, p3_1);
 		    if (s && s1) {
@@ -494,7 +498,7 @@ var _err_out = { innerHTML: '' };   // 错误收集(沿用页面时代的 html �
 		    if (s) { return s+"^"; } else { return match; } });
 		// 镜像：C^d_i 上标在前下标在后
 		latex = latex.replace(/\s*\^(\s*[^\^_ \t]+\s*)_(\s*[^\^_ \t\+\-\(\)]+)(\(| |\b|$)/g, function (match, p3, p2, p4) {
-		    if (p4 == '(') return match;
+		    // (同上: 后跟 ( 时原来整段放弃, 导致 C^d_i(x) 完全不转)
 		    var s1 = trans(m_sup, strip_braces(p3));
 		    var s = trans(m_sub, strip_braces(p2));
 		    if (s && s1) {
