@@ -52,6 +52,8 @@
   <span style="color:#a8481a"><b>⑤ → ⑥ 才引入近似。</b></span>
   ⑤把 φ<sub>Y</sub> 在原点<b>截断到前两项</b> 1−u²/2 → ⑥截断版取 n 次幂得
   <b>[1−t²/2n]<sup>n</sup> → e<sup>−t²/2</sup></b>，再回头和③的精确曲线比。<br>
+  ⑦再把⑤那个截断近似<b>逆变换回时域</b>，看"如果真拿 1−u²/2 当特征函数，反推出的分布是什么" ——
+  答案是小 n 时<b>连密度都不是（有负值）</b>。<br>
   <b>CLT 的内容就是</b>：③那条精确曲线自己趋向 e<sup>−t²/2</sup>；而⑤的截断误差<b>即使被 n 次幂放大</b>也仍然趋于 0
   —— 所以近似只是<b>证明的手段</b>，结论是精确的。最后由 Lévy 连续性定理把频域收敛翻回分布收敛。<br><br>
   <b>哪些是精确算的、哪些是数值积分</b>（别把数值误差当成理论误差）：<br>
@@ -169,6 +171,68 @@
   </div>
 </div>
 
+<div class="row">
+  <div class="col">
+    <canvas id="c8" width="545" height="215"></canvas>
+    <div class="cap"><b>⑦ 把⑥那条<span style="color:#a8481a">截断版</span>也逆变换回时域</b>　
+      即：把 1−u²/2 当 φ<sub>Y</sub> 代进 [φ<sub>Y</sub>(t/√n)]<sup>n</sup>，得到 [1−t²/2n]<sup>n</sup>，
+      <b>反推出的是 S<sub>n</sub> 的"分布"</b>（<b style="color:#c0392b">不是 Y 的</b> ——
+      Y 自己那一档只对应 n=1，见右侧）。<br>
+      <span style="color:#a8481a">■ 橙 = 截断版反推的"密度"</span>／
+      <span style="color:#1f3a6e">■ 蓝 = ④的精确 S<sub>n</sub> 密度</span>／
+      <span style="color:#c0392b">■ 红虚 = 标准正态</span>。<br>
+      <b>看它的最小值</b>：小 n 时<b style="color:#c0392b">是负的</b> —— 那说明截断版<b>根本不是概率密度</b>；
+      n 变大它才先变成合法密度，再逼近正态。</div>
+  </div>
+  <div class="col">
+    <canvas id="c9" width="545" height="215"></canvas>
+    <div style="display:flex;align-items:center;gap:8px;margin:2px 0 0">
+      <span style="font-size:11.5px;white-space:nowrap"><b>⑧ 的独立 n</b></span>
+      <input type="range" id="ns2" min="0" max="27" value="3" style="flex:1;margin:0">
+      <span id="ns2V" style="font-size:11.5px;font-family:Menlo,monospace;white-space:nowrap;min-width:108px"></span>
+    </div>
+    <div class="cap"><b>⑧ 只看纯数学：[1 − t²/2n]<sup>n</sup> → e<sup>−t²/2</sup></b>　
+      这条滑杆<b>独立于全局 n</b>，只动这张图。<br>
+      <span style="color:#c0392b">■ 红虚 = 极限 e<sup>−t²/2</sup></span>（不动）／
+      <span style="color:#a8481a">■ 橙 = [1−t²/2n]<sup>n</sup></span>／
+      <span style="color:#1f3a6e">■ 蓝细 = 当前总体真实的 Re φ<sub>Sₙ</sub></span>（同一个 n，看近似贴不贴）。<br>
+      灰虚线 = 断点 t=√(2n)：<b>右边底数变负</b>，橙线就<b>画到这里为止</b>（再往外偶数 n 会变成大正数
+      又"飞回"画面，那是假象不是曲线回来了）；n 越大断点越往外推，
+      所以"钟形有效区"是靠 n 撑开的。开 legend 里的<b>族</b>可叠出所有档位，一眼看收敛。<br>
+      <b>图上两个数读法完全不同</b>：<code>max|橙−红|</code> 是<b>纯数学</b>，和总体<b>毫无关系</b>
+      （换任何总体都是 n=4→0.0738、10→0.0280、100→0.0027、400→0.0007，O(1/n)）；
+      <code>max|橙−蓝|</code> 才依赖总体 ——
+      正态/均匀 O(1/n)、对数正态/伯努利 O(1/√n)（偏度拖慢），
+      <b style="color:#c0392b">柯西则从 0.53 一路涨到 0.96</b>，近似永远贴不上，这就是反例的样子。</div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col" style="flex:0 0 1104px;max-width:1104px">
+    <div class="warn" style="margin-top:0">
+      <b>⚠ 先说清楚：<span style="color:#c0392b">1−u²/2 本身反推不出任何分布</span></b><br>
+      它连合法的特征函数都不是：特征函数必须处处 |φ|≤1，而 1−u²/2 在 |u|&gt;2 之后一路跌向 −∞
+      （按 Bochner 定理它不是正定的）。它的逆变换是
+      <b>δ(x) + ½δ″(x)</b> —— 一个点质量加上点质量的二阶导数，既不是函数也不非负。<br>
+      <b>所以⑦反推的不是它，而是它代进 n 次幂后的 [1−t²/2n]<sup>n</sup></b> —— 也就是 <b>S<sub>n</sub></b> 的分布，
+      不是 Y 的。Y 自己只对应 <b>n=1</b>（S₁=Y），而<b>即便 n=1 也必须加窗</b>：
+      1−t²/2 在 |t|→∞ 时跌向 −∞，∫|g|=∞，不加窗连逆变换都不存在。<br>
+      加窗就是截到底数的零点 |t| ≤ √(2n)。这个边界上 g 的值正好是 0，且 n≥2 时导数也是 0
+      （g′=−t(1−t²/2n)<sup>n−1</sup>），所以窗口是<b>光滑接上的</b>，没引入跳变；只有 n=1 有个真折角。<br>
+      反推公式：g 实且偶 ⟹ 虚部逐点抵消，只剩余弦 ——
+      <b>f<sub>n</sub>(x) = (1/2π)∫<sub>−√(2n)</sub><sup>√(2n)</sup> [1−t²/2n]<sup>n</sup> cos(tx) dt</b>。
+      n=1 有闭式 f₁(x)=[sin(√2x)/x³ − √2cos(√2x)/x²]/π，和图上的数值积分吻合到 1e−9。<br>
+      <b>这才是"近似"真正的代价</b>：不是"差一点点"，而是<b>先连密度都不是</b>。实测最小值：
+      n=1 时 −2.6×10<sup>−2</sup>、n=4 时 −4.4×10<sup>−3</sup>、n=9 时 −3.6×10<sup>−4</sup>、
+      n=25 时 −4.8×10<sup>−7</sup>，到 n≥100 才落到数值零以内。
+      <span class="hint">（负值不是数值假象：网格从 M=500 加密到 32000，最小值稳定在 −2.5860×10<sup>−2</sup>，
+      解析闭式给 −2.5860×10<sup>−2</sup>。是 g 不正定这个固有性质。）</span><br>
+      <span class="hint">这也从另一个角度说明为什么证明必须走"频域逐点收敛 + Lévy 定理"这条路：
+      中间步骤的那个近似物在时域里<b>没有概率意义</b>，只有取完极限才有。</span>
+    </div>
+  </div>
+</div>
+
 <div class="st" id="st"></div>
 <div id="warn"></div>
 
@@ -203,7 +267,7 @@
 const $=id=>document.getElementById(id);
 const C=id=>{const c=$(id); return [c,c.getContext('2d')];};
 const [c1,g1]=C('c1'), [c2,g2]=C('c2'), [c3,g3]=C('c3'), [c4,g4]=C('c4'),
-      [c5,g5]=C('c5'), [c6,g6]=C('c6'), [c7,g7]=C('c7');
+      [c5,g5]=C('c5'), [c6,g6]=C('c6'), [c7,g7]=C('c7'), [c8,g8]=C('c8'), [c9,g9]=C('c9');
 
 const npdf=x=>Math.exp(-x*x/2)/Math.sqrt(2*Math.PI);
 const erf=x=>{ const s=x<0?-1:1; x=Math.abs(x); const t=1/(1+0.3275911*x);
@@ -634,7 +698,92 @@ c1.addEventListener('lostpointercapture',finishDraw);
 window.addEventListener('blur',finishDraw);
 
 bindLegend(c1,'c1',true); bindLegend(c2,'c2'); bindLegend(c3,'c3');
-bindLegend(c4,'c4'); bindLegend(c5,'c5'); bindLegend(c6,'c6'); bindLegend(c7,'c7');
+bindLegend(c4,'c4'); bindLegend(c5,'c5'); bindLegend(c6,'c6'); bindLegend(c7,'c7'); bindLegend(c8,'c8'); bindLegend(c9,'c9');
+
+/* ⑦ 截断版 [1−t²/2n]^n 逆变换回时域。只在 |t| ≤ √(2n) 内积分（外面底数变负、n 次幂会炸）。
+   小 n 时结果会出现负值 —— 那正说明它不是概率密度。 */
+function drawApprox(n){
+  const ax=frame(g8,c8,-4.5,4.5,-0.09,0.52,'x　＝ Sₙ 的取值（同④的单位）');
+  if(!X4){ X4=new Float64Array(181); for(let i=0;i<181;i++) X4[i]=-4.5+9*i/180; }
+  const brk=Math.sqrt(2*n), M=4000, dt=brk/M;
+  const g=new Float64Array(181);
+  for(let q=0;q<181;q++){ const x=X4[q]; let acc=0;
+    for(let k=-M;k<=M;k++){ const t=k*dt, base=1-t*t/(2*n);
+      const v=Math.pow(Math.max(base,0),n);
+      acc += (Math.abs(k)===M?0.5:1)*v*Math.cos(t*x); }
+    g[q]=acc*dt/(2*Math.PI); }
+  let mn=Infinity; for(let q=0;q<181;q++) mn=Math.min(mn,g[q]);
+  if(on('8.g')) curve(g8,ax,x=>npdf(x),-4.5,4.5,'#c0392b',1.6,[5,4]);
+  if(on('8.e')){ const f=invFT(phiForPlot(n),X4);
+    g8.strokeStyle='#1f3a6e'; g8.lineWidth=2; g8.beginPath();
+    for(let i=0;i<181;i++){ const x=ax.X(X4[i]), y=ax.Y(f[i]); i?g8.lineTo(x,y):g8.moveTo(x,y); }
+    g8.stroke(); }
+  if(on('8.t')){ g8.strokeStyle='#a8481a'; g8.lineWidth=2; g8.beginPath();
+    for(let i=0;i<181;i++){ const x=ax.X(X4[i]), y=ax.Y(g[i]); i?g8.lineTo(x,y):g8.moveTo(x,y); }
+    g8.stroke(); }
+  g8.fillStyle=mn<-1e-6?'#c0392b':'#27713d'; g8.font='10.5px Menlo';
+  g8.fillText(`截断版的最小值 = ${mn.toExponential(2)}`
+    + (mn<-1e-6 ? '　← 负值 ⟹ 它不是概率密度' : '　← 已非负, 是合法密度了'), ax.L+4, 11);
+  legend(g8,c8,'c8',[{key:'8.t',name:'截断版反推',col:'#a8481a'},
+    {key:'8.e',name:'精确 Sₙ 密度',col:'#1f3a6e'},
+    {key:'8.g',name:'标准正态',col:'#c0392b',dash:[5,4],lw:1.6}]);
+}
+
+/* ⑧ 纯数学版：[1−t²/2n]^n → e^{−t²/2}。n 独立于全局滑杆，只驱动这张图。 */
+const n9 = () => NLAD[+$('ns2').value];
+function drawA9(){
+  const n=n9(), brk=Math.sqrt(2*n);
+  const ax=frame(g9,c9,-TMAX,TMAX,-0.35,1.15,'t ＝ φ_Sₙ 的自变量（|t| ≤ T='+TMAX+'）');
+  const trunc=(t,m)=>Math.pow(1-t*t/(2*m),m);
+  if(on('9.f')){                                  /* 所有档位叠出来的族 */
+    g9.lineWidth=1;
+    for(const m of NLAD){ if(m===n) continue;
+      g9.strokeStyle='rgba(168,72,26,.17)'; g9.beginPath(); let st=false;
+      const bm=Math.sqrt(2*m);
+      for(let px=0;px<=ax.PW;px++){ const t=-TMAX+2*TMAX*px/ax.PW, v=trunc(t,m);
+        if(Math.abs(t)>bm||!isFinite(v)||v<-0.35||v>1.15){ st=false; continue; }
+        const y=ax.Y(v); st?g9.lineTo(ax.L+px,y):g9.moveTo(ax.L+px,y); st=true; }
+      g9.stroke(); } }
+  if(on('9.b')&&brk<TMAX){ g9.strokeStyle='#bbb'; g9.lineWidth=1; g9.setLineDash([3,3]);
+    for(const e of [-brk,brk]){ g9.beginPath(); g9.moveTo(ax.X(e),ax.T); g9.lineTo(ax.X(e),ax.Y(-0.35)); g9.stroke(); }
+    g9.setLineDash([]); g9.fillStyle='#888'; g9.font='9.5px Menlo'; g9.textAlign='center';
+    g9.fillText('|t|=√(2n)='+brk.toFixed(2), ax.X(brk), ax.T+10); g9.textAlign='left'; }
+  if(on('9.g')) curve(g9,ax,t=>Math.exp(-t*t/2),-TMAX,TMAX,'#c0392b',1.7,[5,4]);
+  let P9=null;
+  if(on('9.re')){ P9=phiSn(n);
+    g9.strokeStyle='#1f3a6e'; g9.lineWidth=1.3; g9.beginPath();
+    for(let k=0;k<=2*NT;k++){ const t=-TMAX+k*TMAX/NT, x=ax.X(t), y=ax.Y(P9.re[k]);
+      k?g9.lineTo(x,y):g9.moveTo(x,y); }
+    g9.stroke(); }
+  if(on('9.tr')){ /* 严格只画底数非负的 |t| ≤ √(2n)。外面底数变负，偶数 n 会变成大正数
+       又飞回画面里，看着像"第二个峰" —— 那是假象，不是曲线真的回来了。 */
+    g9.strokeStyle='#a8481a'; g9.lineWidth=2.2; g9.beginPath(); let st=false;
+    for(let px=0;px<=ax.PW;px++){ const t=-TMAX+2*TMAX*px/ax.PW, v=trunc(t,n);
+      if(Math.abs(t)>brk||!isFinite(v)||v<-0.35||v>1.15){ st=false; continue; }
+      const y=ax.Y(v); st?g9.lineTo(ax.L+px,y):g9.moveTo(ax.L+px,y); st=true; }
+    g9.stroke();
+    if(brk<TMAX){ g9.fillStyle='#a8481a'; g9.font='9px Menlo'; g9.textAlign='center';
+      for(const e of [-brk,brk]){ const v=trunc(e,n);
+        if(v>=-0.35&&v<=1.15){ g9.beginPath(); g9.arc(ax.X(e),ax.Y(v),2.6,0,7); g9.fill(); } }
+      g9.fillText('曲线到此为止', ax.X(brk)+34, ax.Y(0)-5); g9.textAlign='left'; } }
+  legend(g9,c9,'c9',[{key:'9.tr',name:'[1−t²/2n]ⁿ',col:'#a8481a',lw:2.2},
+    {key:'9.g',name:'e^(−t²/2)',col:'#c0392b',dash:[5,4],lw:1.7},
+    {key:'9.re',name:'精确 Re φ_Sn',col:'#1f3a6e',lw:1.3},
+    {key:'9.f',name:'族(所有档)',col:'rgba(168,72,26,.45)'},
+    {key:'9.b',name:'|t|=√(2n)',col:'#bbb',dash:[3,3],lw:1}]);
+  /* 量化：只在 |t|<√(2n) 内比（外面近似无意义）。和精确比时用复模。 */
+  const Pe=P9||phiSn(n);
+  let dg=0,de=0;
+  for(let k=0;k<=2*NT;k++){ const t=-TMAX+k*TMAX/NT; if(Math.abs(t)>=brk) continue;
+    const v=trunc(t,n);
+    dg=Math.max(dg,Math.abs(v-Math.exp(-t*t/2)));
+    de=Math.max(de,Math.hypot(v-Pe.re[k], Pe.im[k])); }
+  g9.fillStyle='#555'; g9.font='10px Menlo';
+  g9.fillText(`|t|<√(2n) 内　max|橙−红| = ${dg.toFixed(4)} (纯数学, 与总体无关)`
+    + `　max|橙−蓝(复)| = ${de.toFixed(4)}`, ax.L+4, 11);
+  $('ns2V').textContent='n='+n+'　('+(+$('ns2').value+1)+'/'+NLAD.length+')';
+}
+$('ns2').addEventListener('input',drawA9);
 
 /* ═══ 尾部精度表：KS 是绝对偏差, 会掩盖尾部的相对误差 ═══ */
 /* 上尾概率用 Gil–Pelaez：P(X>z) = 1/2 − (1/π)∫₀^T Im[e^{−itz}φ(t)]/t dt。
@@ -682,7 +831,7 @@ function render(){
   const n=NLAD[+$('ns').value]; nOfCur=n;
   $('nsV').textContent='n='+n+'　('+(+$('ns').value+1)+'/'+NLAD.length+')';
   const P=phiSn(n);
-  draw1(); draw2(); draw3(P); const ks=draw4(P); draw5(n); const dd=drawTrunc(n,P); drawResid();
+  draw1(); draw2(); draw3(P); const ks=draw4(P); draw5(n); const dd=drawTrunc(n,P); drawApprox(n); drawA9(); drawResid();
   const ta=taylorResid(n), fq=freqResid(P);
   const nm = mode==='custom'?'手绘':PN[mode];
   $('st').innerHTML =
