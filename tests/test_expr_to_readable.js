@@ -20,6 +20,18 @@ const cases = [
     [R`e^{i\pi}`, R`e^{iπ}`],                     // 转不成 Unicode 的上标保持花括号形式
     [R`|X^{r^j}| = k^{\gcd(j,n)}`, R`|X^{rʲ}| = k^{gcd(j,n)}`],   // 嵌套上标: {} 不退化成 ()
     [R`\|x\|_{L^2}`, R`‖x‖_{L²}`],
+    // 下标/上标后面紧跟函数括号：_ 和 ^ 在 LaTeX 里只吃一个 token，别把 (x) 吞进去
+    [R`f_n(x) \to f(x)`, R`fₙ(x) → f(x)`],
+    [R`x_i(t)`, R`xᵢ(t)`],
+    [R`g_k(x_i)`, R`gₖ(xᵢ)`],
+    [R`a_1(y) + b_2(z)`, R`a₁(y) + b₂(z)`],
+    [R`x^n(y)`, R`xⁿ(y)`],
+    [R`a^k(b)`, R`aᵏ(b)`],
+    [R`f_n^2(x)`, R`fₙ²(x)`],
+    [R`x_i^j(t)`, R`xᵢʲ(t)`],
+    [R`C^d_i(x)`, R`Cᵈᵢ(x)`],
+    [R`\int_0^1(x)dx`, R`∫₀¹(x)dx`],
+    [R`\sum_{i=1}^n(a_i)`, R`∑ᵢ₌₁ⁿ(aᵢ)`],
     // frac / sqrt
     [R`\frac{a}{b}`, R`a/b`],
     [R`\frac{x^2+1}{3}`, R`(x²+1)/3`],
