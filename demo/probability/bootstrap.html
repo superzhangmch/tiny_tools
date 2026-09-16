@@ -2,225 +2,615 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bootstrap：一份样本硬拽出抽样分布</title>
+<title>Bootstrap：只有一份样本，怎么拽出抽样分布</title>
 <style>
-  body { margin: 0; padding: 12px 16px; background: #fff; color: #222;
-         font-family: Arial, "PingFang SC", sans-serif; }
-  h1 { font-size: 18px; margin: 4px 0 8px; }
-  button { padding: 4px 12px; font-size: 13px; cursor: pointer; background: #f2f3f5; color: #222;
-    border: 1px solid #bbb; border-radius: 3px; }
-  button:hover { background: #e2e6ee; }
-  button.on { background: #2b5fb8; color: #fff; border-color: #2b5fb8; }
-  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
-  .hint { color: #555; font-size: 12.5px; line-height: 1.6; max-width: 1150px; margin-top: 8px; }
-  .mono { font-family: Menlo, Consolas, monospace; }
-  canvas { display: block; border: 1px solid #999; }
-  .cap { font-size: 12px; color: #555; margin: 2px 0 8px; }
-  b.k { color: #b03030; }
-  body.ctl-collapsed h1, body.ctl-collapsed .bar, body.ctl-collapsed .hint { display: none !important; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; margin:14px 16px; color:#222; }
+  h1 { font-size:17px; margin:0 0 8px; }
+  canvas { border:1px solid #ddd; display:block; background:#fff; }
+  button { font-size:12.5px; padding:2px 9px; border:1px solid #bbb; background:#fafafa;
+           border-radius:4px; cursor:pointer; }
+  button.on { background:#1a63d8; border-color:#1a63d8; color:#fff; font-weight:600; }
+  button:disabled { opacity:.45; cursor:default; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12.5px; margin:5px 0; }
+  .cap { font-size:11.5px; color:#555; margin:3px 0 9px; }
+  .hint { color:#777; font-size:11px; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  .col { flex:0 0 545px; max-width:545px; }
+  .mono { font-family:Menlo,Consolas,monospace; }
+  .st { font-family:Menlo,Consolas,monospace; font-size:12.5px; background:#0f1522; color:#dfe6f3;
+        padding:6px 10px; border-radius:4px; margin:5px 0; line-height:1.95; }
+  .st b { color:#7fd3c4; } .st .r { color:#ff8f7a; } .st .g { color:#8fe09a; } .st .y { color:#ffd27f; }
+  .step { background:#eef3fb; border-left:3px solid #2b5fb8; padding:6px 10px; font-size:12px;
+          margin:6px 0; line-height:1.7; max-width:1120px; }
+  .note { background:#f6f7fa; border-left:3px solid #9aa6bd; padding:7px 11px;
+          font-size:11.5px; color:#444; line-height:1.75; max-width:1120px; margin:8px 0; }
+  code { background:#eef1f6; padding:0 3px; border-radius:2px; font-size:11.5px; }
 </style>
 </head>
 <body>
-<h1>Bootstrap：上帝不给你第二份样本，你就自己抽自己</h1>
+<h1>Bootstrap —— 只有<b>一份</b>样本，怎么拽出抽样分布</h1>
+
+<div class="step">
+  <b>θ</b> = 你关心的统计量（均值、中位数…）。想知道它离真值多远，需要<b>θ 的抽样分布</b>，
+  而那要无数份新样本 —— 你只有一份。<br>
+  <b>Efron 1979</b>：把手里这一份样本当成总体的替身，<b>有放回</b>重抽 n 个，重复上万次。
+  ①→②→③ 就是这条链；④ 是<b>用上帝视角检验它到底准不准</b>。
+</div>
+
 <div class="bar">
-  总体:
-  <button class="on" data-d="skew">偏态</button>
-  <button data-d="bimodal">双峰</button>
-  <button data-d="uniform">均匀</button>
-  样本量 n: <input type="range" id="ns" min="0" max="6" value="3" style="width:130px"><span class="mono" id="ns2"></span>
-  统计量:
-  <button class="on" data-s="mean">均值</button>
+  <b>① 总体</b>
+  <button data-p="normal">正态</button>
+  <button data-p="uniform">均匀</button>
+  <button data-p="exp">指数</button>
+  <button data-p="lognorm">对数正态</button>
+  <button data-p="bimodal">双峰</button>
+  <button data-p="longtail">长尾</button>
+  <span class="hint">或在①里按住鼠标画</span>
+</div>
+<div class="bar">
+  <b>θ</b>
+  <button data-s="mean">均值</button>
   <button data-s="median">中位数</button>
   <button data-s="sd">标准差</button>
-  <button data-s="max">最大值(失灵案例)</button>
-  <button id="newSample">🎲 重抽一份原始样本</button>
+  <button data-s="q90">90% 分位</button>
+  <button data-s="max">最大值</button>
+  <b>n</b><input type="range" id="ns" min="0" max="8" value="3" style="width:150px">
+  <span id="nsV" class="mono" style="min-width:56px"></span>
+  <button id="redraw">② 重抽一份样本</button>
+  <button id="b1">③ bootstrap +1 万</button>
+  <button id="b2">+10 万</button>
+  <button id="cov">④ 测覆盖率</button>
+  <span id="cnt" class="mono hint"></span>
 </div>
-<div class="bar mono" id="stat"></div>
-<canvas id="scv" width="1100" height="90"></canvas>
-<div class="cap">你手里唯一的一份样本（每点一个观测；bootstrap 只能看到这些）</div>
-<div style="display:flex; gap:16px; flex-wrap:wrap">
-  <div>
-    <canvas id="bcv" width="542" height="330"></canvas>
-    <div class="cap"><b>Bootstrap 世界</b>：从这份样本<b>有放回</b>重抽 n 个 → 算统计量，重复上万次</div>
+
+<div class="st" id="st"></div>
+
+<div class="row">
+  <div class="col">
+    <canvas id="c1" width="545" height="210"></canvas>
+    <div class="cap"><b>① 总体</b>（真相，现实中看不见）　蓝 = 密度，按住鼠标可改。
+      <span style="color:#c0392b">红虚 = 真值 θ</span>。</div>
   </div>
-  <div>
-    <canvas id="tcv" width="542" height="330"></canvas>
-    <div class="cap"><b>上帝视角</b>：每次从真总体抽全新的 n 个 → 统计量的真实抽样分布（现实中不可得）</div>
+  <div class="col">
+    <canvas id="c2" width="545" height="210"></canvas>
+    <div class="cap"><b>② 抽一次，得到手里唯一的 n 个观测</b>　
+      灰点 = 每个观测，蓝条 = 它们的直方图，<span style="color:#1a8f4a">绿虚 = 这份样本算出的 θ̂</span>，
+      <span style="color:#c0392b">红虚 = 真值 θ</span>。bootstrap 只看得到这些点。</div>
   </div>
 </div>
-<div class="hint">
-  <b>问题</b>：统计量（均值、中位数…）离真值有多远？答案需要"统计量的抽样分布"，但那要无数份新样本——你只有一份。
-  <b>Efron 1979</b>：把这份样本当作总体的替身，<b>有放回重抽</b>——左图就这样凭一份数据"硬拽"出了右图的近似。
-  对照两图的实测标准误 SE 和 95% 区间（读数在上方）：均值/中位数/标准差下相当接近——这就是为什么它无处不在。
-  <b class="k">失灵案例</b>：切到"最大值"——bootstrap 的最大值永远 ≤ 样本最大值，左图变成贴在样本最大值上的几根离散尖刺
-  （P(重抽 max = 样本 max) = 1−(1−1/n)ⁿ ≈ 63%），右图却是连续分布且延伸到样本没见过的地方。
-  <b>教训</b>：bootstrap 靠"样本 ≈ 总体"，在分布的<b>边缘</b>（极值、重尾）这个替身骗不了人。按"重抽一份原始样本"再看：换一份样本，左图整体搬家——bootstrap 自身也有围绕真相的抖动。
+
+<div class="row">
+  <div class="col">
+    <canvas id="c3" width="545" height="210"></canvas>
+    <div class="cap"><b>③ 从②有放回重抽 n 个 → 算 θ*，重复上万次</b>　
+      <span style="color:#c0392b">红 = bootstrap 分布</span>／
+      <span style="color:#1f3a6e">蓝 = 上帝视角的真抽样分布</span>（每次从①抽全新的 n 个）。<br>
+      两条越像，bootstrap 越成功 —— 它只用一份数据就重建了蓝色那条。<br>
+      <span class="hint">但形状是个<b>粗糙</b>的判据：红线的锯齿来自离散性（θ* 只能取那 n 个观测的
+      次序统计量，中位数/分位数尤其明显），它会把 KS 顶高，却几乎不影响 SE 和区间端点。
+      真正的判据是 ④ 的覆盖率。</span></div>
+  </div>
+  <div class="col">
+    <canvas id="c4" width="545" height="210"></canvas>
+    <div class="cap"><b>④ 检验：bootstrap 的 95% 区间真能覆盖真值 95% 吗</b>　
+      整套流程重复很多轮（每轮：抽新样本 → bootstrap → 取 2.5%/97.5% 分位当区间 → 看它含不含真 θ）。<br>
+      <span style="color:#1a8f4a">绿点 = 实测覆盖率</span>，<span style="color:#c0392b">红虚 = 名义 95%</span>。
+      点低于红线就是<b>区间偏窄、置信度虚高</b>。</div>
+  </div>
+</div>
+
+<div class="note">
+  <b>③ 里两条曲线左右错开，是局限吗？—— 不是，那部分修不掉也不该修</b><br>
+  实测（双峰总体，n=200，6 万次）：两条曲线的平移量 <b>−0.025431</b>，而 <b>θ̂−θ = −0.025494</b> ——
+  平移<b>正好等于</b>你这份样本的估计误差。bootstrap 分布的中心是 θ̂（差 7×10<sup>−5</sup>），
+  上帝分布的中心是 θ（差 9×10<sup>−6</sup>）。<br>
+  把两条<b>各减自己的中心</b>再比：KS 从 <b>0.5711</b> 掉到 <b>0.0120</b> ——
+  <b>眼睛看到的差异有 97.9% 纯粹来自平移</b>。③的 legend 里有「对齐」开关，可以直接看这件事。<br>
+  <b>为什么修不掉</b>：bootstrap 只看得见你那一份样本，所以它只能以 θ̂ 为中心。
+  要是能把平移修掉，就等于知道了 θ̂−θ，也就知道了 θ —— 那还做什么统计。
+  bootstrap 的任务从来不是<b>定位</b> θ，而是估计 <b>θ̂−θ 的散布形状</b>，这件事它做到了。<br>
+  <b>这也是为什么 ④ 才是正确的判据</b>：置信区间挂在 θ̂ 上、跟着 θ̂ 一起动；多轮下来那个动来动去的
+  区间覆盖 θ 的比例才是 95%。④ 正是在对平移求平均。<br>
+  <span class="hint">真正"能更准确"的是残下的形状误差（对齐后那 0.0120，以及小 n 时的偏窄）。
+  改进方向是 <b>BCa</b>（bias-corrected and accelerated）和 <b>bootstrap-t</b>（studentized），
+  它们纠的是偏度和方差不稳，不是纠平移。</span>
+</div>
+
+<div class="note">
+  <b>bootstrap 什么时候靠不住</b><br>
+  它的全部依据是「样本 ≈ 总体」。这个替身在分布<b>中间</b>很像，在<b>边缘</b>就骗不了人：<br>
+  <b>最大值</b>是最干净的反例 —— 重抽的最大值<b>永远 ≤ 样本最大值</b>，所以③里红色变成贴在样本最大值上的
+  几根离散尖刺（<code>P(重抽 max = 样本 max) = 1−(1−1/n)ⁿ ≈ 63%</code>），而蓝色是连续的、还延伸到
+  样本没见过的地方。④ 的覆盖率会直接塌下去。<br>
+  实测覆盖率（对数正态总体，名义 95%，每档 600 轮）：<br>
+  <span class="mono" style="font-size:11px">
+  &nbsp;θ&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;n=5&nbsp;&nbsp;&nbsp;&nbsp;n=10&nbsp;&nbsp;&nbsp;n=30&nbsp;&nbsp;&nbsp;n=100&nbsp;&nbsp;n=200<br>
+  &nbsp;均值&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;82.0%&nbsp;&nbsp;85.5%&nbsp;&nbsp;90.8%&nbsp;&nbsp;94.7%&nbsp;&nbsp;94.0%<br>
+  &nbsp;中位数&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;93.8%&nbsp;&nbsp;92.5%&nbsp;&nbsp;93.8%&nbsp;&nbsp;94.2%&nbsp;&nbsp;93.5%<br>
+  &nbsp;标准差&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;42.8%&nbsp;&nbsp;57.5%&nbsp;&nbsp;73.2%&nbsp;&nbsp;87.8%&nbsp;&nbsp;89.8%<br>
+  &nbsp;90%分位&nbsp;&nbsp;&nbsp;&nbsp;40.7%&nbsp;&nbsp;62.5%&nbsp;&nbsp;93.8%&nbsp;&nbsp;93.8%&nbsp;&nbsp;94.8%<br>
+  &nbsp;最大值&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;0.0%&nbsp;&nbsp;&nbsp;0.0%&nbsp;&nbsp;&nbsp;0.0%&nbsp;&nbsp;&nbsp;0.0%&nbsp;&nbsp;&nbsp;0.0%
+  </span><br>
+  <b>均值/中位数</b>最稳；<b>标准差</b>到 n=200 还差 5 个点；<b>最大值</b>恒为 0%（区间整个在样本最大值以下，
+  而真最大值在它之上，结构上就不可能覆盖）。<b>n 小 + 偏态</b>一律偏窄。<br>
+  <span class="hint">另外：每次点「重抽一份样本」，③的红色会整体搬家 —— bootstrap 自己也带着围绕真相的抖动，
+  它给的是"这份样本能告出的不确定性"，不是"真相的不确定性"。</span>
 </div>
 
 <script>
 'use strict';
-// ===== 核心（无 DOM）=====
-function mulberry32(seed) {
-  return function () {
-    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
-    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-const STATS = {
-  mean: a => { let s = 0; for (const v of a) s += v; return s / a.length; },
-  median: a => {
-    const b = [...a].sort((x, y) => x - y), m = b.length >> 1;
-    return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2;
-  },
-  sd: a => {
-    let s = 0, s2 = 0;
-    for (const v of a) { s += v; s2 += v * v; }
-    const m = s / a.length;
-    return Math.sqrt(Math.max(s2 / a.length - m * m, 0));
-  },
-  max: a => Math.max(...a),
+const $=id=>document.getElementById(id);
+const C=id=>{const c=$(id); return [c,c.getContext('2d')];};
+const [c1,g1]=C('c1'), [c2,g2]=C('c2'), [c3,g3]=C('c3'), [c4,g4]=C('c4');
+
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296; }; }
+let rnd=mulberry32(20260915);
+
+/* ═══ 总体：分段均匀（块内均匀，连续）+ 精确统计量 ═══ */
+const K=256;
+let mode='lognorm', fv=new Float64Array(K), BL=[], CUM=[], MU=0, SD=1, SUP=[0,1];
+const PRE={
+  normal:  i=>Math.exp(-Math.pow((i/K-0.5)/0.13,2)/2),
+  uniform: i=>1,
+  exp:     i=>Math.exp(-(i/K)*6),
+  lognorm: i=>{const x=(i+0.5)/K*4+0.02; return Math.exp(-Math.pow(Math.log(x)+0.3,2)/(2*0.55*0.55))/x;},
+  bimodal: i=>Math.exp(-Math.pow((i/K-0.28)/0.075,2)/2)+0.85*Math.exp(-Math.pow((i/K-0.72)/0.075,2)/2),
+  longtail:i=>{const x=(i+0.5)/K; return Math.pow(x+0.02,-1.6);},
 };
-// 有放回重抽一份并算统计量
-function bootOnce(sample, statFn, rng, buf) {
-  const n = sample.length;
-  for (let i = 0; i < n; i++) buf[i] = sample[Math.floor(rng() * n)];
-  return statFn(buf);
+function buildPop(){
+  let w=0; for(let i=0;i<K;i++) w+=fv[i];
+  if(w<=1e-12){ for(let i=0;i<K;i++) fv[i]=0.5; w=0.5*K; }
+  BL=[]; CUM=[]; let acc=0, m1=0, m2=0, lo=Infinity, hi=-Infinity;
+  for(let i=0;i<K;i++){ if(fv[i]<=0) continue;
+    const a=i/K, b=(i+1)/K, p=fv[i]/w;
+    BL.push([a,b,p]); acc+=p; CUM.push(acc);
+    m1+=p*(a+b)/2; m2+=p*(a*a+a*b+b*b)/3;
+    lo=Math.min(lo,a); hi=Math.max(hi,b); }
+  MU=m1; SD=Math.sqrt(Math.max(0,m2-m1*m1)); SUP=[lo,hi];
 }
-function quantileSorted(sorted, q) {
-  return sorted[Math.max(0, Math.min(sorted.length - 1, Math.floor(q * sorted.length)))];
+function sample1(){                                  // 块内均匀 ⟹ 连续取值
+  const u=rnd(); let a=0,b=CUM.length-1;
+  while(a<b){ const m=(a+b)>>1; if(u<=CUM[m]) b=m; else a=m+1; }
+  const [lo,hi]=BL[a]; return lo+rnd()*(hi-lo);
 }
-function summarize(arr) {                      // 实测 SE 与 95% 分位区间
-  const n = arr.length;
-  if (n < 30) return null;
-  let s = 0, s2 = 0;
-  for (const v of arr) { s += v; s2 += v * v; }
-  const m = s / n;
-  const sorted = [...arr].sort((a, b) => a - b);
-  return { mean: m, se: Math.sqrt(Math.max(s2 / n - m * m, 0)),
-           lo: quantileSorted(sorted, 0.025), hi: quantileSorted(sorted, 0.975) };
+const cdf=x=>{ let s=0;
+  for(const [a,b,p] of BL){ if(x>=b) s+=p; else if(x>a) s+=p*(x-a)/(b-a); }
+  return s; };
+function popQuantile(q){                             // 精确分位（二分 CDF）
+  let lo=SUP[0], hi=SUP[1];
+  for(let i=0;i<60;i++){ const m=(lo+hi)/2; if(cdf(m)<q) lo=m; else hi=m; }
+  return (lo+hi)/2;
 }
-// ===== 核心结束 =====
 
-const NS = [10, 20, 30, 50, 100, 200, 500];
-const rng = mulberry32(99);
-const $ = id => document.getElementById(id);
-let DIST = 'skew', STAT = 'mean';
-const POPS = {                                  // 总体采样器(逆变换/组合)
-  skew: r => { const u = Math.max(r(), 1e-12); return -Math.log(u) * 0.25; },          // 指数, 均值 0.25
-  bimodal: r => 0.3 + 0.07 * boxg(r) + (r() < 0.4 ? 0.45 : 0),                          // 0.3 峰 + 0.75 峰
-  uniform: r => r(),
+/* ═══ 统计量：样本上的估计 + 总体上的精确真值 ═══ */
+const STATS={
+  mean:  {name:'均值',    f:a=>{let s=0;for(const v of a)s+=v;return s/a.length;},
+          truth:()=>MU},
+  median:{name:'中位数',  f:a=>{const b=Float64Array.from(a).sort(); const m=b.length>>1;
+            return b.length%2?b[m]:(b[m-1]+b[m])/2;}, truth:()=>popQuantile(0.5)},
+  sd:    {name:'标准差',  f:a=>{let s=0,s2=0;for(const v of a){s+=v;s2+=v*v;}
+            const m=s/a.length; return Math.sqrt(Math.max(0,s2/a.length-m*m));}, truth:()=>SD},
+  q90:   {name:'90% 分位',f:a=>{const b=Float64Array.from(a).sort();
+            return b[Math.min(b.length-1,Math.floor(0.9*b.length))];}, truth:()=>popQuantile(0.9)},
+  max:   {name:'最大值',  f:a=>{let m=-Infinity;for(const v of a)if(v>m)m=v;return m;},
+          truth:()=>SUP[1]},
 };
-function boxg(r) { return Math.sqrt(-2 * Math.log(Math.max(r(), 1e-12))) * Math.cos(2 * Math.PI * r()); }
+let stat='mean';
+const NL=[5,10,20,30,50,100,200,500,1000];
+let n=30, samp=null, buf=null;
+let bootV=[], godV=[];                                // ③ 的两组
+const COVN=[5,10,20,30,50,100,200];
+let covHit=new Float64Array(COVN.length), covRep=new Float64Array(COVN.length);
 
-let sample = [], bootVals = [], trueVals = [], buf = null;
-const BMAX = 40000;
-function newSample() {
-  const n = NS[+$('ns').value];
-  sample = Array.from({ length: n }, () => POPS[DIST](rng));
-  buf = new Float64Array(n);
-  bootVals = []; trueVals = [];
+function newSample(){
+  n=NL[+$('ns').value];
+  samp=new Float64Array(n); for(let i=0;i<n;i++) samp[i]=sample1();
+  buf=new Float64Array(n);
+  bootV=[]; godV=[];
 }
-document.body.addEventListener('click', e => {
-  const d = e.target.dataset && e.target.dataset.d;
-  const s = e.target.dataset && e.target.dataset.s;
-  if (d) { DIST = d; document.querySelectorAll('button[data-d]').forEach(b => b.classList.toggle('on', b === e.target)); newSample(); }
-  if (s) { STAT = s; document.querySelectorAll('button[data-s]').forEach(b => b.classList.toggle('on', b === e.target)); bootVals = []; trueVals = []; }
-});
-$('ns').addEventListener('input', newSample);
-$('newSample').addEventListener('click', newSample);
-
-const scv = $('scv'), gS = scv.getContext('2d');
-const bcv = $('bcv'), gB = bcv.getContext('2d');
-const tcv = $('tcv'), gT = tcv.getContext('2d');
-
-function frame() {
-  const n = NS[+$('ns').value];
-  $('ns2').textContent = 'n=' + n;
-  const statFn = STATS[STAT];
-  if (bootVals.length < BMAX) {
-    const batch = Math.max(50, Math.floor(30000 / n));
-    for (let i = 0; i < batch; i++) {
-      bootVals.push(bootOnce(sample, statFn, rng, buf));
-      const fresh = new Float64Array(n);
-      for (let k = 0; k < n; k++) fresh[k] = POPS[DIST](rng);
-      trueVals.push(statFn(fresh));
-    }
-  }
-  // ---- 共同 x 范围(两边合并的 1%~99% 分位) ----
-  const all = bootVals.concat(trueVals).sort((a, b) => a - b);
-  const lo = quantileSorted(all, 0.003), hi = quantileSorted(all, 0.997);
-  const pad = (hi - lo) * 0.08 + 1e-9;
-  const x0 = lo - pad, x1 = hi + pad;
-  // ---- 样本带 ----
-  gS.fillStyle = '#fff'; gS.fillRect(0, 0, scv.width, scv.height);
-  const smin = Math.min(...sample), smax = Math.max(...sample);
-  const sp = (smax - smin) * 0.06 + 1e-9;
-  gS.fillStyle = 'rgba(31,58,110,0.5)';
-  for (const v of sample) {
-    const x = (v - (smin - sp)) / (smax - smin + 2 * sp) * scv.width;
-    gS.beginPath(); gS.arc(x, 45 + (rng() - 0.5) * 40, 3, 0, 7); gS.fill();
-  }
-  gS.fillStyle = '#888'; gS.font = '11px Menlo';
-  gS.fillText(smin.toPrecision(3), 6, 84); gS.fillText(smax.toPrecision(3), scv.width - 60, 84);
-  // ---- 两个直方图 ----
-  const B = 70;
-  const mkHist = vals => {
-    const h = new Float64Array(B);
-    let out = 0;
-    for (const v of vals) {
-      const bi = Math.floor((v - x0) / (x1 - x0) * B);
-      if (bi >= 0 && bi < B) h[bi]++; else out++;
-    }
-    return { h, out };
-  };
-  const hb = mkHist(bootVals), ht = mkHist(trueVals);
-  const mx = Math.max(...hb.h, ...ht.h, 1);
-  const drawH = (g2, cvel, hh, col, label, summ) => {
-    g2.fillStyle = '#fff'; g2.fillRect(0, 0, cvel.width, cvel.height);
-    g2.fillStyle = col;
-    for (let i = 0; i < B; i++) {
-      const hgt = hh.h[i] / mx * (cvel.height - 40);
-      g2.fillRect(i / B * cvel.width + 1, cvel.height - 18 - hgt, cvel.width / B - 2, hgt);
-    }
-    if (summ) {                                 // 95% 区间横杆
-      const X = v => (v - x0) / (x1 - x0) * cvel.width;
-      g2.strokeStyle = '#111'; g2.lineWidth = 2;
-      g2.beginPath(); g2.moveTo(X(summ.lo), 14); g2.lineTo(X(summ.hi), 14); g2.stroke();
-      g2.beginPath(); g2.moveTo(X(summ.mean), 8); g2.lineTo(X(summ.mean), 20); g2.stroke();
-    }
-    g2.fillStyle = '#888'; g2.font = '11px Menlo';
-    g2.fillText(label, 8, cvel.height - 4);
-    g2.fillText(x0.toPrecision(3), 4, cvel.height - 22);
-    g2.fillText(x1.toPrecision(3), cvel.width - 58, cvel.height - 22);
-  };
-  const sb = summarize(bootVals), st = summarize(trueVals);
-  drawH(gB, bcv, hb, 'rgba(192,57,43,0.55)', 'bootstrap 重抽 ' + bootVals.length.toLocaleString() + ' 次', sb);
-  drawH(gT, tcv, ht, 'rgba(31,58,110,0.55)', '真抽样 ' + trueVals.length.toLocaleString() + ' 次(上帝视角)', st);
-  if (sb && st) {
-    $('stat').textContent =
-      `统计量 = ${ { mean: '均值', median: '中位数', sd: '标准差', max: '最大值' }[STAT] }　`
-      + `SE: bootstrap ${sb.se.toPrecision(3)} vs 真 ${st.se.toPrecision(3)}　`
-      + `95% 区间: boot [${sb.lo.toPrecision(3)}, ${sb.hi.toPrecision(3)}] vs 真 [${st.lo.toPrecision(3)}, ${st.hi.toPrecision(3)}]`
-      + (STAT === 'max' ? `　P(boot max = 样本 max) 理论 ${(1 - Math.pow(1 - 1 / n, n)).toFixed(3)}` : '');
-  }
-  requestAnimationFrame(frame);
+function bootOnce(){
+  for(let i=0;i<n;i++) buf[i]=samp[(rnd()*n)|0];
+  return STATS[stat].f(buf);
 }
-newSample();
-frame();
-</script>
-<script>
-(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
-  const b = document.createElement('button');
-  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
-  document.body.appendChild(b);
-  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
-  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
-  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
-  sync();
-})();
+function godOnce(){
+  for(let i=0;i<n;i++) buf[i]=sample1();
+  return STATS[stat].f(buf);
+}
+const q=(sorted,p)=>sorted[Math.max(0,Math.min(sorted.length-1,Math.floor(p*sorted.length)))];
+function ksDist(a,b){                                  // 两组样本的 KS 距离
+  if(!a.length||!b.length) return NaN;
+  const A=Float64Array.from(a).sort(), B=Float64Array.from(b).sort();
+  let i=0,j=0,ks=0;
+  while(i<A.length&&j<B.length){ const x=Math.min(A[i],B[j]);
+    while(i<A.length&&A[i]<=x)i++; while(j<B.length&&B[j]<=x)j++;
+    ks=Math.max(ks,Math.abs(i/A.length-j/B.length)); }
+  return ks;
+}
+function summ(v){ if(v.length<50) return null;
+  let s=0,s2=0; for(const x of v){s+=x;s2+=x*x;}
+  const m=s/v.length, sd=Math.sqrt(Math.max(0,s2/v.length-m*m));
+  const so=Float64Array.from(v).sort();
+  return {m,sd,lo:q(so,0.025),hi:q(so,0.975)}; }
+
+/* ④ 覆盖率：整套流程重复一轮 = 抽新样本 → bootstrap B 次 → 取分位区间 → 看含不含真 θ */
+function covRound(nn,B){
+  const th=STATS[stat].truth();
+  const s=new Float64Array(nn); for(let i=0;i<nn;i++) s[i]=sample1();
+  const bb=new Float64Array(nn), out=new Float64Array(B);
+  for(let b=0;b<B;b++){ for(let i=0;i<nn;i++) bb[i]=s[(rnd()*nn)|0]; out[b]=STATS[stat].f(bb); }
+  out.sort();
+  const lo=q(out,0.025), hi=q(out,0.975);
+  return (th>=lo && th<=hi) ? 1 : 0;
+}
+
+/* ═══ 可点击 legend ═══ */
+const VIS={}, HIT={}, LEGX={};
+const on=k=>VIS[k]!==false;
+function legend(g,c,id,items){
+  HIT[id]=[]; g.font='10px Arial'; g.textAlign='right';
+  { let mw=0; for(const it of items) mw=Math.max(mw,g.measureText(it.name).width);
+    const bw=mw+34, bh=items.length*13+6, bx=c.width-10-mw-31;
+    g.fillStyle='rgba(255,255,255,.93)'; g.fillRect(bx,1,bw,bh);
+    g.strokeStyle='#e4e4e4'; g.lineWidth=1; g.strokeRect(bx+.5,1.5,bw-1,bh-1); LEGX[id]=bx; }
+  items.forEach((it,i)=>{
+    const y=13+i*13, vis=on(it.key), col=vis?it.col:'#c9c9c9';
+    const tw=g.measureText(it.name).width, tx=c.width-10, sx=tx-tw-26;
+    g.fillStyle=vis?'#333':'#b0b0b0'; g.fillText(it.name,tx,y);
+    g.strokeStyle=col; g.lineWidth=it.lw||2;
+    if(it.dash) g.setLineDash(it.dash);
+    g.beginPath(); g.moveTo(sx,y-4); g.lineTo(sx+18,y-4); g.stroke(); g.setLineDash([]);
+    if(it.dot){ g.fillStyle=col; g.beginPath(); g.arc(sx+9,y-4,3,0,7); g.fill(); }
+    if(!vis){ g.strokeStyle='#b0b0b0'; g.lineWidth=1;
+      g.beginPath(); g.moveTo(tx-tw,y-3); g.lineTo(tx,y-3); g.stroke(); }
+    HIT[id].push({key:it.key,x0:sx-4,y0:y-11,x1:tx+4,y1:y+3});
+  });
+  g.textAlign='left';
+}
+function hitLegend(id,c,e){
+  const r=c.getBoundingClientRect();
+  const x=(e.clientX-r.left)*c.width/r.width, y=(e.clientY-r.top)*c.height/r.height;
+  return (HIT[id]||[]).find(b=>x>=b.x0&&x<=b.x1&&y>=b.y0&&y<=b.y1);
+}
+function bindLegend(c,id,cur){
+  c.addEventListener('click',e=>{ const h=hitLegend(id,c,e);
+    if(h){ VIS[h.key]=!on(h.key); render(); } });
+  c.addEventListener('mousemove',e=>{ c.style.cursor=hitLegend(id,c,e)?'pointer':(cur||'default'); });
+}
+
+/* ═══ 坐标轴 ═══ */
+const AXL=62, AXS={};
+function frame(g,c,xlo,xhi,ylo,yhi,xl,opt){
+  opt=opt||{};
+  const L=AXL,R=8,T=16,B=32, PW=c.width-L-R, PH=c.height-T-B;
+  g.clearRect(0,0,c.width,c.height);
+  const lx=!!opt.logx;
+  const fx=v=>lx?Math.log10(v):v;
+  const x0=fx(xlo),x1=fx(xhi);
+  const X=v=>L+(fx(v)-x0)/(x1-x0)*PW, Y=v=>T+(1-(v-ylo)/(yhi-ylo))*PH;
+  const Xinv=px=>{const f=x0+(px-L)/PW*(x1-x0); return lx?Math.pow(10,f):f;};
+  g.strokeStyle='#e8e8e8'; g.lineWidth=1; g.fillStyle='#777'; g.font='9.5px Menlo';
+  g.textAlign='right';
+  for(let i=0;i<=4;i++){ const v=ylo+(yhi-ylo)*i/4, y=Math.round(Y(v))+.5;
+    g.beginPath(); g.moveTo(L,y); g.lineTo(L+PW,y); g.stroke();
+    g.fillText(opt.ypct?(v*100).toFixed(0)+'%':v.toPrecision(3), L-4, y+3); }
+  const xtk=[];
+  if(lx){ for(let e=Math.ceil(Math.log10(xlo));e<=Math.floor(Math.log10(xhi));e++) xtk.push(Math.pow(10,e)); }
+  else for(let i=0;i<=5;i++) xtk.push(xlo+(xhi-xlo)*i/5);
+  g.textAlign='center';
+  for(const v of xtk){ const x=Math.round(X(v))+.5;
+    g.beginPath(); g.moveTo(x,T); g.lineTo(x,T+PH); g.stroke();
+    g.fillText(lx?(v>=1000?(v/1000)+'k':String(v)):v.toPrecision(3), x, T+PH+13); }
+  g.strokeStyle='#888'; g.beginPath(); g.moveTo(L,T); g.lineTo(L,T+PH); g.lineTo(L+PW,T+PH); g.stroke();
+  g.fillStyle='#555'; g.font='10px Menlo'; g.fillText(xl, L+PW/2, T+PH+27);
+  if(opt.yl){ g.save(); g.translate(12,T+PH/2); g.rotate(-Math.PI/2);
+    g.textAlign='center'; g.fillStyle='#555'; g.font='10px Menlo'; g.fillText(opt.yl,0,0); g.restore(); }
+  g.textAlign='left';
+  return {X,Y,Xinv,L,T,PW,PH,xlo,xhi,ylo,yhi};
+}
+function vline(g,ax,x,col,dash,lab,slot){
+  if(!isFinite(x)||x<ax.xlo||x>ax.xhi) return;
+  const px=ax.X(x);
+  g.strokeStyle=col; g.lineWidth=1.4; if(dash) g.setLineDash(dash);
+  g.beginPath(); g.moveTo(px,ax.T); g.lineTo(px,ax.T+ax.PH); g.stroke(); g.setLineDash([]);
+  if(!lab) return;
+  /* 标签画在图内顶部并按 slot 错行：画在图外会和 x 轴刻度同高、两条线的标签也会互相压 */
+  g.font='9.5px Menlo';
+  const tw=g.measureText(lab).width+6;
+  let bx=px+4; if(bx+tw>ax.L+ax.PW) bx=px-4-tw;
+  const by=ax.T+3+(slot||0)*13;
+  g.fillStyle='rgba(255,255,255,.88)'; g.fillRect(bx,by,tw,12);
+  g.fillStyle=col; g.textAlign='left'; g.fillText(lab,bx+3,by+9);
+}
+/* 直方图 → 描边折线（叠加对比时比填充柱清楚得多） */
+function histLine(g,ax,vals,x0,x1,B,col,lw,dash,norm){
+  if(!vals.length) return 0;
+  const h=new Float64Array(B);
+  for(const v of vals){ const b=Math.floor((v-x0)/(x1-x0)*B); if(b>=0&&b<B) h[b]++; }
+  let mx=0; for(let i=0;i<B;i++) mx=Math.max(mx,h[i]);
+  if(!mx) return 0;
+  const sc=norm||mx;
+  g.strokeStyle=col; g.lineWidth=lw||2; if(dash) g.setLineDash(dash);
+  g.beginPath();
+  g.moveTo(ax.X(x0),ax.Y(0));
+  for(let i=0;i<B;i++){ const y=ax.Y(h[i]/sc);
+    g.lineTo(ax.X(x0+(x1-x0)*i/B),y); g.lineTo(ax.X(x0+(x1-x0)*(i+1)/B),y); }
+  g.lineTo(ax.X(x1),ax.Y(0)); g.stroke(); g.setLineDash([]);
+  return mx;
+}
+function ciBar(g,ax,s,col,yy){
+  if(!s) return;
+  g.strokeStyle=col; g.lineWidth=2.4;
+  g.beginPath(); g.moveTo(ax.X(s.lo),yy); g.lineTo(ax.X(s.hi),yy); g.stroke();
+  g.lineWidth=1.4;
+  for(const v of [s.lo,s.hi]){ g.beginPath(); g.moveTo(ax.X(v),yy-4); g.lineTo(ax.X(v),yy+4); g.stroke(); }
+}
+
+/* ═══ ① 总体 ═══ */
+function draw1(){
+  const th=STATS[stat].truth();
+  let top=0; for(let i=0;i<K;i++) top=Math.max(top,fv[i]);
+  const ax=frame(g1,c1,-0.05,1.05,0,Math.max(top,1)*1.15,'x = X 的取值（网格 [0,1)）',
+    {yl:'密度 = 你画的高度'});
+  AXS['c1']=ax;
+  if(on('1.d')){
+    g1.fillStyle='rgba(31,58,110,.5)'; g1.beginPath(); g1.moveTo(ax.X(0),ax.Y(0));
+    for(let i=0;i<K;i++){ const y=ax.Y(fv[i]);
+      g1.lineTo(ax.X(i/K),y); g1.lineTo(ax.X((i+1)/K),y); }
+    g1.lineTo(ax.X(1),ax.Y(0)); g1.closePath(); g1.fill();
+    g1.strokeStyle='rgba(31,58,110,.9)'; g1.lineWidth=1; g1.beginPath();
+    for(let i=0;i<K;i++){ const y=ax.Y(fv[i]);
+      i?g1.lineTo(ax.X(i/K),y):g1.moveTo(ax.X(i/K),y); g1.lineTo(ax.X((i+1)/K),y); }
+    g1.stroke();
+  }
+  if(on('1.th')) vline(g1,ax,th,'#c0392b',[5,4],'真 θ='+th.toPrecision(4),0);
+  legend(g1,c1,'c1',[{key:'1.d',name:'总体密度',col:'#1f3a6e'},
+    {key:'1.th',name:'真值 θ',col:'#c0392b',dash:[5,4],lw:1.4}]);
+  g1.fillStyle='#555'; g1.font='10px Menlo';
+  g1.fillText(`μ=${MU.toPrecision(4)}  σ=${SD.toPrecision(4)}`, ax.L+4, 11);
+  hoverAt(g1,ax,'c1',v=>`x=${v.toPrecision(4)}  F(x)=${(cdf(v)*100).toFixed(1)}%`);
+}
+
+/* ═══ ② 这一份样本 ═══ */
+function draw2(){
+  const th=STATS[stat].truth(), hat=samp?STATS[stat].f(samp):NaN;
+  const ax=frame(g2,c2,-0.05,1.05,0,1.2,'x = 观测值',{yl:'样本直方图（归一）'});
+  AXS['c2']=ax;
+  if(samp){
+    if(on('2.h')) histLine(g2,ax,Array.from(samp),0,1,Math.min(40,Math.max(12,Math.round(n/3))),'#1f3a6e',2);
+    if(on('2.p')){                                // 每个观测一个点（竖向抖开避免重叠）
+      g2.fillStyle='rgba(60,60,60,.55)';
+      const jr=mulberry32(7);
+      for(let i=0;i<n;i++){ g2.beginPath();
+        g2.arc(ax.X(samp[i]), ax.T+ax.PH-8-jr()*26, 2.4,0,7); g2.fill(); }
+    }
+  }
+  if(on('2.th')) vline(g2,ax,th,'#c0392b',[5,4],'真 θ='+th.toPrecision(4),0);
+  if(on('2.hat')) vline(g2,ax,hat,'#1a8f4a',[4,3],'θ̂='+(isFinite(hat)?hat.toPrecision(4):'—'),1);
+  legend(g2,c2,'c2',[{key:'2.p',name:'n 个观测',col:'#3c3c3c',dot:1,lw:0.1},
+    {key:'2.h',name:'样本直方图',col:'#1f3a6e'},
+    {key:'2.hat',name:'θ̂（这份样本）',col:'#1a8f4a',dash:[4,3],lw:1.4},
+    {key:'2.th',name:'真值 θ',col:'#c0392b',dash:[5,4],lw:1.4}]);
+  g2.fillStyle='#555'; g2.font='10px Menlo';
+  g2.fillText(`n=${n}　θ̂−θ = ${isFinite(hat)?(hat-th).toPrecision(3):'—'}`, ax.L+4, 11);
+}
+
+/* ═══ ③ bootstrap 分布 vs 上帝视角（叠在一张图）═══ */
+function draw3(){
+  const th=STATS[stat].truth();
+  /* 「对齐」：各减自己的中心。图上那个左右错开有 ~98% 纯粹是 θ̂−θ 这个平移，
+     而平移是无法修掉的（能修掉就等于知道了 θ）。bootstrap 要估的是散布形状，
+     对齐之后看到的才是它真正的误差。 */
+  const AL=on('3.al');
+  const mb=bootV.length?bootV.reduce((a,c)=>a+c,0)/bootV.length:0;
+  const mg=godV.length?godV.reduce((a,c)=>a+c,0)/godV.length:0;
+  const BV=AL?bootV.map(v=>v-mb):bootV, GV=AL?godV.map(v=>v-mg):godV;
+  const all=BV.concat(GV);
+  let x0,x1;
+  if(all.length>40){ const so=Float64Array.from(all).sort();
+    x0=q(so,0.002); x1=q(so,0.998); }
+  else if(AL){ x0=-1e-3; x1=1e-3; }
+  else { x0=Math.min(SUP[0],th); x1=Math.max(SUP[1],th); }
+  const pad=(x1-x0)*0.12+1e-9; x0-=pad; x1+=pad;
+  if(x0===x1){ x0-=0.01; x1+=0.01; }
+  const ax=frame(g3,c3,x0,x1,0,1.28, AL?'θ − 各自中心（只看形状）':'θ 的取值',{yl:'密度（各自归一）'});
+  AXS['c3']=ax;
+  const B=Math.min(70,Math.max(20,Math.round(Math.sqrt(bootV.length||100))));
+  if(on('3.g')) histLine(g3,ax,GV,x0,x1,B,'#1f3a6e',2);
+  if(on('3.b')) histLine(g3,ax,BV,x0,x1,B,'#c0392b',2);
+  const sb=summ(BV), sg=summ(GV);
+  if(on('3.ci')){ ciBar(g3,ax,sb,'#c0392b',ax.T+7); ciBar(g3,ax,sg,'#1f3a6e',ax.T+17); }
+  if(on('3.th')&&!AL) vline(g3,ax,th,'#7a7a7a',[3,3],'真 θ='+th.toPrecision(4),0);
+  if(AL) vline(g3,ax,0,'#7a7a7a',[3,3],'各自中心',0);
+  legend(g3,c3,'c3',[{key:'3.b',name:'bootstrap',col:'#c0392b'},
+    {key:'3.g',name:'上帝视角(真抽样)',col:'#1f3a6e'},
+    {key:'3.ci',name:'两个 95% 区间',col:'#555',lw:2.4},
+    {key:'3.th',name:'真 θ',col:'#7a7a7a',dash:[3,3],lw:1.4},
+    {key:'3.al',name:'对齐：各减自己中心',col:'#8a4ab0',lw:2.4}]);
+  g3.fillStyle='#333'; g3.font='9.5px Menlo';
+  if(sb&&sg){
+    const hat=STATS[stat].f(samp);
+    const ks=ksDist(BV,GV);
+    g3.fillText(`SE  boot ${sb.sd.toPrecision(3)}  vs 真 ${sg.sd.toPrecision(3)}`
+      +`　(比 ${(sb.sd/sg.sd).toFixed(3)})　KS ${ks.toFixed(4)}`
+      + (AL?'　← 只剩形状误差':`　其中平移 θ̂−θ = ${(hat-th).toPrecision(3)}`), ax.L+4, 11);
+  } else {
+    g3.fillText('点上面的「③ bootstrap +1 万」', ax.L+4, 11);
+  }
+  hoverAt(g3,ax,'c3',v=>{
+    const fb=bootV.length?bootV.filter(x=>x<=v).length/bootV.length:NaN;
+    const fg=godV.length?godV.filter(x=>x<=v).length/godV.length:NaN;
+    return `θ=${v.toPrecision(4)}  累积: boot ${isFinite(fb)?(fb*100).toFixed(1)+'%':'—'}`
+      + `  真 ${isFinite(fg)?(fg*100).toFixed(1)+'%':'—'}`; });
+}
+
+/* ═══ ④ 覆盖率 ═══ */
+function draw4(){
+  const ax=frame(g4,c4,5,200,0.5,1.0,'n = 样本量',{logx:true,ypct:true,yl:'95% 区间的实测覆盖率'});
+  AXS['c4']=ax;
+  if(on('4.nom')){ g4.strokeStyle='#c0392b'; g4.lineWidth=1.6; g4.setLineDash([5,4]);
+    g4.beginPath(); g4.moveTo(ax.L,ax.Y(0.95)); g4.lineTo(ax.L+ax.PW,ax.Y(0.95)); g4.stroke();
+    g4.setLineDash([]); }
+  const pts=[];
+  for(let j=0;j<COVN.length;j++) if(covRep[j]>0) pts.push([COVN[j],covHit[j]/covRep[j],covRep[j]]);
+  if(on('4.e')){
+    g4.strokeStyle='rgba(26,143,74,.55)'; g4.lineWidth=1.3; g4.beginPath();
+    pts.forEach(([x,y],i)=>{ const px=ax.X(x),py=ax.Y(Math.max(y,ax.ylo));
+      i?g4.lineTo(px,py):g4.moveTo(px,py); });
+    g4.stroke();
+    for(const [x,y,r] of pts){
+      const py=ax.Y(Math.max(y,ax.ylo));
+      g4.strokeStyle='#1a8f4a'; g4.lineWidth=1;              // ±2SE 误差棒
+      const se=2*Math.sqrt(Math.max(y*(1-y),1e-9)/r);
+      g4.beginPath(); g4.moveTo(ax.X(x),ax.Y(Math.min(1,Math.max(ax.ylo,y+se))));
+      g4.lineTo(ax.X(x),ax.Y(Math.max(ax.ylo,y-se))); g4.stroke();
+      g4.fillStyle='#1a8f4a'; g4.beginPath(); g4.arc(ax.X(x),py,3.4,0,7); g4.fill();
+      if(y<ax.ylo){ g4.fillStyle='#1a8f4a'; g4.font='9px Menlo'; g4.textAlign='center';
+        g4.fillText('↓'+(y*100).toFixed(0)+'%', ax.X(x), ax.T+ax.PH-4); g4.textAlign='left'; }
+    }
+  }
+  legend(g4,c4,'c4',[{key:'4.e',name:'实测覆盖率',col:'#1a8f4a',dot:1,lw:0.1},
+    {key:'4.nom',name:'名义 95%',col:'#c0392b',dash:[5,4],lw:1.6}]);
+  g4.fillStyle='#333'; g4.font='9.5px Menlo';
+  g4.fillText(pts.length?`θ=${STATS[stat].name}　每档 ${covRep[0]|0} 轮（点「④ 测覆盖率」继续累加）`
+                        :'点上面的「④ 测覆盖率」', ax.L+4, 11);
+}
+
+function drawSt(){
+  const th=STATS[stat].truth(), hat=samp?STATS[stat].f(samp):NaN;
+  const sb=summ(bootV), sg=summ(godV);
+  const nm=({normal:'正态',uniform:'均匀',exp:'指数',lognorm:'对数正态',
+             bimodal:'双峰',longtail:'长尾',hand:'手绘'})[mode]||mode;
+  let h=`总体 <b>${nm}</b>　θ = <b>${STATS[stat].name}</b>`
+    + `　真值 θ=<span class="y">${th.toPrecision(5)}</span>`
+    + `　这份样本 θ̂=<span class="g">${isFinite(hat)?hat.toPrecision(5):'—'}</span>`
+    + `　n=<span class="y">${n}</span>`;
+  h+='<br>';
+  if(sb&&sg) h+=`SE: bootstrap <span class="r">${sb.sd.toPrecision(4)}</span>`
+    + ` vs 真 <span class="g">${sg.sd.toPrecision(4)}</span>`
+    + `　95%区间: boot <span class="r">[${sb.lo.toPrecision(4)}, ${sb.hi.toPrecision(4)}]</span>`
+    + ` 真 <span class="g">[${sg.lo.toPrecision(4)}, ${sg.hi.toPrecision(4)}]</span>`
+    + (stat==='max'?`　P(重抽max=样本max)=${(1-Math.pow(1-1/n,n)).toFixed(3)}`:'');
+  else h+='<span class="hint">点「③ bootstrap +1 万」开始</span>';
+  $('st').innerHTML=h;
+  $('cnt').textContent=`bootstrap ${bootV.length.toLocaleString()} 次　覆盖率 ${(covRep[0]|0)} 轮/档`;
+}
+function render(){ draw1(); draw2(); draw3(); draw4(); drawSt(); }
+const DRAW={c1:draw1,c2:draw2,c3:draw3,c4:draw4};
+
+/* ═══ 手绘（同 central_limit_theorem.html：直接赋值，可往下画）═══ */
+let drawing=false, lastI=null;
+function paint(e){
+  const r=c1.getBoundingClientRect(), PW=c1.width-AXL-8;
+  const XL=-0.05, XH=1.05;
+  const px=(e.clientX-r.left)/r.width*c1.width;
+  const x=XL+(px-AXL)/PW*(XH-XL);
+  const i=Math.floor(x*K); if(i<0||i>=K) return;
+  const h=Math.max(0,Math.min(1, 1-(e.clientY-r.top)/r.height*1.15));
+  if(lastI!==null && Math.abs(i-lastI[0])>1){
+    const [i0,h0]=lastI, d=i-i0, sg=Math.sign(d);
+    for(let k2=1;k2<=Math.abs(d);k2++) fv[i0+sg*k2]=h0+(h-h0)*k2/Math.abs(d);
+  } else fv[i]=h;
+  lastI=[i,h];
+  if(mode!=='hand'){ mode='hand';
+    document.querySelectorAll('[data-p]').forEach(b=>b.classList.remove('on')); }
+  buildPop(); draw1();
+}
+function endDraw(){ if(!drawing) return; drawing=false; lastI=null;
+  buildPop(); newSample(); resetCov(); render(); }
+c1.addEventListener('pointerdown',e=>{ if(hitLegend('c1',c1,e)) return;
+  drawing=true; lastI=null; c1.setPointerCapture?.(e.pointerId); paint(e); });
+c1.addEventListener('pointermove',e=>{ if(!drawing) return;
+  if(e.buttons===0){ endDraw(); return; } paint(e); });
+for(const ev of ['pointerup','pointercancel','lostpointercapture']) c1.addEventListener(ev,endDraw);
+window.addEventListener('blur',endDraw);
+
+/* ═══ 悬停读数 ═══ */
+let HOVID=null,HOVX=null;
+function hoverAt(g,ax,id,fmt){
+  if(HOVID!==id||HOVX==null) return;
+  const x=ax.X(HOVX); if(x<ax.L-1||x>ax.L+ax.PW+1) return;
+  g.strokeStyle='#2b5fb8'; g.lineWidth=1; g.setLineDash([4,3]);
+  g.beginPath(); g.moveTo(x,ax.T); g.lineTo(x,ax.T+ax.PH); g.stroke(); g.setLineDash([]);
+  const t=fmt(HOVX); g.font='10px Menlo';
+  const tw=g.measureText(t).width+10; let bx=x+7;
+  if(bx+tw>ax.L+ax.PW) bx=x-7-tw;
+  const by=ax.T+ax.PH-23;
+  g.fillStyle='rgba(43,95,184,.95)'; g.fillRect(bx,by,tw,17);
+  g.fillStyle='#fff'; g.fillText(t,bx+5,by+12);
+}
+function bindHover(c,id){
+  const upd=e=>{ const ax=AXS[id]; if(!ax) return;
+    if(hitLegend(id,c,e)){ if(HOVID===id){HOVID=null;HOVX=null;DRAW[id]();} return; }
+    const r=c.getBoundingClientRect(), px=(e.clientX-r.left)*c.width/r.width;
+    if(px<ax.L||px>ax.L+ax.PW){ if(HOVID===id){HOVID=null;HOVX=null;DRAW[id]();} return; }
+    HOVID=id; HOVX=ax.Xinv(px); DRAW[id](); };
+  c.addEventListener('mousemove',upd);
+  c.addEventListener('mouseleave',()=>{ if(HOVID===id){HOVID=null;HOVX=null;DRAW[id]();} });
+}
+
+/* ═══ 控件 ═══ */
+function resetCov(){ covHit=new Float64Array(COVN.length); covRep=new Float64Array(COVN.length); }
+let busy=false;
+function runBoot(total){
+  if(busy||!samp) return; busy=true;
+  const btns=[...document.querySelectorAll('#b1,#b2,#cov,#redraw')];
+  btns.forEach(b=>b.disabled=true);
+  const CH=20000; let done=0;
+  (function chunk(){
+    const m=Math.min(CH,total-done);
+    for(let i=0;i<m;i++){ bootV.push(bootOnce()); godV.push(godOnce()); }
+    done+=m; render();
+    if(done<total) setTimeout(chunk,0);
+    else { busy=false; btns.forEach(b=>b.disabled=false); render(); }
+  })();
+}
+function runCov(rounds){
+  if(busy) return; busy=true;
+  const btns=[...document.querySelectorAll('#b1,#b2,#cov,#redraw')];
+  btns.forEach(b=>b.disabled=true);
+  const B=300; let done=0;
+  (function chunk(){
+    const m=Math.min(20,rounds-done);
+    for(let r=0;r<m;r++)
+      for(let j=0;j<COVN.length;j++){ covHit[j]+=covRound(COVN[j],B); covRep[j]++; }
+    done+=m; render();
+    if(done<rounds) setTimeout(chunk,0);
+    else { busy=false; btns.forEach(b=>b.disabled=false); render(); }
+  })();
+}
+document.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('[data-p]').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); mode=b.dataset.p;
+  for(let i=0;i<K;i++) fv[i]=PRE[mode](i);
+  let mx=0; for(let i=0;i<K;i++) mx=Math.max(mx,fv[i]);
+  for(let i=0;i<K;i++) fv[i]/=mx;                 // 归一到 [0,1]，和手绘同量纲
+  buildPop(); newSample(); resetCov(); render();
+}));
+document.querySelectorAll('[data-s]').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('[data-s]').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); stat=b.dataset.s;
+  bootV=[]; godV=[]; resetCov(); render();
+}));
+$('ns').addEventListener('input',()=>{ $('nsV').textContent='n='+NL[+$('ns').value];
+  newSample(); resetCov(); render(); });
+$('redraw').addEventListener('click',()=>{ newSample(); render(); });
+$('b1').addEventListener('click',()=>runBoot(10000));
+$('b2').addEventListener('click',()=>runBoot(100000));
+$('cov').addEventListener('click',()=>runCov(200));
+
+bindLegend(c1,'c1','crosshair'); bindLegend(c2,'c2'); bindLegend(c3,'c3'); bindLegend(c4,'c4');
+bindHover(c3,'c3');
+
+/* ═══ 启动 ═══ */
+document.querySelector('[data-p="lognorm"]').classList.add('on');
+document.querySelector('[data-s="mean"]').classList.add('on');
+for(let i=0;i<K;i++) fv[i]=PRE.lognorm(i);
+{ let mx=0; for(let i=0;i<K;i++) mx=Math.max(mx,fv[i]); for(let i=0;i<K;i++) fv[i]/=mx; }
+buildPop();
+$('nsV').textContent='n='+NL[+$('ns').value];
+newSample(); render();
 </script>
 </body>
 </html>
