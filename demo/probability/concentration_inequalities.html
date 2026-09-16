@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>集中不等式 —— 对任意分布都成立的界</title>
+<style>
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; margin:14px 16px; color:#222; }
+  h1 { font-size:17px; margin:0 0 8px; }
+  canvas { border:1px solid #ddd; display:block; background:#fff; }
+  button { font-size:12.5px; padding:2px 9px; border:1px solid #bbb; background:#fafafa;
+           border-radius:4px; cursor:pointer; }
+  button.on { background:#1a63d8; border-color:#1a63d8; color:#fff; font-weight:600; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12.5px; margin:5px 0; }
+  .cap { font-size:11.5px; color:#555; margin:3px 0 9px; }
+  .hint { color:#777; font-size:11px; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  .col { flex:0 0 545px; max-width:545px; }
+  .st { font-family:Menlo,Consolas,monospace; font-size:12.5px; background:#0f1522; color:#dfe6f3;
+        padding:6px 10px; border-radius:4px; margin:5px 0; line-height:1.95; }
+  .st b { color:#7fd3c4; } .st .r { color:#ff8f7a; } .st .g { color:#8fe09a; } .st .y { color:#ffd27f; }
+  .note { background:#f6f7fa; border-left:3px solid #9aa6bd; padding:7px 11px;
+          font-size:11.5px; color:#444; line-height:1.75; max-width:1120px; margin:8px 0; }
+  .step { background:#eef3fb; border-left:3px solid #2b5fb8; padding:6px 10px; font-size:12px;
+          margin:6px 0; line-height:1.7; max-width:1120px; }
+  .warn { background:#fff4e5; border:1px solid #e0b070; border-radius:4px; padding:6px 10px;
+          font-size:12px; line-height:1.65; max-width:1120px; margin:6px 0; }
+  code { background:#eef1f6; padding:0 3px; border-radius:2px; font-size:11.5px; }
+</style>
+</head>
+<body>
+<h1>集中不等式（concentration inequalities）—— <b>对任意分布都成立</b>的界</h1>
+
+<div class="step">
+  <b>X</b> = 从总体抽的一个观测（①画的是它，原始单位）。<b>Z = (X−μ)/σ</b> 是标准化后的它，
+  E[Z]=0、Var[Z]=1，②③④ 用 Z。<b>k</b> = 偏离几个 σ。<br>
+  <b>Z̄</b> = n 个观测标准化后的均值，Var[Z̄]=1/n；<b>ε</b> = 均值偏离几个 σ，⑤⑥ 用它。
+</div>
+
+<div class="bar">
+  <b>总体</b>
+  <button data-p="normal">正态</button>
+  <button data-p="uniform">均匀</button>
+  <button data-p="exp">指数</button>
+  <button data-p="lognorm">对数正态</button>
+  <button data-p="bimodal">双峰</button>
+  <button data-p="bern">伯努利 p=0.15</button>
+  <button data-p="cheb3">撑满 Chebyshev 的最坏总体</button>
+  <button data-p="cant2">撑满 Cantelli 的最坏总体</button>
+</div>
+<div class="bar">
+  <b>k</b><input type="range" id="kk" min="50" max="500" value="200" style="width:200px">
+  <span id="kkV" class="mono" style="min-width:64px"></span>
+  <b>采样</b>
+  <button id="s1">+1 万</button>
+  <button id="s2">+10 万</button>
+  <button id="s3">+100 万</button>
+  <button id="rst">清零</button>
+  <span id="cnt" class="mono hint"></span>
+</div>
+
+<div class="st" id="st"></div>
+
+<div class="row">
+  <div class="col">
+    <canvas id="c1" width="545" height="210"></canvas>
+    <div class="cap"><b>① 总体</b>（原始单位）　蓝 = 密度，<span style="color:#2b7a4b">绿 = μ</span>，
+      <span style="color:#c0392b">红虚 = μ±kσ</span>，红区 = Chebyshev 管的那块尾部。按住鼠标可改。</div>
+  </div>
+  <div class="col">
+    <canvas id="c2" width="545" height="210"></canvas>
+    <div class="cap"><b>② Chebyshev：P(|Z| ≥ k) ≤ 1/k²</b>　
+      <span style="color:#c0392b">红 = 界</span>（与分布无关）／
+      <span style="color:#1f3a6e">蓝 = 真值</span>／<span style="color:#1a8f4a">绿 = 实测</span>。
+      蓝线永远在红线下；最坏总体会在某个 k 上贴住。</div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col">
+    <canvas id="c3" width="545" height="210"></canvas>
+    <div class="cap"><b>③ 这个界松了多少倍</b> = (1/k²) ÷ P(|Z|≥k)　
+      正态在 k=2 松 5.5 倍，k=4 松约 4000 倍。灰线 = 1，即取等号。</div>
+  </div>
+  <div class="col">
+    <canvas id="c4" width="545" height="210"></canvas>
+    <div class="cap"><b>④ 单边：Cantelli P(Z ≥ k) ≤ 1/(1+k²)</b>　
+      <span style="color:#c0392b">红 = Cantelli</span>／<span style="color:#1f3a6e">蓝 = 真值</span>／
+      <span style="color:#1a8f4a">绿 = 实测</span>／<span style="color:#b03060">品红点 = 把双边界折半 1/(2k²)</span>
+      —— 那一步只对<b>对称</b>分布成立，一般情况下它比真值还小。</div>
+  </div>
+</div>
+
+<div class="bar" style="margin:10px 0 2px">
+  <b>⑤⑥ 专用</b>　ε<input type="range" id="ee" min="2" max="100" value="20" style="width:200px">
+  <span id="eeV" class="mono" style="min-width:64px"></span>
+  <span class="hint">②③④ 的不等式里没有 ε —— 它只出现在对<b>均值</b>的界里</span>
+</div>
+
+<div class="row">
+  <div class="col">
+    <canvas id="c5" width="545" height="210"></canvas>
+    <div class="cap"><b>⑤ 对均值用一次 Chebyshev ⟹ 弱大数定律</b>　Var[Z̄]=1/n ⟹ P(|Z̄| ≥ ε) ≤ 1/(nε²) → 0。<br>
+      <span style="color:#c0392b">红 = 1/nε²</span>（幂律，斜率 −1）／
+      <span style="color:#8a4ab0">紫虚 = CLT 2Φ(−ε√n)</span>（指数衰减）／
+      <span style="color:#1a8f4a">绿 = 实测</span>。差距越拉越大。</div>
+  </div>
+  <div class="col">
+    <canvas id="c6" width="545" height="210"></canvas>
+    <div class="cap"><b>⑥ Hoeffding：P(|Z̄| ≥ ε) ≤ 2e<sup>−2nε²/R²</sup></b>，R = 标准化后的极差。<br>
+      <span style="color:#d98000">橙 = Hoeffding</span>／<span style="color:#c0392b">红 = Chebyshev</span>／
+      <span style="color:#1a8f4a">绿 = 实测</span>。多买一条"有界"假设，把幂律换成指数；
+      R 大的总体它反而更松。</div>
+  </div>
+</div>
+
+<div class="note">
+  <b>界为什么这么松，以及为什么不能再改进</b><br>
+  Chebyshev 在 k=2 只给出 ≤25%，正态的真值是 4.55%。松不是证明的毛病 —— <b>存在分布把它恰好撑满</b>：<br>
+  <b>三点</b>：<code>P(±k)=1/(2k²)</code>、<code>P(0)=1−1/k²</code> ⟹ 均值 0、方差 1，
+  而 <code>P(|Z|≥k)=1/k²</code>，正好等于 Chebyshev 界。<br>
+  <b>两点</b>：<code>P(+k)=1/(1+k²)</code>、另一点在 <code>−pk/(1−p)</code> ⟹
+  <code>P(Z≥k)=1/(1+k²)</code>，正好等于 Cantelli 界。<br>
+  做法是把该跑到尾部的概率<b>全顶在 k 那一点</b>，剩下的塞在均值处省方差。上面那两个按钮就是它们，
+  按当前 k 构造，也只在那个 k 上贴住。（不算人造：<b>伯努利 p 本身</b>就是 Cantelli 在
+  <code>k=√((1−p)/p)</code> 处的最坏总体，p=0.15 ⟹ k=2.38。）<br>
+  <b>所以"松"是「只知道 μ 和 σ²」的代价。</b>想更紧，只能多买一条假设：<b>有界</b> ⟹ Hoeffding（⑥，
+  幂律变指数）；<b>n→∞</b> ⟹ CLT（⑤，但那是近似，不是界）。
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const C=id=>{const c=$(id); return [c,c.getContext('2d')];};
+const [c1,g1]=C('c1'), [c2,g2]=C('c2'), [c3,g3]=C('c3'),
+      [c4,g4]=C('c4'), [c5,g5]=C('c5'), [c6,g6]=C('c6');
+
+/* ── RNG：mulberry32。全程 Math.imul 做 32 位整数运算，不像 LCG 那样
+   在 seed*大常数 时超过 2^53 丢精度（那会让实测偏 2% 且不随 N 缩小）。 ── */
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15, 1|a); t=t+Math.imul(t^t>>>7, 61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296; }; }
+let rnd=mulberry32(20260915);
+
+const erf=x=>{const t=1/(1+0.5*Math.abs(x));
+  const y=t*Math.exp(-x*x-1.26551223+t*(1.00002368+t*(0.37409196+t*(0.09678418+t*(-0.18628806+
+    t*(0.27886807+t*(-1.13520398+t*(1.48851587+t*(-0.82215223+t*0.17087277)))))))));
+  return x>=0?1-y:y-1;};
+const ncdf=x=>0.5*(1+erf(x/Math.SQRT2));
+
+/* ══════════════ 总体模型 ══════════════
+   统一表示成「原子 + 分段均匀块」，两者都给精确矩和精确尾概率，
+   所以图上的「真值」一律是解析算的，不是采样估的。
+   全部在标准化坐标 z=(X−μ)/σ 下存放 ⟹ μ=0, σ=1。 */
+const K=256;
+let mode='normal', fv=new Float64Array(K);
+let AT=[], BL=[], CUM=[], EABS=0, SK=NaN, RNG=[0,0], pinK=null;
+/* RAW = 未标准化的分段，MU/SD = 标准化用的那两个数。① 画 RAW。 */
+let RAW=[], MU=0, SD=1, RSUP=[0,1];
+
+const PRE={
+  normal:  i=>Math.exp(-Math.pow((i/K-0.5)/0.13,2)/2),
+  uniform: i=>1,
+  exp:     i=>Math.exp(-(i/K)*6),
+  lognorm: i=>{const x=(i+0.5)/K*4+0.02; return Math.exp(-Math.pow(Math.log(x)+0.3,2)/(2*0.55*0.55))/x;},
+  bimodal: i=>Math.exp(-Math.pow((i/K-0.28)/0.075,2)/2)+0.85*Math.exp(-Math.pow((i/K-0.72)/0.075,2)/2),
+};
+
+function buildPop(){
+  AT=[]; BL=[];
+  let raw=[];                                  // [值或区间, 概率]
+  if(mode==='bern'){ raw=[['a',0,0.85],['a',1,0.15]]; }
+  else if(mode==='cheb3'){
+    /* Chebyshev 的极值分布：P(±k)=1/(2k²), P(0)=1−1/k²。
+       μ=0 显然；σ² = 2k²·(1/2k²) = 1 恰好；P(|Z|≥k)=1/k² 正好等于界。
+       注意它只在这一个 k 上贴等号 —— 所以钉住构造时的 k₀。 */
+    const k=pinK, p=1/(2*k*k);
+    raw=[['a',-k,p],['a',0,1-2*p],['a',k,p]];
+  }
+  else if(mode==='cant2'){
+    /* Cantelli 的极值分布：两点，P(k)=1/(1+k²)，另一点在 −pk/(1−p)。
+       解 μ=0, σ²=1 得 p=1/(1+k²)。P(Z≥k)=p 正好等于 Cantelli 界。 */
+    const k=pinK, p=1/(1+k*k), b=-p*k/(1-p);
+    raw=[['a',b,1-p],['a',k,p]];
+  }
+  else {
+    let w=0; for(let i=0;i<K;i++) w+=fv[i];
+    if(w<=1e-12){ for(let i=0;i<K;i++) fv[i]=0.5; w=0.5*K; }    // 全零 ⟹ 退成均匀
+    for(let i=0;i<K;i++){ if(fv[i]<=0) continue; raw.push(['b',i/K,(i+1)/K,fv[i]/w]); }
+  }
+  /* 精确矩：块 [lo,hi] 上 E[X]=p(lo+hi)/2, E[X²]=p(lo²+lo·hi+hi²)/3 */
+  let m1=0,m2=0;
+  for(const r of raw){
+    if(r[0]==='a'){ m1+=r[2]*r[1]; m2+=r[2]*r[1]*r[1]; }
+    else { const [,lo,hi,p]=r; m1+=p*(lo+hi)/2; m2+=p*(lo*lo+lo*hi+hi*hi)/3; } }
+  const mu=m1, sd=Math.sqrt(Math.max(1e-300,m2-m1*m1));
+  RAW=raw; MU=mu; SD=sd;
+  { let lo=Infinity,hi=-Infinity;
+    for(const r of raw){ if(r[0]==='a'){ lo=Math.min(lo,r[1]); hi=Math.max(hi,r[1]); }
+      else { lo=Math.min(lo,r[1]); hi=Math.max(hi,r[2]); } }
+    RSUP=[lo,hi]; }
+  let m3=0;
+  for(const r of raw){
+    if(r[0]==='a'){ const z=(r[1]-mu)/sd; m3+=r[2]*z*z*z; AT.push([z,r[2]]); }
+    else { const [,lo,hi,p]=r, a=(lo-mu)/sd, b=(hi-mu)/sd;
+      m3+=p*(Math.pow(b,4)-Math.pow(a,4))/(4*(b-a));       // ∫z³/(b−a)
+      BL.push([a,b,p]); } }
+  SK=m3;
+  /* 采样用的累积表 + 精确 E|Z| + 标准化后的极差 */
+  CUM=[]; let acc=0; EABS=0; let lo=Infinity, hi=-Infinity;
+  for(const a of AT){ acc+=a[1]; CUM.push([acc,'a',a[0],0]); EABS+=a[1]*Math.abs(a[0]);
+    lo=Math.min(lo,a[0]); hi=Math.max(hi,a[0]); }
+  for(const b of BL){ acc+=b[2]; CUM.push([acc,'b',b[0],b[1]]); 
+    const [p,q]=[b[0],b[1]];
+    EABS += b[2]*((p>=0)?(q*q-p*p)/2 : (q<=0)?(p*p-q*q)/2 : (p*p+q*q)/2)/(q-p);
+    lo=Math.min(lo,p); hi=Math.max(hi,q); }
+  RNG=[lo,hi];
+  resetAcc();
+}
+function sample(){
+  const u=rnd(); let a=0,b=CUM.length-1;
+  while(a<b){ const m=(a+b)>>1; if(u<=CUM[m][0]) b=m; else a=m+1; }
+  const e=CUM[a];
+  return e[1]==='a' ? e[2] : e[2]+rnd()*(e[3]-e[2]);
+}
+/* 精确尾概率（解析，不采样）*/
+function tailR(k){                                  // P(Z ≥ k)
+  let s=0;
+  for(const [z,p] of AT) if(z>=k-1e-12) s+=p;
+  for(const [a,b,p] of BL){ const o=Math.min(b,Infinity)-Math.max(a,k);
+    if(o>0) s+=p*Math.min(o,b-a)/(b-a); }
+  return s;
+}
+function tailL(k){                                  // P(Z ≤ −k)
+  let s=0;
+  for(const [z,p] of AT) if(z<=-k+1e-12) s+=p;
+  for(const [a,b,p] of BL){ const o=Math.min(b,-k)-a;
+    if(o>0) s+=p*Math.min(o,b-a)/(b-a); }
+  return s;
+}
+const tailB=k=>tailR(k)+tailL(k);                   // P(|Z| ≥ k)
+
+/* ══════════════ 采样累积 ══════════════ */
+const W=0.005, NB=3200;                             // z ∈ [−8,8] 的直方图
+let H=new Float64Array(NB), Nz=0;
+let hitB=0, hitR=0, Nk=0;                           // 当前 k 上的精确计数
+const NL=[1,2,3,5,8,12,20,30,50,80,120,200,300,500,800,1200,2000];
+let mRep=new Float64Array(NL.length), mHit=new Float64Array(NL.length);
+function resetAcc(){ H=new Float64Array(NB); Nz=0; hitB=hitR=Nk=0;
+  mRep=new Float64Array(NL.length); mHit=new Float64Array(NL.length);
+  rnd=mulberry32(20260915); }
+function resetK(){ hitB=hitR=Nk=0; }
+function resetE(){ mRep=new Float64Array(NL.length); mHit=new Float64Array(NL.length); }
+
+let K_=2, EPS=0.2;
+const empB=k=>{ if(!Nz) return NaN;              // 实测 P(|Z|≥k)，由直方图求和
+  let lo=Math.floor((-k+8)/W+1e-7), hi=Math.ceil((k+8)/W-1e-7), s=0;
+  for(let i=0;i<=lo;i++) s+=H[i];
+  for(let i=hi;i<NB;i++) s+=H[i];
+  return s/Nz; };
+const empR=k=>{ if(!Nz) return NaN;
+  let hi=Math.ceil((k+8)/W-1e-7), s=0;
+  for(let i=hi;i<NB;i++) s+=H[i];
+  return s/Nz; };
+
+const LSUM=NL.reduce((a,c)=>a+c,0);                  // 均值面板跑一轮全档位要的样本数
+function step(N){                                    // 抽 N 个单点样本 + 配比的均值组
+  for(let i=0;i<N;i++){
+    const z=sample(); Nz++;
+    const bi=Math.floor((z+8)/W+1e-7);
+    if(bi>=0&&bi<NB) H[bi]++;
+    if(Math.abs(z)>=K_-1e-12) hitB++;
+    if(z>=K_-1e-12) hitR++;
+    Nk++;
+  }
+  const passes=Math.max(1,Math.round(N/LSUM));       // 均值样本量和单点大致等量
+  for(let pass=0;pass<passes;pass++)
+    for(let j=0;j<NL.length;j++){ const n=NL[j];
+      let s=0; for(let i=0;i<n;i++) s+=sample();
+      mRep[j]++; if(Math.abs(s/n)>=EPS) mHit[j]++; }
+}
+/* 分块跑并在块间让出主线程，这样大批量时计数和图能看到进度、页面不假死 */
+let busy=false;
+function runBatch(total){
+  if(busy) return; busy=true;
+  const CH=100000; let done=0;
+  const btns=[...document.querySelectorAll('#s1,#s2,#s3,#rst')];
+  btns.forEach(b=>b.disabled=true);
+  (function chunk(){
+    const m=Math.min(CH,total-done); step(m); done+=m;
+    render();
+    $('cnt').textContent += `　…采样中 ${done.toLocaleString()}/${total.toLocaleString()}`;
+    if(done<total) setTimeout(chunk,0);
+    else { busy=false; btns.forEach(b=>b.disabled=false); render(); }
+  })();
+}
+
+/* ══════════════ 可点击 legend ══════════════ */
+const VIS={}, HIT={}, LEGX={};
+const on = k => VIS[k]!==false;
+function legend(g,c,id,items){
+  HIT[id]=[]; g.font='10px Arial'; g.textAlign='right';
+  /* 不透明底衬：曲线会画到画布右上角，否则会从 legend 文字中间穿过去。 */
+  { let mw=0; for(const it of items)
+      mw=Math.max(mw, g.measureText(it.name+(it.empty?'（未采样）':'')).width);
+    const bw=mw+34, bh=items.length*13+6, bx=c.width-10-mw-26-5, by=1;
+    g.fillStyle='rgba(255,255,255,.93)'; g.fillRect(bx,by,bw,bh);
+    g.strokeStyle='#e4e4e4'; g.lineWidth=1; g.strokeRect(bx+0.5,by+0.5,bw-1,bh-1);
+    LEGX[id]=bx; }
+  items.forEach((it,i)=>{
+    const y=13+i*13, vis=on(it.key), col=vis?it.col:'#c9c9c9';
+    const nm=it.name+(it.empty?'（未采样）':'');
+    const tw=g.measureText(nm).width, tx=c.width-10, sx=tx-tw-26;
+    g.fillStyle=it.empty?'#c08040':(vis?'#333':'#b0b0b0'); g.fillText(nm,tx,y);
+    g.strokeStyle=col; g.lineWidth=it.lw||2;
+    if(it.dash) g.setLineDash(it.dash);
+    g.beginPath(); g.moveTo(sx,y-4); g.lineTo(sx+18,y-4); g.stroke(); g.setLineDash([]);
+    if(it.dot){ g.fillStyle=col; g.beginPath(); g.arc(sx+9,y-4,3,0,7); g.fill(); }
+    if(!vis){ g.strokeStyle='#b0b0b0'; g.lineWidth=1;
+      g.beginPath(); g.moveTo(tx-tw,y-3); g.lineTo(tx,y-3); g.stroke(); }
+    HIT[id].push({key:it.key, x0:sx-4, y0:y-11, x1:tx+4, y1:y+3});
+  });
+  g.textAlign='left';
+}
+function hitLegend(id,c,e){
+  const r=c.getBoundingClientRect();
+  const x=(e.clientX-r.left)*c.width/r.width, y=(e.clientY-r.top)*c.height/r.height;
+  return (HIT[id]||[]).find(b=>x>=b.x0&&x<=b.x1&&y>=b.y0&&y<=b.y1);
+}
+function bindLegend(c,id,cur){
+  c.addEventListener('click',e=>{ const h=hitLegend(id,c,e);
+    if(h){ VIS[h.key]=!on(h.key); render(); } });
+  c.addEventListener('mousemove',e=>{ c.style.cursor = hitLegend(id,c,e)?'pointer' : (cur||'default'); });
+}
+
+/* 图内顶部读数：宽度上限 = legend 左边界，先试 10.5px 再 9.5px，不够就折两行。 */
+function hdr(g,c,ax,id,txt,col){
+  const lim=(LEGX[id]!=null?LEGX[id]:c.width-8)-(ax.L+4)-8;
+  g.fillStyle=col||'#333';
+  for(const fs of [10.5,9.5]){ g.font=fs+'px Menlo';
+    if(g.measureText(txt).width<=lim){ g.fillText(txt, ax.L+4, 11); return; } }
+  g.font='9.5px Menlo';
+  const parts=txt.split(/(?<=[\s\u3000])/), ln=['',''];
+  let li=0;
+  for(const w of parts){ if(li===0 && g.measureText(ln[0]+w).width>lim) li=1; ln[li]+=w; }
+  g.fillText(ln[0], ax.L+4, 11);
+  if(ln[1]) g.fillText(ln[1], ax.L+4, 22);
+}
+
+/* 鼠标悬停读数：②③④⑤⑥ 划过即读该处数值；②③④ 点一下把 k 定过去。 */
+const AXS={}; let HOVID=null, HOVX=null;
+function hoverAt(g,ax,id,fmt){
+  if(HOVID!==id || HOVX==null) return;
+  const x=ax.X(HOVX);
+  if(x<ax.L-1||x>ax.L+ax.PW+1) return;
+  g.strokeStyle='#2b5fb8'; g.lineWidth=1; g.setLineDash([4,3]);
+  g.beginPath(); g.moveTo(x,ax.T); g.lineTo(x,ax.T+ax.PH); g.stroke(); g.setLineDash([]);
+  const txt=fmt(HOVX);
+  g.font='10px Menlo'; const tw=g.measureText(txt).width+10;
+  let bx=x+7; if(bx+tw>ax.L+ax.PW) bx=x-7-tw;
+  const by=ax.T+ax.PH-23;
+  g.fillStyle='rgba(43,95,184,.95)'; g.fillRect(bx,by,tw,17);
+  g.fillStyle='#fff'; g.fillText(txt,bx+5,by+12);
+}
+function bindHover(c,id,commit){
+  const upd=e=>{
+    const ax=AXS[id]; if(!ax) return;
+    if(hitLegend(id,c,e)){ if(HOVID===id){HOVID=null;HOVX=null;DRAW[id]();} return; }
+    const r=c.getBoundingClientRect(), px=(e.clientX-r.left)*c.width/r.width;
+    if(px<ax.L||px>ax.L+ax.PW){ if(HOVID===id){HOVID=null;HOVX=null;DRAW[id]();} return; }
+    HOVID=id; HOVX=ax.Xinv(px); DRAW[id]();
+  };
+  c.addEventListener('mousemove',upd);
+  c.addEventListener('mouseleave',()=>{ if(HOVID===id){HOVID=null;HOVX=null;DRAW[id]();} });
+  if(commit) c.addEventListener('click',e=>{            // 点一下把 k 定到这里
+    if(hitLegend(id,c,e)) return;
+    const ax=AXS[id]; if(!ax) return;
+    const r=c.getBoundingClientRect(), px=(e.clientX-r.left)*c.width/r.width;
+    if(px<ax.L||px>ax.L+ax.PW) return;
+    const k=Math.max(0.5,Math.min(5,ax.Xinv(px)));
+    $('kk').value=Math.round(k*100); $('kk').dispatchEvent(new Event('input',{bubbles:true}));
+  });
+}
+
+const noS  = () => Nk===0;            // 还没采过单点样本
+const noSM = () => (mRep[0]|0)===0;   // 还没采过均值样本
+/* 提示只放在图内左下角一行小字，绝不盖在曲线上 */
+function hintNoSample(g,ax,what){
+  g.font='10px Arial'; g.fillStyle='#b07020';
+  g.fillText(what, ax.L+5, ax.T+ax.PH-5);
+}
+
+/* ══════════════ 通用坐标轴 ══════════════ */
+const AXL=64;                          // 左边距：要放得下刻度文字 + 竖排的 y 轴标注
+function frame(g,c,xlo,xhi,ylo,yhi,xl,opt){
+  opt=opt||{};
+  const L=opt.L||AXL, R=8, T=16, B=32;
+  const PW=c.width-L-R, PH=c.height-T-B;
+  g.clearRect(0,0,c.width,c.height);
+  const lx=!!opt.logx, ly=!!opt.logy;
+  const fx=v=>lx?Math.log10(v):v, fy=v=>ly?Math.log10(Math.max(v,1e-300)):v;
+  const x0=fx(xlo), x1=fx(xhi), y0=fy(ylo), y1=fy(yhi);
+  const X=v=>L+(fx(v)-x0)/(x1-x0)*PW, Y=v=>T+(1-(fy(v)-y0)/(y1-y0))*PH;
+  const Xinv=px=>{ const f=x0+(px-L)/PW*(x1-x0); return lx?Math.pow(10,f):f; };
+  g.strokeStyle='#e8e8e8'; g.lineWidth=1; g.fillStyle='#777'; g.font='9.5px Menlo';
+  const ytk=[];
+  if(ly){ for(let e=Math.ceil(Math.log10(ylo));e<=Math.floor(Math.log10(yhi));e++) ytk.push(Math.pow(10,e)); }
+  else { for(let i=0;i<=4;i++) ytk.push(ylo+(yhi-ylo)*i/4); }
+  g.textAlign='right';
+  for(const v of ytk){ const y=Math.round(Y(v))+0.5;
+    g.beginPath(); g.moveTo(L,y); g.lineTo(L+PW,y); g.stroke();
+    g.fillText(ly?('1e'+Math.round(Math.log10(v))):v.toFixed(2), L-4, y+3); }
+  const xtk=[];
+  if(lx){ for(let e=Math.ceil(Math.log10(xlo));e<=Math.floor(Math.log10(xhi));e++) xtk.push(Math.pow(10,e)); }
+  else { for(let i=0;i<=6;i++) xtk.push(xlo+(xhi-xlo)*i/6); }
+  g.textAlign='center';
+  for(const v of xtk){ const x=Math.round(X(v))+0.5;
+    g.beginPath(); g.moveTo(x,T); g.lineTo(x,T+PH); g.stroke();
+    g.fillText(lx?(v>=1000?(v/1000)+'k':String(v)):v.toFixed(lx?0:1), x, T+PH+13); }
+  g.strokeStyle='#888'; g.beginPath(); g.moveTo(L,T); g.lineTo(L,T+PH); g.lineTo(L+PW,T+PH); g.stroke();
+  g.fillStyle='#555'; g.font='10px Menlo'; g.fillText(xl, L+PW/2, T+PH+27);
+  if(opt.yl){                          // 竖排 y 轴标注
+    g.save(); g.translate(12, T+PH/2); g.rotate(-Math.PI/2);
+    g.textAlign='center'; g.fillStyle='#555'; g.font='10px Menlo';
+    g.fillText(opt.yl,0,0); g.restore(); }
+  g.textAlign='left';
+  return {X,Y,Xinv,L,T,PW,PH,xlo,xhi,ylo,yhi};
+}
+function line(g,ax,f,lo,hi,col,lw,dash,N){
+  g.strokeStyle=col; g.lineWidth=lw||2; if(dash) g.setLineDash(dash);
+  g.beginPath(); let st=false; N=N||300;
+  const lgx = ax.xlo>0 && (hi/lo>50);
+  for(let i=0;i<=N;i++){
+    const x = lgx ? lo*Math.pow(hi/lo,i/N) : lo+(hi-lo)*i/N;
+    const v=f(x);
+    if(!isFinite(v)||v<=0&&ax.ylo>0){ st=false; continue; }
+    const yy=Math.min(Math.max(v,ax.ylo),ax.yhi);
+    const px=ax.X(x), py=ax.Y(yy);
+    st?g.lineTo(px,py):g.moveTo(px,py); st=true; }
+  g.stroke(); g.setLineDash([]);
+}
+function dots(g,ax,pts,col,r){
+  g.fillStyle=col;
+  for(const [x,v] of pts){ if(!isFinite(v)||v<ax.ylo||v>ax.yhi) continue;
+    g.beginPath(); g.arc(ax.X(x),ax.Y(v),r||2.4,0,7); g.fill(); }
+}
+
+/* ══════════════ ① 总体 ══════════════ */
+/* ① 的坐标固定：网格总体用 x∈[−0.08,1.08]、y∈[0,VMAX]，纵轴直接画 fv
+   （格宽相等 ⟹ fv ∝ 密度）。这样「点哪里 = 画多高」恒定，手绘不会漂。
+   只有原子总体按自己的支撑取范围。 */
+const VMAX=1.12;      // 手绘高度上限：点到画布最顶 ⟹ fv=1
+const isAtomic = () => RAW.length>0 && RAW[0][0]==='a';
+function ax1(){
+  if(isAtomic()){
+    const pad=(RSUP[1]-RSUP[0])*0.08+0.05;
+    let top=0.6; for(const r of RAW) top=Math.max(top,r[2]);
+    return [Math.min(RSUP[0]-pad, MU-K_*SD-pad), Math.max(RSUP[1]+pad, MU+K_*SD+pad), top*1.18, true];
+  }
+  return [-0.08, 1.08, VMAX, false];
+}
+function draw1(){
+  const [XL,XH,top,atom]=ax1();
+  const ax=frame(g1,c1,XL,XH,0,top, atom ? 'x = X 的取值（原始单位）'
+    : 'x = X 的取值（原始单位，网格 [0,1)）',
+    {yl: atom ? '原子概率 p' : '密度 = 你画的高度'});
+  /* Chebyshev 管的那块尾部 */
+  const kl=MU-K_*SD, kh=MU+K_*SD;
+  if(on('1.sh')){ g1.fillStyle='rgba(200,60,60,.10)';
+    g1.fillRect(ax.L,ax.T, Math.max(0,ax.X(kl)-ax.L), ax.PH);
+    g1.fillRect(ax.X(kh),ax.T, Math.max(0,ax.L+ax.PW-ax.X(kh)), ax.PH); }
+  if(!atom && on('1.d')){                       // 网格总体：直接画 fv，纵轴即 fv
+    /* 一条整体阶梯路径填充，不逐格 fillRect —— 后者用小数坐标画 160 个矩形会留下
+       抗锯齿白缝，放大看像梳齿，而实际 fv 是平的。 */
+    g1.fillStyle='rgba(31,58,110,.55)'; g1.beginPath();
+    g1.moveTo(ax.X(0),ax.Y(0));
+    for(let i=0;i<K;i++){ const y=ax.Y(Math.min(fv[i],top));
+      g1.lineTo(ax.X(i/K),y); g1.lineTo(ax.X((i+1)/K),y); }
+    g1.lineTo(ax.X(1),ax.Y(0)); g1.closePath(); g1.fill();
+    g1.strokeStyle='rgba(31,58,110,.9)'; g1.lineWidth=1; g1.beginPath();
+    for(let i=0;i<K;i++){ const y=ax.Y(Math.min(fv[i],top));
+      i?g1.lineTo(ax.X(i/K),y):g1.moveTo(ax.X(i/K),y); g1.lineTo(ax.X((i+1)/K),y); }
+    g1.stroke(); }
+  if(on('1.d')) for(const r of RAW){
+    if(r[0]==='b'){ /* 已在上面按 fv 画了 */ }
+    else { const [,c,p]=r;                        // 离散原子：竖棒
+      g1.strokeStyle='#1f3a6e'; g1.lineWidth=3; g1.beginPath();
+      g1.moveTo(ax.X(c),ax.Y(0)); g1.lineTo(ax.X(c),ax.Y(p)); g1.stroke();
+      g1.fillStyle='#1f3a6e'; g1.beginPath(); g1.arc(ax.X(c),ax.Y(p),3.4,0,7); g1.fill();
+      g1.font='10px Menlo'; g1.textAlign='center';
+      g1.fillText('p='+p.toFixed(4), ax.X(c), ax.Y(p)-6); g1.textAlign='left'; } }
+  if(on('1.mu')){ g1.strokeStyle='#2b7a4b'; g1.lineWidth=1.2;    // μ
+    g1.beginPath(); g1.moveTo(ax.X(MU),ax.T); g1.lineTo(ax.X(MU),ax.Y(0)); g1.stroke(); }
+  if(on('1.k')){ g1.strokeStyle='#c0392b'; g1.lineWidth=1.4; g1.setLineDash([5,4]);
+    for(const e of [kl,kh]){ if(e<XL||e>XH) continue;
+      g1.beginPath(); g1.moveTo(ax.X(e),ax.T); g1.lineTo(ax.X(e),ax.Y(0)); g1.stroke(); }
+    g1.setLineDash([]); }
+  legend(g1,c1,'c1',[{key:'1.d',name:'总体密度',col:'#1f3a6e'},
+    {key:'1.mu',name:'μ',col:'#2b7a4b',lw:1.2},
+    {key:'1.k',name:'μ±kσ',col:'#c0392b',dash:[5,4],lw:1.4},
+    {key:'1.sh',name:'尾部区域',col:'#eec0c0',lw:6}]);
+  hdr(g1,c1,ax,'c1',
+    `μ=${MU.toFixed(4)} σ=${SD.toFixed(4)}　μ±${K_.toFixed(2)}σ = ${kl.toFixed(3)}/${kh.toFixed(3)}`,'#c0392b');
+  if(pinK!=null && (mode==='cheb3'||mode==='cant2')){
+    g1.fillStyle='#a8481a'; g1.textAlign='right';
+    g1.fillText(`极值分布钉在 k₀=${pinK.toFixed(2)}`, ax.L+ax.PW-2, 11); g1.textAlign='left'; }
+}
+
+/* ══════════════ ② Chebyshev 全景 ══════════════ */
+const YLO=1e-7;
+function draw2(){
+  const ax=frame(g2,c2,1,6,YLO,1.3,'k = 偏离多少个 σ　（鼠标划过可读任意 k；点一下把 k 定在那里）',
+    {logy:true, yl:'概率 P(|Z| ≥ k)'});
+  AXS['c2']=ax;
+  if(on('2.b')) line(g2,ax,k=>1/(k*k),1,6,'#c0392b',2);                   // 界
+  if(on('2.t')) line(g2,ax,k=>tailB(k),1,6,'#1f3a6e',2);                  // 真值(解析)
+  if(on('2.e')){ const pts=[]; for(let i=0;i<=40;i++){ const k=1+5*i/40; pts.push([k,empB(k)]); }
+    dots(g2,ax,pts,'#1a8f4a',2.2); }
+  const e=Nk?hitB/Nk:NaN;
+  if(on('2.m')){
+    g2.strokeStyle='#888'; g2.lineWidth=1; g2.setLineDash([2,3]);
+    g2.beginPath(); g2.moveTo(ax.X(K_),ax.T); g2.lineTo(ax.X(K_),ax.T+ax.PH); g2.stroke(); g2.setLineDash([]);
+    dots(g2,ax,[[K_,e]],'#0d6b33',4.5); }
+  legend(g2,c2,'c2',[{key:'2.b',name:'界 1/k²',col:'#c0392b'},
+    {key:'2.t',name:'真值(解析)',col:'#1f3a6e'},
+    {key:'2.e',name:'实测',col:'#1a8f4a',dot:1,lw:0.1,empty:noS()},
+    {key:'2.m',name:'当前 k',col:'#888',dash:[2,3],lw:1}]);
+  if(noS()) hintNoSample(g2,ax,'实测：点上面的「+10 万」');
+  hdr(g2,c2,ax,'c2',
+    `k=${K_.toFixed(2)}　界 ${(1/(K_*K_)).toFixed(6)}　真值 ${tailB(K_).toFixed(6)}　实测 ${isFinite(e)?e.toFixed(6):'—'}`);
+  hoverAt(g2,ax,'c2',k=>{ const em=empB(k);
+    return `k=${k.toFixed(2)} 界 ${(1/(k*k)).toFixed(5)} 真值 ${tailB(k).toFixed(5)}`
+      + (isFinite(em)?` 实测 ${em.toFixed(5)}`:'') ; });
+}
+
+/* ══════════════ ③ 松紧比 ══════════════ */
+function draw3(){
+  const ax=frame(g3,c3,1,6,0.5,1e9,'k = 偏离多少个 σ　（鼠标划过可读任意 k）',
+    {logy:true, yl:'松了多少倍 = 界÷真值'});
+  AXS['c3']=ax;
+  if(on('3.one')){ g3.strokeStyle='#999'; g3.lineWidth=1.3; g3.setLineDash([5,4]);
+    g3.beginPath(); g3.moveTo(ax.L,ax.Y(1)); g3.lineTo(ax.L+ax.PW,ax.Y(1)); g3.stroke(); g3.setLineDash([]);
+    g3.fillStyle='#777'; g3.font='9.5px Menlo'; g3.fillText('比值=1 ⟹ 贴上等号', ax.L+4, ax.Y(1)-4); }
+  if(on('3.r')) line(g3,ax,k=>{const t=tailB(k); return t>0? (1/(k*k))/t : NaN;},1,6,'#1f3a6e',2.2);
+  const r=tailB(K_)>0?(1/(K_*K_))/tailB(K_):Infinity;
+  if(on('3.m')){ g3.strokeStyle='#888'; g3.lineWidth=1; g3.setLineDash([2,3]);
+    g3.beginPath(); g3.moveTo(ax.X(K_),ax.T); g3.lineTo(ax.X(K_),ax.T+ax.PH); g3.stroke(); g3.setLineDash([]);
+    dots(g3,ax,[[K_,r]],'#c0392b',4.5); }
+  legend(g3,c3,'c3',[{key:'3.r',name:'Chebyshev界/真值',col:'#1f3a6e',lw:2.2},
+    {key:'3.one',name:'=1 (等号)',col:'#999',dash:[5,4],lw:1.3},
+    {key:'3.m',name:'当前 k',col:'#c0392b',dot:1,lw:0.1}]);
+  hdr(g3,c3,ax,'c3',
+    `k=${K_.toFixed(2)}　(1/k²) ÷ P(|Z|≥k) = ${isFinite(r)?(r<1e6?r.toFixed(2):r.toExponential(2)):'∞ (真值=0)'}`);
+  hoverAt(g3,ax,'c3',k=>{ const t=tailB(k), q=t>0?(1/(k*k))/t:Infinity;
+    return `k=${k.toFixed(2)} 松 ${isFinite(q)?(q<1e5?q.toFixed(1)+'×':q.toExponential(1)+'×'):'∞ (真值=0)'}`; });
+}
+
+/* ══════════════ ④ 单边 + 折半陷阱 ══════════════ */
+function draw4(){
+  const ax=frame(g4,c4,0.5,6,YLO,1.3,'k = 偏离多少个 σ　（鼠标划过可读任意 k）',
+    {logy:true, yl:'概率 P(Z ≥ k) 单边'});
+  AXS['c4']=ax;
+  if(on('4.h')) line(g4,ax,k=>1/(2*k*k),0.5,6,'#b03060',1.8,[2,3]);        // 错界：折半
+  if(on('4.c')) line(g4,ax,k=>1/(1+k*k),0.5,6,'#c0392b',2);                // Cantelli
+  if(on('4.t')) line(g4,ax,k=>tailR(k),0.5,6,'#1f3a6e',2);                 // 真值
+  if(on('4.e')){ const pts=[]; for(let i=0;i<=44;i++){ const k=0.5+5.5*i/44; pts.push([k,empR(k)]); }
+    dots(g4,ax,pts,'#1a8f4a',2.2); }
+  const e=Nk?hitR/Nk:NaN;
+  if(on('4.m')){ g4.strokeStyle='#888'; g4.lineWidth=1; g4.setLineDash([2,3]);
+    g4.beginPath(); g4.moveTo(ax.X(K_),ax.T); g4.lineTo(ax.X(K_),ax.T+ax.PH); g4.stroke(); g4.setLineDash([]);
+    dots(g4,ax,[[K_,e]],'#0d6b33',4.5); }
+  legend(g4,c4,'c4',[{key:'4.c',name:'Cantelli 1/(1+k²)',col:'#c0392b'},
+    {key:'4.t',name:'真值(解析)',col:'#1f3a6e'},
+    {key:'4.e',name:'实测',col:'#1a8f4a',dot:1,lw:0.1,empty:noS()},
+    {key:'4.h',name:'✘折半 1/(2k²)',col:'#b03060',dash:[2,3],lw:1.8},
+    {key:'4.m',name:'当前 k',col:'#888',dash:[2,3],lw:1}]);
+  if(noS()) hintNoSample(g4,ax,'实测：点上面的「+10 万」');
+  const tr=tailR(K_), half=1/(2*K_*K_);
+  hdr(g4,c4,ax,'c4',
+    `k=${K_.toFixed(2)}　Cantelli ${(1/(1+K_*K_)).toFixed(6)}　真值 ${tr.toFixed(6)}　折半 ${half.toFixed(6)}`
+    +(tr>half+1e-12?'　✘折半被破':''), tr>half+1e-12?'#b03060':'#333');
+  hoverAt(g4,ax,'c4',k=>{ const t=tailR(k), hf=1/(2*k*k);
+    return `k=${k.toFixed(2)} Cantelli ${(1/(1+k*k)).toFixed(5)} 真值 ${t.toFixed(5)}`
+      + (t>hf+1e-12?`　✘折半(${hf.toFixed(5)})被破`:''); });
+}
+
+/* ══════════════ ⑤ Chebyshev ⟹ 大数定律 ══════════════ */
+function draw5(){
+  const ax=frame(g5,c5,1,2000,YLO,1.3,'n = 每组的样本量　（鼠标划过可读任意 n）',
+    {logx:true,logy:true, yl:'概率 P(|Z̄| ≥ ε)'});
+  AXS['c5']=ax;
+  if(on('5.c')) line(g5,ax,n=>1/(n*EPS*EPS),1,2000,'#c0392b',2,null,200);
+  if(on('5.l')) line(g5,ax,n=>2*ncdf(-EPS*Math.sqrt(n)),1,2000,'#8a4ab0',1.8,[5,4],200);
+  const pts=[]; for(let j=0;j<NL.length;j++) if(mRep[j]>0) pts.push([NL[j],mHit[j]/mRep[j]]);
+  if(on('5.e')){ dots(g5,ax,pts,'#1a8f4a',3.4);
+    g5.strokeStyle='rgba(26,143,74,.5)'; g5.lineWidth=1.2; g5.beginPath(); let st=false;
+    for(const [n,v] of pts){ if(v<ax.ylo){ st=false; continue; }
+      const x=ax.X(n),y=ax.Y(v); st?g5.lineTo(x,y):g5.moveTo(x,y); st=true; }
+    g5.stroke(); }
+  legend(g5,c5,'c5',[{key:'5.c',name:'Chebyshev 1/nε²',col:'#c0392b'},
+    {key:'5.e',name:'实测',col:'#1a8f4a',dot:1,lw:0.1,empty:noSM()},
+    {key:'5.l',name:'CLT 2Φ(−ε√n)',col:'#8a4ab0',dash:[5,4],lw:1.8}]);
+  if(noSM()) hintNoSample(g5,ax,'实测：点上面的「+10 万」');
+  const nc=Math.ceil(1/(0.05*EPS*EPS)), nl=Math.ceil(Math.pow(1.959964/EPS,2));
+  hdr(g5,c5,ax,'c5',
+    `ε=${EPS.toFixed(2)}　P≤5% 需: Chebyshev n≥${nc}, CLT n≥${nl} (差 ${(nc/nl).toFixed(1)}×)`);
+  hoverAt(g5,ax,'c5',nv=>{ const nn=Math.max(1,Math.round(nv));
+    const j=NL.reduce((b,v,i)=>Math.abs(v-nn)<Math.abs(NL[b]-nn)?i:b,0);
+    const em=mRep[j]>0?mHit[j]/mRep[j]:NaN;
+    return `n=${nn}  Cheb ${(1/(nn*EPS*EPS)).toExponential(2)}  CLT ${(2*ncdf(-EPS*Math.sqrt(nn))).toExponential(2)}`
+      + (isFinite(em)?`  实测(n=${NL[j]}) ${em.toFixed(4)}`:''); });
+}
+
+/* ══════════════ ⑥ Hoeffding ══════════════ */
+function draw6(){
+  const ax=frame(g6,c6,1,2000,YLO,1.3,'n = 每组的样本量　（鼠标划过可读任意 n）',
+    {logx:true,logy:true, yl:'概率 P(|Z̄| ≥ ε)'});
+  AXS['c6']=ax;
+  const R=RNG[1]-RNG[0];
+  if(on('6.c')) line(g6,ax,n=>1/(n*EPS*EPS),1,2000,'#c0392b',2,null,200);
+  if(on('6.h')) line(g6,ax,n=>2*Math.exp(-2*n*EPS*EPS/(R*R)),1,2000,'#d98000',2,null,200);
+  const pts=[]; for(let j=0;j<NL.length;j++) if(mRep[j]>0) pts.push([NL[j],mHit[j]/mRep[j]]);
+  if(on('6.e')) dots(g6,ax,pts,'#1a8f4a',3.4);
+  legend(g6,c6,'c6',[{key:'6.h',name:'Hoeffding',col:'#d98000'},
+    {key:'6.c',name:'Chebyshev 1/nε²',col:'#c0392b'},
+    {key:'6.e',name:'实测',col:'#1a8f4a',dot:1,lw:0.1,empty:noSM()}]);
+  if(noSM()) hintNoSample(g6,ax,'实测：点上面的「+10 万」');
+  /* 交叉点：Hoeffding 从哪个 n 起比 Chebyshev 紧 */
+  /* 只在两条界都已经「不是空话」(≤1) 的区间里比。否则 n 很小时 Chebyshev=1/nε² 可以是 25，
+     Hoeffding 的 1.99 虽然数值更小但两者都 >1、都毫无信息，报「从 n≥1 起更紧」会误导。 */
+  let cross=null, nUse=null;
+  for(let j=1;j<=2000;j++){ const h=2*Math.exp(-2*j*EPS*EPS/(R*R)), c=1/(j*EPS*EPS);
+    if(nUse==null && Math.min(h,c)<1) nUse=j;
+    if(h<c && h<1){ cross=j; break; } }
+  hdr(g6,c6,ax,'c6',
+    `R=${R.toFixed(3)}　两界 n≥${nUse==null?'>2k':nUse} 起才有意义　`
+    + `Hoeffding n≥${cross==null?'>2k':cross} 起反超`);
+  hoverAt(g6,ax,'c6',nv=>{ const nn=Math.max(1,Math.round(nv));
+    const j=NL.reduce((b,v,i)=>Math.abs(v-nn)<Math.abs(NL[b]-nn)?i:b,0);
+    const em=mRep[j]>0?mHit[j]/mRep[j]:NaN;
+    return `n=${nn}  Cheb ${(1/(nn*EPS*EPS)).toExponential(2)}`
+      + `  Hoef ${(2*Math.exp(-2*nn*EPS*EPS/(R*R))).toExponential(2)}`
+      + (isFinite(em)?`  实测 ${em.toFixed(4)}`:''); });
+}
+
+/* ══════════════ 对照表 + 违反检测 ══════════════ */
+
+/* ══════════════ 状态条 ══════════════ */
+function drawSt(){
+  const R=RNG[1]-RNG[0];
+  $('st').innerHTML =
+    `总体 <b>${({normal:'正态',uniform:'均匀',exp:'指数',lognorm:'对数正态',bimodal:'双峰',
+      bern:'伯努利 p=0.15',cheb3:'最坏总体(撑满 Chebyshev, 3点)',
+      cant2:'最坏总体(撑满 Cantelli, 2点)',hand:'手绘'})[mode]||mode}</b>`
+    + `　偏度 γ₁=<span class="y">${isFinite(SK)?SK.toFixed(4):'—'}</span>`
+    + `　标准化支撑 [<span class="g">${RNG[0].toFixed(3)}, ${RNG[1].toFixed(3)}</span>]　极差 R=<span class="g">${R.toFixed(3)}</span>`
+    + `<br>k=<span class="y">${K_.toFixed(2)}</span>`
+    + `　Chebyshev 界 <span class="r">${(1/(K_*K_)).toFixed(6)}</span>`
+    + `　真值 <span class="g">${tailB(K_).toFixed(6)}</span>`
+    + `　实测 <span class="g">${Nk?(hitB/Nk).toFixed(6):'—'}</span>`
+    + `　松 <span class="y">${tailB(K_)>0?((1/(K_*K_))/tailB(K_)).toFixed(2)+'×':'∞'}</span>`;
+  $('cnt').textContent = Nz ? `单点样本 ${Nz.toLocaleString()}　均值样本 ${(mRep[0]|0).toLocaleString()} 组/档`
+                            : '还没采样 —— 点上面的「+10 万」';
+}
+
+const DRAW={c1:draw1,c2:draw2,c3:draw3,c4:draw4,c5:draw5,c6:draw6};
+function render(){ draw1(); draw2(); draw3(); draw4(); draw5(); draw6(); drawSt(); }
+
+/* ══════════════ 手绘 ══════════════ */
+let drawing=false, lastI=null;
+/* 手绘（同 central_limit_theorem.html）：fv[i]=h 直接赋值（可往下画）；一格一值，
+   两个事件落点之间线性插值；h 归一到 [0,1]；拖动中只重画①，pointerup 再全量刷。 */
+function paint(e){
+  const r=c1.getBoundingClientRect();
+  const L=AXL, PW=c1.width-L-8;
+  const XL=-0.08, XH=1.08;                    // 固定，绝不随内容变
+  const px=(e.clientX-r.left)/r.width*c1.width;
+  const x=XL+(px-L)/PW*(XH-XL);
+  const i=Math.floor(x*K);
+  if(i<0||i>=K) return;
+  const h=Math.max(0,Math.min(1, 1-(e.clientY-r.top)/r.height*VMAX));
+  if(lastI!==null && Math.abs(i-lastI[0])>1){
+    const [i0,h0]=lastI, d=i-i0, sg=Math.sign(d);
+    for(let q=1;q<=Math.abs(d);q++) fv[i0+sg*q]=h0+(h-h0)*q/Math.abs(d);
+  } else fv[i]=h;
+  lastI=[i,h];
+  if(mode!=='hand'){ mode='hand';
+    document.querySelectorAll('[data-p]').forEach(b=>b.classList.remove('on')); }
+  buildPop(); draw1(); drawSt();
+}
+function endDraw(){ if(!drawing) return; drawing=false; lastI=null; buildPop(); render(); }
+bindLegend(c1,'c1','crosshair'); bindLegend(c2,'c2'); bindLegend(c3,'c3');
+bindLegend(c4,'c4'); bindLegend(c5,'c5'); bindLegend(c6,'c6');
+/* ②③④ 的横轴是 k ⟹ 点一下顺手把 k 定过去；⑤⑥ 横轴是 n，只读不写 */
+bindHover(c2,'c2',true); bindHover(c3,'c3',true); bindHover(c4,'c4',true);
+bindHover(c5,'c5'); bindHover(c6,'c6');
+
+c1.addEventListener('pointerdown',e=>{
+  if(hitLegend('c1',c1,e)) return;          // 点在 legend 上就别落笔（click 里会切显隐）
+  if(isAtomic()) for(let i=0;i<K;i++) fv[i]=0.5;   // 原子总体没网格可画，先退成均匀
+  drawing=true; lastI=null; c1.setPointerCapture?.(e.pointerId); paint(e); });
+c1.addEventListener('pointermove',e=>{ if(!drawing) return;
+  if(e.buttons===0){ endDraw(); return; } paint(e); });
+for(const ev of ['pointerup','pointercancel','lostpointercapture'])
+  c1.addEventListener(ev,endDraw);
+window.addEventListener('blur',endDraw);
+
+
+/* ══════════════ 控件 ══════════════ */
+document.querySelectorAll('[data-p]').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('[data-p]').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  mode=b.dataset.p;
+  if(mode==='cheb3'||mode==='cant2') pinK=K_; else pinK=null;
+  if(PRE[mode]) for(let i=0;i<K;i++) fv[i]=PRE[mode](i);
+  buildPop(); render();
+}));
+$('kk').addEventListener('input',()=>{ K_=+$('kk').value/100; $('kkV').textContent='k='+K_.toFixed(2);
+  resetK(); render(); });
+$('ee').addEventListener('input',()=>{ EPS=+$('ee').value/100; $('eeV').textContent='ε='+EPS.toFixed(2);
+  resetE(); render(); });
+$('s1').addEventListener('click',()=>runBatch(10000));
+$('s2').addEventListener('click',()=>runBatch(100000));
+$('s3').addEventListener('click',()=>runBatch(1000000));
+$('rst').addEventListener('click',()=>{ resetAcc(); render(); });
+
+K_=+$('kk').value/100; EPS=+$('ee').value/100;
+$('kkV').textContent='k='+K_.toFixed(2); $('eeV').textContent='ε='+EPS.toFixed(2);
+document.querySelector('[data-p="normal"]').classList.add('on');
+for(let i=0;i<K;i++) fv[i]=PRE.normal(i);
+buildPop(); render();
+</script>
+
+</body>
+</html>
