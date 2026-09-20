@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>测度与勒贝格积分：怎么把面积量出来、怎么积</title>
+<style>
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; margin:12px 16px; color:#222; background:#fff; }
+  h1 { font-size:17px; margin:0 0 8px; }
+  canvas { border:1px solid #ddd; display:block; background:#fff; touch-action:none; }
+  button { font-size:12.5px; padding:3px 10px; border:1px solid #bbb; background:#fafafa;
+           border-radius:4px; cursor:pointer; color:#222; }
+  button:hover { background:#eef1f6; }
+  button.on { background:#1a63d8; border-color:#1a63d8; color:#fff; font-weight:600; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12.5px; margin:6px 0; }
+  .tabs { border-bottom:1px solid #ccc; padding-bottom:7px; }
+  .tabs button { font-size:13px; padding:4px 12px; }
+  .cap { font-size:11.5px; color:#555; margin:3px 0 9px; line-height:1.7; }
+  .hint { color:#777; font-size:11px; }
+  .mono { font-family:Menlo,Consolas,monospace; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  .st { font-family:Menlo,Consolas,monospace; font-size:12.5px; background:#0f1522; color:#dfe6f3;
+        padding:7px 11px; border-radius:4px; margin:6px 0; line-height:1.95; max-width:1120px; }
+  .st b { color:#7fd3c4; } .st .r { color:#ff8f7a; } .st .g { color:#8fe09a; } .st .y { color:#ffd27f; }
+  .step { background:#eef3fb; border-left:3px solid #2b5fb8; padding:7px 11px; font-size:12px;
+          margin:7px 0; line-height:1.75; max-width:1120px; }
+  .note { background:#f6f7fa; border-left:3px solid #9aa6bd; padding:7px 11px;
+          font-size:11.5px; color:#444; line-height:1.75; max-width:1120px; margin:7px 0; }
+  .warn { background:#fff4e5; border:1px solid #e0b070; border-radius:4px; padding:7px 11px;
+          font-size:12px; line-height:1.7; max-width:1120px; margin:7px 0; }
+  table.t2 { border-collapse:collapse; font-size:12px; margin:6px 0; }
+  table.t2 td, table.t2 th { border:1px solid #ccc; padding:3px 8px; text-align:right;
+    font-family:Menlo,Consolas,monospace; white-space:nowrap; }
+  table.t2 th { background:#eef1f6; text-align:center; font-family:inherit; }
+  table.t2 td.lb { text-align:left; font-family:inherit; background:#f7f8fa; }
+  b.k { color:#b03030; }
+  input[type=range] { vertical-align:middle; }
+  body.ctl-collapsed h1, body.ctl-collapsed .step, body.ctl-collapsed .note,
+  body.ctl-collapsed .cap, body.ctl-collapsed .warn { display:none !important; }
+</style>
+</head>
+<body>
+<h1>测度与勒贝格积分 —— <span style="font-size:12.5px;font-weight:400;color:#555">
+  ①手绘一个集合, 数格子把面积量出来（能不能量, 由边界的维数决定） ②同一个函数, 竖着切(黎曼) vs 横着切(勒贝格)</span></h1>
+
+<div class="bar tabs">
+  <button class="on" data-t="d2">① 量面积：手绘 + 数格子夹逼</button>
+  <button data-t="int">② 积分：横着切 vs 竖着切</button>
+</div>
+
+<!-- ================== ① 量面积（二维） ================== -->
+<div id="pane-d2">
+<div class="step">
+  <b>二维完全是同一套规则，只把"区间"换成"矩形"</b>：λ²([a,b]×[c,d]) = (b−a)(c... 见下)。
+  乘积测度：<b>λ²(矩形) = 宽 × 高</b> ⟹ 可数个不相交矩形之并：面积相加 ⟹ 开集（可数个矩形/方块之并）⟹ 一般集合用内外测度夹。<br>
+  网格从"小段"换成 <b>2<sup>k</sup>×2<sup>k</sup> 个小方块</b>：
+  <span style="color:#27713d">绿 = 整块都在 A 里</span>（内测度 L<sub>k</sub>）、
+  <span style="color:#c0392b">红 = 碰到但没被装满</span>（外测度 U<sub>k</sub> 才算它）、白 = 没碰到。
+  <b>U<sub>k</sub> = (绿+红)/4<sup>k</sup>，L<sub>k</sub> = 绿/4<sup>k</sup></b>。<br>
+  <b class="k">二维才看得清的那件事：gap = U<sub>k</sub> − L<sub>k</sub> 全部来自"边界那一圈红格子"。</b>
+  红格子数 ≈ 边界的盒计数 N(ε) ≈ ε<sup>−dim ∂A</sup>，每格面积 ε² ⟹
+  <b>gap ≈ ε<sup>2 − dim ∂A</sup></b>。所以：光滑边界（dim 1）gap ∝ ε 飞快收敛；
+  科赫雪花边界（dim 1.26）gap ∝ ε<sup>0.74</sup> 慢一截；边界胖到 dim = 2（胖康托方）就<b>根本不收敛</b>。
+  <b>"这个集合好不好量"这件事，答案写在它边界的维数里</b> —— 右下那张图就在实测这个斜率。<br>
+  <span class="hint">实现说明：所有图形先光栅化成 1024×1024 的 0/1 位图，再用 2×2 的 OR 金字塔数"碰到"、AND 金字塔数"装满"，
+  所以 U<sub>k</sub>/L<sub>k</sub> 对该位图是<b>精确</b>的；与闭式面积的偏差（~10⁻³）来自光栅化本身，读数里单列。</span>
+</div>
+<div class="bar">
+  <button class="on" data-s2="draw2">✏️ 手绘（涂抹）</button>
+  <button data-s2="disk">圆盘 πr²</button>
+  <button data-s2="tri">三角形</button>
+  <button data-s2="ring">圆环（差集）</button>
+  <button data-s2="two">两个圆 A、B（可加性）</button>
+  <button data-s2="sqrot">旋转的正方形（旋转不变）</button>
+  <button data-s2="koch">科赫雪花（边界 dim 1.26）</button>
+  <button data-s2="sierp">谢尔宾斯基三角（面积 0）</button>
+  <button data-s2="svc2">胖康托方 SVC×SVC（面积 1/4, 无内点）</button>
+</div>
+<div class="bar">
+  <span class="mono">网格层数 k</span><input type="range" id="dk" min="1" max="8" value="5" style="width:170px">
+  <span class="mono" id="dkv"></span>
+  <span id="dbrwrap"><span class="mono">笔刷</span>
+    <input type="range" id="dbr" min="4" max="60" value="22" style="width:110px">
+    <button id="dpe" class="on">涂</button><button id="dpx">擦</button>
+    <button id="dclr">清空</button></span>
+  <span id="drotwrap" style="display:none"><span class="mono">旋转角</span>
+    <input type="range" id="drot" min="0" max="90" value="23" style="width:130px">
+    <span class="mono" id="drotv"></span></span>
+</div>
+<div class="row">
+  <div style="width:512px"><canvas id="dc0" width="1024" height="1024" style="width:512px;height:512px"></canvas>
+    <div class="cap"><b>集合 + 第 k 层方格网</b>。手绘档直接在图上涂（"擦"可以擦出洞）。
+      <span style="color:#1a63d8">蓝</span>=A，<span style="color:#e08a2e">橙</span>=B，两者重叠=紫。
+      注意网格层是<b>半透明盖在图形上</b>的，所以图形内部会被染成墨绿、边界一圈被染成紫红。</div></div>
+  <div style="width:400px">
+    <canvas id="dc1" width="800" height="600" style="width:400px;height:300px"></canvas>
+    <div class="cap"><b>夹逼收敛</b>：<span style="color:#c0392b">U<sub>k</sub></span> 从上、
+      <span style="color:#27713d">L<sub>k</sub></span> 从下，绿虚线 = 面积真值。</div>
+    <canvas id="dc2" width="800" height="500" style="width:400px;height:250px"></canvas>
+    <div class="cap"><b>gap 的标度律</b>（双对数）：斜率 = <b>2 − dim ∂A</b>。
+      橙点实测、灰虚线理论。<b>斜率 0 就意味着永远量不出来</b>（若尔当意义）。</div>
+  </div>
+</div>
+<div class="st" id="dst"></div>
+<div class="note" id="dnote"></div>
+</div>
+
+<!-- ================== ② 勒贝格积分 ================== -->
+<div id="pane-int" style="display:none">
+<div class="step">
+  <b>黎曼是竖着切，勒贝格是横着切。</b><br>
+  竖切：Σ f(ξ<sub>i</sub>)·|I<sub>i</sub>| —— 要求"同一小段里 f 差不多"，所以怕振荡。上和 U（每段取 sup）与下和 L（取 inf）夹不住时就<b>不可积</b>。<br>
+  横切（<b>层饼公式</b>，f ≥ 0）：<b>∫f dλ = ∫₀<sup>∞</sup> λ({x : f(x) &gt; t}) dt</b> —— 把高度 t 那一层的<b>底边测度</b>乘上厚度 dt 再加起来。
+  只要每个 {f &gt; t} <b>可测</b>就行，f 怎么跳、怎么振荡都无所谓。<b>这就是"可测函数"的定义</b>：所有上水平集可测。<br>
+  右图把每一层的底边<b>推到左端对齐</b>，得到 f 的<b>递减重排 f*</b>。<b>∫f = ∫f*</b>：勒贝格积分只关心"每个高度上有多长"，完全不管它长在哪儿
+  —— 这是它对"位置有多乱"免疫的根源。
+</div>
+<div class="bar">
+  <button class="on" data-f="smooth">光滑 f = 0.9+0.5sin2πx+0.3sin6πx</button>
+  <button data-f="unbdd">无界 f = x<sup>−1/2</sup></button>
+  <button data-f="cantor">1<sub>康托集</sub>（黎曼可积, ∫=0）</button>
+  <button data-f="svc">1<sub>胖康托集</sub>（<b class="k">黎曼不可积</b>, ∫=1/2）</button>
+  <button data-f="dir">1<sub>ℚ</sub>（狄利克雷）</button>
+</div>
+<div class="bar">
+  <b>切法</b>
+  <button data-v="v">┃ 竖切（黎曼）</button>
+  <button data-v="h" class="on">━ 横切（勒贝格）</button>
+  <span class="hint">一次只看一种 —— 两套画在一起就分不清谁是谁了。来回点这两个按钮，看同一个函数被两种方式怎么处理</span>
+</div>
+<div class="bar">
+  <span id="invwrap" style="display:none"><span class="mono">竖切段数 n</span>
+    <input type="range" id="in" min="5" max="50" value="50" style="width:180px">
+    <span class="mono" id="inv"></span></span>
+  <span id="imvwrap"><span class="mono">横切层数 m</span>
+    <input type="range" id="im" min="5" max="50" value="50" style="width:180px">
+    <span class="mono" id="imv"></span></span>
+</div>
+<div class="row">
+  <div style="width:560px"><canvas id="ic1" width="560" height="330"></canvas>
+    <div class="cap" id="icap1"></div></div>
+  <div style="width:460px"><canvas id="ic2" width="460" height="330"></canvas>
+    <div class="cap" id="icap2"></div></div>
+</div>
+<div class="st" id="ist"></div>
+<div class="note" id="inote"></div>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+function cx(id) { const c = $(id); return { c, g: c.getContext('2d'), W: c.width, H: c.height }; }
+function bg(o) { o.g.fillStyle = '#fff'; o.g.fillRect(0, 0, o.W, o.H); }
+const fmt = (v, d) => (Math.abs(v) < 1e-12 ? '0' : v.toFixed(d === undefined ? 6 : d));
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+
+// ===================== 区间集合（纯函数，可离线核对） =====================
+function cantorIv(k) {                       // 康托集第 k 层: 2^k 个长 3^-k
+  let iv = [[0, 1]];
+  for (let j = 0; j < k; j++) {
+    const nx = [];
+    for (const [a, b] of iv) { const d = (b - a) / 3; nx.push([a, a + d], [b - d, b]); }
+    iv = nx;
+  }
+  return iv;
+}
+function svcIv(k) {                           // Smith–Volterra–Cantor: 第 n 步每段挖去居中的 4^-n
+  let iv = [[0, 1]];
+  for (let n = 1; n <= k; n++) {
+    const r = Math.pow(4, -n), nx = [];
+    for (const [a, b] of iv) { const m = (a + b) / 2; nx.push([a, m - r / 2], [m + r / 2, b]); }
+    iv = nx;
+  }
+  return iv;
+}
+// 一维等大网格数格子（二维页的"胖康托方"靠乘积结构复用它）
+function squeeze(M, pts, k) {
+  const n = 1 << k, f = new Uint8Array(n);
+  let p = 0;
+  for (let i = 0; i < n; i++) {
+    const c0 = i / n, c1 = (i + 1) / n;
+    while (p < M.length && M[p][1] <= c0) p++;
+    if (p < M.length && M[p][0] < c1) f[i] = (M[p][0] <= c0 && M[p][1] >= c1) ? 2 : 1;
+  }
+  for (const x of pts) { const i = Math.min(n - 1, Math.floor(x * n)); if (!f[i]) f[i] = 1; }
+  let t = 0, ins = 0;
+  for (let i = 0; i < n; i++) { if (f[i]) t++; if (f[i] === 2) ins++; }
+  return { n, touch: t, inside: ins, f };
+}
+
+// ===================== ① 量面积（二维） =====================
+function cxH(id) {                                // 高分屏: 后备存储比 CSS 尺寸大 S 倍, 逻辑坐标仍用 CSS 尺寸
+  const c = $(id), g = c.getContext('2d');
+  const lw = parseFloat(c.style.width) || c.width, lh = parseFloat(c.style.height) || c.height;
+  return { c, g, W: lw, H: lh, S: c.width / lw };
+}
+const D0 = cxH('dc0'), D1 = cxH('dc1'), D2 = cxH('dc2');
+const DN = 1024, DLV = 10;                       // 位图 1024×1024, 共 10 次二分（k 可到 10）
+const dOff = document.createElement('canvas'); dOff.width = dOff.height = DN;
+const dOg = dOff.getContext('2d');
+const dDisp = document.createElement('canvas'); dDisp.width = dDisp.height = DN;
+const dDg = dDisp.getContext('2d');
+let D2KEY = 'draw2', DPEN = 'paint';
+let mA = new Uint8Array(DN * DN), mB = new Uint8Array(DN * DN);
+let mDraw = mA;                                  // 手绘那份单独留着（mA 在手绘档就是它本身）
+let DPY = null;
+const P2 = x => x * DN;                          // [0,1] → 位图像素
+
+// ---- 图形（画进离屏画布再取 0/1 位图）----
+function kochPoly(depth, s) {
+  const h = s * Math.sqrt(3) / 2, cx0 = 0.5, cy0 = 0.5 + h / 3;
+  let pts = [[cx0 - s / 2, cy0], [cx0 + s / 2, cy0], [cx0, cy0 - h]];
+  for (let d = 0; d < depth; d++) {
+    const nx = [];
+    for (let i = 0; i < pts.length; i++) {
+      const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % pts.length];
+      const dx = (bx - ax) / 3, dy = (by - ay) / 3;
+      const p1 = [ax + dx, ay + dy], p3 = [ax + 2 * dx, ay + 2 * dy];
+      const px = p1[0] + dx * 0.5 - dy * Math.sqrt(3) / 2;   // 外凸（y 轴向下, 取负号那支）
+      const py = p1[1] + dy * 0.5 + dx * Math.sqrt(3) / 2;
+      nx.push([ax, ay], p1, [px, py], p3);
+    }
+    pts = nx;
+  }
+  return pts;
+}
+function sierpTris(depth) {
+  const s = 0.82, h = s * Math.sqrt(3) / 2;
+  let T = [[[0.5 - s / 2, 0.5 + h / 2], [0.5 + s / 2, 0.5 + h / 2], [0.5, 0.5 - h / 2]]];
+  for (let d = 0; d < depth; d++) {
+    const nx = [];
+    for (const [A, B, C] of T) {
+      const mid = (P, Q) => [(P[0] + Q[0]) / 2, (P[1] + Q[1]) / 2];
+      const ab = mid(A, B), bc = mid(B, C), ca = mid(C, A);
+      nx.push([A, ab, ca], [ab, B, bc], [ca, bc, C]);
+    }
+    T = nx;
+  }
+  return T;
+}
+function paint2(which) {                          // 把预设图形画进 dOg（黑色）
+  dOg.setTransform(1, 0, 0, 1, 0, 0);
+  dOg.clearRect(0, 0, DN, DN);
+  dOg.fillStyle = '#000';
+  const disk = (x, y, r) => { dOg.beginPath(); dOg.arc(P2(x), P2(y), P2(r), 0, 7); dOg.fill(); };
+  const poly = ps => {
+    dOg.beginPath();
+    ps.forEach(([x, y], i) => i ? dOg.lineTo(P2(x), P2(y)) : dOg.moveTo(P2(x), P2(y)));
+    dOg.closePath(); dOg.fill();
+  };
+  switch (D2KEY) {
+    case 'disk': if (which === 'A') disk(0.5, 0.5, 0.35); break;
+    case 'tri': if (which === 'A') poly([[0.10, 0.12], [0.88, 0.20], [0.42, 0.86]]); break;
+    case 'ring':
+      if (which === 'A') {
+        dOg.beginPath();
+        dOg.arc(P2(0.5), P2(0.5), P2(0.42), 0, 7);
+        dOg.arc(P2(0.5), P2(0.5), P2(0.24), 0, 7, true);
+        dOg.fill();
+      }
+      break;
+    case 'two':
+      if (which === 'A') disk(0.38, 0.5, 0.26);
+      else disk(0.62, 0.5, 0.26);
+      break;
+    case 'sqrot': {
+      if (which !== 'A') break;
+      const a = (+$('drot').value) * Math.PI / 180, L = 0.56;
+      dOg.translate(P2(0.5), P2(0.5)); dOg.rotate(a);
+      dOg.fillRect(-P2(L / 2), -P2(L / 2), P2(L), P2(L));
+      dOg.setTransform(1, 0, 0, 1, 0, 0);
+      break;
+    }
+    case 'koch': if (which === 'A') poly(kochPoly(6, 0.62)); break;
+    case 'sierp': if (which === 'A') for (const t of sierpTris(8)) poly(t); break;
+    case 'svc2': {
+      if (which !== 'A') break;
+      const iv = svcIv(8);
+      for (const [a, b] of iv) for (const [c, d] of iv)
+        dOg.fillRect(P2(a), P2(c), Math.max(1, P2(b - a)), Math.max(1, P2(d - c)));
+      break;
+    }
+  }
+  const dat = dOg.getImageData(0, 0, DN, DN).data, m = new Uint8Array(DN * DN);
+  for (let i = 0, n = DN * DN; i < n; i++) m[i] = dat[i * 4 + 3] > 100 ? 1 : 0;
+  return m;
+}
+function stamp2(x0, y0, x1, y1, r, erase) {       // 手绘：扫过一段"胶囊"
+  const lo = Math.max(0, Math.floor(Math.min(x0, x1) - r - 1)), hi = Math.min(DN - 1, Math.ceil(Math.max(x0, x1) + r + 1));
+  const lo2 = Math.max(0, Math.floor(Math.min(y0, y1) - r - 1)), hi2 = Math.min(DN - 1, Math.ceil(Math.max(y0, y1) + r + 1));
+  const dx = x1 - x0, dy = y1 - y0, dd = dx * dx + dy * dy;
+  for (let y = lo2; y <= hi2; y++) for (let x = lo; x <= hi; x++) {
+    let t = dd > 0 ? ((x - x0) * dx + (y - y0) * dy) / dd : 0;
+    t = Math.max(0, Math.min(1, t));
+    const ex = x0 + t * dx - x, ey = y0 + t * dy - y;
+    if (ex * ex + ey * ey <= r * r) mA[y * DN + x] = erase ? 0 : 1;
+  }
+}
+// ---- OR / AND 金字塔：碰到的格子数 / 装满的格子数 ----
+let dImg = null;
+function build2(dirty) {
+  const n = DN * DN, mS = new Uint8Array(n);
+  let px = 0;
+  for (let i = 0; i < n; i++) { mS[i] = (mA[i] | mB[i]); px += mS[i]; }
+  const orL = [mS], andL = [mS], orC = [], andC = [];
+  let o = mS, a = mS, sz = DN;
+  for (let j = 0; ; j++) {
+    let co = 0, ca = 0;
+    for (let i = 0; i < sz * sz; i++) { if (o[i]) co++; if (a[i]) ca++; }
+    orC.push(co); andC.push(ca);
+    if (sz === 1) break;
+    const ns = sz >> 1, no = new Uint8Array(ns * ns), na = new Uint8Array(ns * ns);
+    for (let y = 0; y < ns; y++) for (let x = 0; x < ns; x++) {
+      const i = 2 * y * sz + 2 * x, k = y * ns + x;
+      no[k] = (o[i] | o[i + 1] | o[i + sz] | o[i + sz + 1]) ? 1 : 0;
+      na[k] = (a[i] & a[i + 1] & a[i + sz] & a[i + sz + 1]) ? 1 : 0;
+    }
+    orL.push(no); andL.push(na); o = no; a = na; sz = ns;
+  }
+  const cnt = m => { let c = 0; for (let i = 0; i < n; i++) c += m[i]; return c; };
+  DPY = { orC, andC, orL, andL, areaPx: px / n,
+    aA: cnt(mA) / n, aB: cnt(mB) / n,
+    aI: (() => { let c = 0; for (let i = 0; i < n; i++) if (mA[i] && mB[i]) c++; return c / n; })() };
+  // 显示用彩图（常驻 ImageData; 手绘时只重写脏矩形）
+  if (!dImg) dImg = dDg.createImageData(DN, DN);
+  const D = dImg.data;
+  const bx0 = dirty ? Math.max(0, dirty[0]) : 0, bx1 = dirty ? Math.min(DN - 1, dirty[2]) : DN - 1;
+  const by0 = dirty ? Math.max(0, dirty[1]) : 0, by1 = dirty ? Math.min(DN - 1, dirty[3]) : DN - 1;
+  for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
+    const i = y * DN + x, o4 = i * 4, ia = mA[i], ib = mB[i];
+    if (ia && ib) { D[o4] = 122; D[o4 + 1] = 79; D[o4 + 2] = 181; D[o4 + 3] = 255; }
+    else if (ia) { D[o4] = 26; D[o4 + 1] = 99; D[o4 + 2] = 216; D[o4 + 3] = 255; }
+    else if (ib) { D[o4] = 224; D[o4 + 1] = 138; D[o4 + 2] = 46; D[o4 + 3] = 255; }
+    else { D[o4] = D[o4 + 1] = D[o4 + 2] = 255; D[o4 + 3] = 255; }
+  }
+  dDg.putImageData(dImg, 0, 0, bx0, by0, bx1 - bx0 + 1, by1 - by0 + 1);
+}
+function rebuild2() {
+  if (D2KEY === 'draw2') { mA = mDraw; mB = new Uint8Array(DN * DN); }
+  else { mA = paint2('A'); mB = paint2('B'); }
+  build2();
+}
+function d2BBox(x0, y0, x1, y1, r) {
+  return [Math.floor(Math.min(x0, x1) - r - 2), Math.floor(Math.min(y0, y1) - r - 2),
+          Math.ceil(Math.max(x0, x1) + r + 2), Math.ceil(Math.max(y0, y1) + r + 2)];
+}
+const D2INFO = {
+  draw2: { nm: '手绘集合', dim: 1, ex: null, exs: '没有闭式 —— 位图数出来的面积就是它的定义' },
+  disk: { nm: '圆盘 r=0.35', dim: 1, ex: Math.PI * 0.35 * 0.35, exs: 'πr² = π·0.35²' },
+  tri: { nm: '三角形', dim: 1, ex: 0.2758, exs: '鞋带公式 = 0.2758' },
+  ring: { nm: '圆环 R=0.42, r=0.24', dim: 1, ex: Math.PI * (0.42 * 0.42 - 0.24 * 0.24), exs: 'π(R²−r²)' },
+  two: { nm: '两个圆盘 r=0.26, 圆心距 0.24', dim: 1, ex: null, exs: '见下面可加性核对（透镜面积有闭式）' },
+  sqrot: { nm: '旋转的正方形 边长 0.56', dim: 1, ex: 0.56 * 0.56, exs: '边长² = 0.3136（与角度无关）' },
+  koch: { nm: '科赫雪花 边长 0.62', dim: Math.log(4) / Math.log(3), ex: 1.6 * Math.sqrt(3) / 4 * 0.62 * 0.62,
+    exs: '(8/5)·(√3/4)s² —— 面积有限，周长无穷' },
+  sierp: { nm: '谢尔宾斯基三角（第 8 层）', dim: Math.log(3) / Math.log(2), ex: Math.pow(0.75, 8) * Math.sqrt(3) / 4 * 0.82 * 0.82,
+    exs: '(3/4)⁸·(√3/4)s²，极限 = 0' },
+  svc2: { nm: '胖康托方 SVC×SVC', dim: 2, ex: 0.25,
+    exs: 'λ(SVC)×λ(SVC) = 1/2 × 1/2（乘积测度）' }
+};
+let SVC14 = null;
+function svc2Counts(k) {                          // SVC×SVC: 靠乘积结构精确数格子（对极限集, 不是有限层位图）
+  if (!SVC14) SVC14 = svcIv(16);                  // 片段长 1.5e-6 ≪ 最细格子 2e-3
+  const q = squeeze(SVC14, [], k);
+  return { U: Math.pow(q.touch / (1 << k), 2), L: 0, f: q.f };
+}
+function drawD2() {
+  const k = +$('dk').value, I = D2INFO[D2KEY];
+  for (const o of [D0, D1, D2]) o.g.setTransform(o.S, 0, 0, o.S, 0, 0);
+  $('dkv').textContent = `k = ${k}（${1 << k}×${1 << k} = ${4 ** k} 格，每格 ${(1 / (1 << k)).toFixed(4)}）`;
+  $('drotv').textContent = $('drot').value + '°';
+  $('dbrwrap').style.display = D2KEY === 'draw2' ? 'inline' : 'none';
+  $('drotwrap').style.display = D2KEY === 'sqrot' ? 'inline' : 'none';
+  if (!DPY) rebuild2();
+  const j = DLV - k, tot = 4 ** k;
+  const ana = D2KEY === 'svc2' ? svc2Counts(k) : null;
+  const U = ana ? ana.U : DPY.orC[j] / tot, Lo = ana ? ana.L : DPY.andC[j] / tot;
+  const areaTrue = ana ? 0.25 : DPY.areaPx;
+  // ---- 图形 + 网格 ----
+  const g = D0.g; bg(D0);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(dDisp, 0, 0, DN, DN, 0, 0, D0.W, D0.H);
+  const nc = 1 << k, cw = D0.W / nc;
+  const oj = DPY.orL[j], aj = DPY.andL[j];
+  for (let y = 0; y < nc; y++) for (let x = 0; x < nc; x++) {
+    const i = y * nc + x;
+    const hitA = ana ? (ana.f[x] && ana.f[y]) : 0;
+    if (ana ? false : aj[i]) g.fillStyle = 'rgba(39,113,61,0.42)';
+    else if (ana ? hitA : oj[i]) g.fillStyle = 'rgba(192,57,43,0.45)';
+    else continue;
+    g.fillRect(x * cw, y * cw, cw, cw);
+  }
+  if (cw >= 6) {
+    g.strokeStyle = 'rgba(0,0,0,0.22)'; g.beginPath();
+    for (let i = 0; i <= nc; i++) {
+      g.moveTo(i * cw, 0); g.lineTo(i * cw, D0.H);
+      g.moveTo(0, i * cw); g.lineTo(D0.W, i * cw);
+    }
+    g.stroke();
+  }
+  g.strokeStyle = '#333'; g.strokeRect(0.5, 0.5, D0.W - 1, D0.H - 1);
+  g.fillStyle = 'rgba(255,255,255,0.9)'; g.fillRect(6, 6, 300, 40);
+  g.font = '13px Menlo'; g.fillStyle = '#c0392b';
+  g.fillText(`外 U_k = ${U.toFixed(6)}`, 12, 22);
+  g.fillStyle = '#27713d';
+  g.fillText(`内 L_k = ${Lo.toFixed(6)}`, 12, 39);
+  if (D2KEY === 'draw2' && !DPY.areaPx) {
+    g.fillStyle = '#c0392b'; g.font = 'bold 15px Menlo';
+    g.fillText('在这块画布上按住拖动，涂出一个集合', 40, D0.H / 2);
+  }
+  // ---- 夹逼收敛 ----
+  bg(D1);
+  const g1 = D1.g, PL = 46, PB = 30, PT = 14, PR = 12;
+  const KS = [], UU = [], LL = [];
+  const KHI = ana ? 13 : 7;                       // 解析档没有像素上限, 可以一直数下去
+  for (let kk = 1; kk <= KHI; kk++) {
+    const t = 4 ** kk, jj = DLV - kk;
+    const aa = D2KEY === 'svc2' ? svc2Counts(kk) : null;
+    KS.push(kk);
+    UU.push(aa ? aa.U : DPY.orC[jj] / t);
+    LL.push(aa ? aa.L : DPY.andC[jj] / t);
+  }
+  const ymax = Math.max(0.05, Math.max(...UU) * 1.1);
+  const X1 = i => PL + (D1.W - PL - PR) * (KS[i] - 1) / (KHI - 1), Y1 = v => D1.H - PB - (D1.H - PT - PB) * v / ymax;
+  g1.strokeStyle = '#eee'; g1.fillStyle = '#888'; g1.font = '10px Menlo';
+  for (let i = 0; i <= 5; i++) {
+    const v = ymax * i / 5;
+    g1.beginPath(); g1.moveTo(PL, Y1(v)); g1.lineTo(D1.W - PR, Y1(v)); g1.stroke();
+    g1.fillText(v.toFixed(3), 6, Y1(v) + 3);
+  }
+  KS.forEach((kk, i) => {
+    if (KHI > 8 && kk % 2 === 0) return;
+    g1.beginPath(); g1.moveTo(X1(i), PT); g1.lineTo(X1(i), D1.H - PB); g1.stroke();
+    g1.fillText(String(kk), X1(i) - 3, D1.H - PB + 12);
+  });
+  g1.strokeStyle = '#27713d'; g1.setLineDash([5, 4]); g1.lineWidth = 1.6;
+  g1.beginPath(); g1.moveTo(PL, Y1(areaTrue)); g1.lineTo(D1.W - PR, Y1(areaTrue)); g1.stroke();
+  g1.setLineDash([]); g1.lineWidth = 1;
+  g1.fillStyle = '#27713d'; g1.font = '12px Menlo';
+  g1.fillText((ana ? '面积 = ' : '位图面积 = ') + areaTrue.toFixed(6), PL + 6, Y1(areaTrue) - 5);
+  const pol = (arr, c) => {
+    g1.strokeStyle = c; g1.lineWidth = 1.8; g1.beginPath();
+    arr.forEach((v, i) => i ? g1.lineTo(X1(i), Y1(v)) : g1.moveTo(X1(i), Y1(v)));
+    g1.stroke(); g1.lineWidth = 1; g1.fillStyle = c;
+    arr.forEach((v, i) => { g1.beginPath(); g1.arc(X1(i), Y1(v), 2.6, 0, 7); g1.fill(); });
+  };
+  pol(UU, '#c0392b'); pol(LL, '#27713d');
+  g1.strokeStyle = '#333'; g1.beginPath();
+  g1.moveTo(PL, D1.H - PB); g1.lineTo(D1.W - PR, D1.H - PB); g1.stroke();
+  g1.fillStyle = '#555'; g1.font = '11px Menlo';
+  g1.fillText('网格层数 k', D1.W / 2 - 30, D1.H - 8);
+  g1.strokeStyle = '#b03030'; g1.setLineDash([3, 3]);
+  g1.beginPath(); g1.moveTo(X1(k - 1), PT); g1.lineTo(X1(k - 1), D1.H - PB); g1.stroke(); g1.setLineDash([]);
+  if (KHI > 8) {
+    g1.fillStyle = '#888'; g1.font = '10px Menlo';
+    g1.fillText('（k>7 的点是解析算的，位图画不到那么细）', PL + 6, PT + 10);
+  }
+  // ---- gap 的标度律: log2(1/gap) vs log2(1/ε), 斜率 = 2 − dim ∂A ----
+  bg(D2);
+  const g2 = D2.g;
+  const xs = [], ys = [];
+  KS.forEach((kk, i) => {
+    const gp = UU[i] - LL[i];
+    if (gp > 1e-9) { xs.push(kk); ys.push(-Math.log2(gp)); }
+  });
+  const ymx2 = Math.max(4, Math.max(...ys, 1) * 1.15);
+  const KFIT = ana ? 13 : 5;                      // 位图档 k>5 起受构造深度/像素污染
+  const X2 = v => PL + (D2.W - PL - PR) * (v - 1) / (KHI - 1), Y2 = v => D2.H - PB - (D2.H - PT - PB) * v / ymx2;
+  g2.strokeStyle = '#eee'; g2.fillStyle = '#888'; g2.font = '10px Menlo';
+  for (let v = 0; v <= ymx2 + 1e-9; v += Math.max(1, Math.round(ymx2 / 6))) {
+    g2.beginPath(); g2.moveTo(PL, Y2(v)); g2.lineTo(D2.W - PR, Y2(v)); g2.stroke();
+    g2.fillText(String(v), 10, Y2(v) + 3);
+  }
+  for (let kk = 1; kk <= KHI; kk++) {
+    if (KHI > 8 && kk % 2 === 0) continue;
+    g2.beginPath(); g2.moveTo(X2(kk), PT); g2.lineTo(X2(kk), D2.H - PB); g2.stroke();
+    g2.fillText(String(kk), X2(kk) - 3, D2.H - PB + 12);
+  }
+  g2.fillStyle = 'rgba(26,99,216,0.08)';
+  g2.fillRect(X2(Math.max(2, KFIT - 3)), PT, X2(KFIT) - X2(Math.max(2, KFIT - 3)), D2.H - PB - PT);
+  let fit = null;
+  if (xs.length >= 3) {
+    const keep = xs.map((v, i) => [v, ys[i]]).filter(([v]) => v >= 2 && v <= KFIT).slice(-4);
+    const a1 = keep.map(q => q[0]), b1 = keep.map(q => q[1]);
+    const n1 = a1.length, sx = a1.reduce((p, q) => p + q, 0), sy = b1.reduce((p, q) => p + q, 0);
+    if (n1 < 2) { fit = null; }
+    let sxx = 0, sxy = 0;
+    for (let i = 0; i < n1; i++) { sxx += a1[i] * a1[i]; sxy += a1[i] * b1[i]; }
+    const sl = (n1 * sxy - sx * sy) / (n1 * sxx - sx * sx), ic = (sy - sl * sx) / n1;
+    fit = sl;
+    g2.strokeStyle = '#c0392b'; g2.lineWidth = 2; g2.beginPath();
+    g2.moveTo(X2(a1[0]), Y2(sl * a1[0] + ic)); g2.lineTo(X2(a1[n1 - 1]), Y2(sl * a1[n1 - 1] + ic));
+    g2.stroke(); g2.lineWidth = 1;
+  }
+  const thS = 2 - I.dim;
+  if (ys.length) {                                 // 理论斜率参照线（过最后一个点）
+    g2.strokeStyle = '#999'; g2.setLineDash([5, 4]); g2.beginPath();
+    const x9 = xs[xs.length - 1], y9 = ys[ys.length - 1];
+    g2.moveTo(X2(1), Y2(y9 + thS * (1 - x9))); g2.lineTo(X2(7), Y2(y9 + thS * (7 - x9)));
+    g2.stroke(); g2.setLineDash([]);
+  }
+  g2.fillStyle = '#e08a2e';
+  xs.forEach((x, i) => { g2.beginPath(); g2.arc(X2(x), Y2(ys[i]), 3, 0, 7); g2.fill(); });
+  g2.strokeStyle = '#333'; g2.beginPath();
+  g2.moveTo(PL, D2.H - PB); g2.lineTo(D2.W - PR, D2.H - PB); g2.stroke();
+  g2.fillStyle = '#555'; g2.font = '11px Menlo';
+  g2.fillText('k  (= log₂(1/ε))', D2.W / 2 - 40, D2.H - 8);
+  g2.save(); g2.translate(12, D2.H / 2 + 34); g2.rotate(-Math.PI / 2);
+  g2.fillText('log₂(1/gap)', 0, 0); g2.restore();
+  g2.font = '12px Menlo'; g2.fillStyle = '#c0392b';
+  g2.fillText(fit === null ? 'gap 没有下降：斜率 ≈ 0' : `实测斜率 = ${fit.toFixed(3)}（在 k≤${KFIT} 的最后 4 点上拟合）`, PL + 8, PT + 13);
+  g2.fillStyle = '#666';
+  g2.fillText(`理论 2 − dim∂A = ${thS.toFixed(3)}`, PL + 8, PT + 28);
+
+  // ---- 读数 ----
+  const ex = I.ex;
+  let add = '';
+  if (D2KEY === 'two') {
+    const r = 0.26, d = 0.24;
+    const lens = 2 * r * r * Math.acos(d / (2 * r)) - (d / 2) * Math.sqrt(4 * r * r - d * d);
+    const uni = DPY.areaPx, inter = DPY.aI;
+    add = `<br>可加性：λA = ${DPY.aA.toFixed(6)}　λB = ${DPY.aB.toFixed(6)}　`
+      + `λ(A∪B) = ${uni.toFixed(6)}　λ(A∩B) = ${inter.toFixed(6)}　`
+      + `<b>λA+λB − [λ(A∪B)+λ(A∩B)] = ${(DPY.aA + DPY.aB - uni - inter).toExponential(1)}</b>　`
+      + `<span class="y">透镜闭式 = ${lens.toFixed(6)}（实测差 ${Math.abs(inter - lens).toExponential(1)}）</span>`;
+  }
+  $('dst').innerHTML =
+    `<b>${I.nm}</b>　${ana ? '面积（乘积测度精确值）' : '位图面积'} = <b class="y">${areaTrue.toFixed(6)}</b>`
+    + (ex !== null ? `　闭式 ${I.exs} = <b>${ex.toFixed(6)}</b>　<span class="${Math.abs(ex - areaTrue) < 3e-3 ? 'g' : 'r'}">${ana ? '与有限层位图差' : '光栅误差'} ${Math.abs(ex - areaTrue).toExponential(1)}</span>`
+      : `　<span class="hint">${I.exs}</span>`) + '<br>'
+    + `k = ${k}（${4 ** k} 格）：<span class="r">U_k = ${U.toFixed(6)}</span>（${Math.round(U * tot)} 格碰到）　`
+    + `<span class="g">L_k = ${Lo.toFixed(6)}</span>（${Math.round(Lo * tot)} 格装满）　<b>gap = ${(U - Lo).toFixed(6)}</b>　`
+    + `<span class="hint">红格子数 = ${Math.round((U - Lo) * tot)}，全部 gap 都来自这一圈</span><br>`
+    + `gap 标度：实测斜率 ${fit === null ? '≈ 0（不下降）' : fit.toFixed(3)}　理论 2−dim∂A = ${thS.toFixed(3)}`
+    + `（dim ∂A = ${I.dim.toFixed(4)}）　`
+    + (thS > 0.05
+      ? `<span class="g">gap → 0 ⟹ 边界测度 0 ⟹ 若尔当可测，面积量得出</span>`
+      : `<span class="r">gap 不趋于 0 ⟹ 边界本身有正面积 ⟹ 若尔当（= 黎曼）不可测</span>`
+        + `　但它是<b>博雷尔集</b>，勒贝格可测，λ = 1/4（用"每边各自是 1/2"的乘积测度算）`)
+    + add;
+  $('dnote').innerHTML = D2NOTE[D2KEY];
+}
+const D2NOTE = {
+  draw2: `<b>自己涂一个集合，面积当场量出来。</b>试几件事：<br>
+    · <b>涂一团再用"擦"挖几个洞</b>：λ 随之下降，内外夹逼照样收敛 —— 有洞不影响可测性，只要边界还是曲线。<br>
+    · <b>涂得越花哨（很多细枝、毛刺），gap 收敛越慢</b>：因为 gap ≈ 周长×ε，周长变长，红格子就变多。
+    这正是"可测性好坏由边界决定"的手感。<br>
+    · 想造一个"量不出来"的集合是<b>做不到的</b> —— 手能涂出来的都是有限周长的，边界测度必然为 0。
+    想造一个"量不出来"的集合，只能靠选择公理"取"（Vitali 集），那种东西<b>画不出来</b> —— 手能画的都是可测的。`,
+  disk: `<b>校准档</b>：πr² = 0.384845。看 U_k 和 L_k 怎么从两边合拢 —— 
+    红格子就是圆周那一圈，条数 ≈ 周长/ε = 2πr·2^k，每格面积 4^(−k) ⟹ <b>gap ≈ 2πr·2^(−k) ∝ ε</b>，斜率 1。<br>
+    这就是阿基米德"内外接多边形夹逼圆面积"的现代版，只不过格子换成了正方形。`,
+  tri: `直边图形的红格子更少（只有 3 条边），gap 掉得比圆还干净。鞋带公式给出 0.2758 作为对照。`,
+  ring: `<b>差集</b>：λ(外∖内) = λ(外) − λ(内) = π(R²−r²)。这条来自可加性（内圆盘 ⊂ 外圆盘）。
+    注意现在有<b>两圈</b>边界，红格子加倍、gap 也加倍，但斜率仍是 1。`,
+  two: `<b>可加性的二维版</b>：λA+λB = λ(A∪B)+λ(A∩B)，读数里核对到 10⁻⁶ 量级（位图分辨率限制）。
+    交集那块"透镜"有闭式 2r²·arccos(d/2r) − (d/2)√(4r²−d²)，也在读数里对照。<br>
+    <b>为什么不是 λ(A∪B) = λA+λB</b>：重叠被算了两遍，必须减掉一次 —— 测度只对<b>不相交</b>的并才直接相加。`,
+  sqrot: `<b>旋转不变性</b>：拖角度滑块，面积读数<b>一动不动</b>（0.3136 = 0.56²）。
+    勒贝格测度不仅平移不变，还是<b>刚体运动不变</b>的 —— 这是它配得上"面积"这个名字的原因。<br>
+    有意思的是 gap 会跟着角度变（45° 时边界最"不对齐"网格，红格子最多），但<b>极限值不变</b>。
+    <span class="hint">顺带一提：三维里"旋转不变 + 有限可加"会直接导致巴拿赫–塔斯基悖论，二维幸免。</span>`,
+  koch: `<b>本页的主角：面积有限、周长无穷。</b>面积 = (8/5)·初始三角形面积（每层加 1/3 的 1/9，等比求和），
+    闭式 0.266317；周长 = (4/3)^k → ∞。<br>
+    <b>边界是维数 1.2619 的分形</b>，于是红格子数 ≈ ε^(−1.2619) 而不是 ε^(−1)，
+    <b>gap ≈ ε^(0.7381)</b> —— 图上实测斜率就该落在 0.74 附近，比圆盘的 1 明显慢。
+    <b>但它仍然收敛</b>：只要 dim ∂A &lt; 2，边界面积就是 0，集合就若尔当可测。`,
+  sierp: `谢尔宾斯基三角<b>没有内点</b>，所以 <b>L_k ≡ 0</b>（永远没有格子被装满），
+    gap = U_k 自己。而 U_k ≈ ε^(2−1.585) = ε^(0.415) → 0，所以面积 = 0，<b>照样可测</b>。<br>
+    图上画的是第 8 层（有限层还有面积 (3/4)⁸ = 10.0% 的初始三角形），
+    所以实测斜率在细尺度上会偏向 0（构造深度用完了）—— 拖 k 小一点看中段。`,
+  svc2: `<b>二维版"若尔当量不出来"</b>：SVC×SVC = 两个方向各做一次胖康托集。
+    每边测度 1/2 ⟹ 乘积测度 = <b>1/4</b>，但它<b>无内点</b>（无处稠密）⟹ <b>L_k ≡ 0</b>，
+    而 U_k → 1/4，<b>gap 卡在 1/4 不动，斜率 = 0</b>。<br>
+    换句话说它的<b>边界就是它自己，边界的维数是 2、面积是 1/4 &gt; 0</b> —— 若尔当/黎曼的框架在这里彻底失效。<br>
+    <b>这一档的格子数是解析算的，不是数位图</b>：图上只能画到第 8 层（片段 2 像素），而<b>有限层是有限个矩形、边界维数其实是 1</b>，
+    位图会把斜率伪装成 1。所以这里用乘积结构 —— 格子 (i,j) 碰到 SVC² ⟺ 第 i 段和第 j 段都碰到 SVC ——
+    对<b>极限集</b>精确计数（一维那边用第 16 层，片段 1.5×10⁻⁶ 远细于最小格子）。
+    勒贝格照样算：它是闭集（博雷尔集），λ = λ(SVC)×λ(SVC) = 1/2 × 1/2 = 1/4。<br>
+    <span class="hint">这也是 ② 页 1_SVC <b>黎曼不可积</b>的同一个病根：那里叫"上下和夹不住"，这里叫"gap 不收敛"。</span>`
+};
+
+// ===================== ② 勒贝格积分 =====================
+const I1 = cx('ic1'), I2 = cx('ic2');
+let IFN = 'smooth', IVIEW = 'h';       // 'v' 竖切(黎曼) / 'h' 横切(勒贝格), 只看一种
+const NS = 200000;
+const FDEF = {
+  smooth: { kind: 'cont', ymax: 1.85, exact: 0.9, ex: '0.9（三角项整周期积分为 0）', rok: 1,
+    rv: '可积（连续 ⇒ U−L = O(1/n) → 0，拖 n 看它掉）',
+    f: x => 0.9 + 0.5 * Math.sin(2 * Math.PI * x) + 0.3 * Math.sin(6 * Math.PI * x) },
+  unbdd: { kind: 'cont', ymax: 6, exact: 2, ex: '2 = ∫₀¹x^(−1/2)dx', f: x => Math.pow(x, -0.5), rok: 0,
+    rv: '常义不可积（无界，上和 ≡ +∞）；只能走"广义积分"的门，值 = 2' },
+  cantor: { kind: 'ind', ymax: 1.25, exact: 0, ex: '0 = 1·λ(C)', iv: cantorIv(12), lam: 0, rok: 1,
+    rv: '可积（不连续点集 C 的若尔当容量 = 0，U → 0 = L）' },
+  svc: { kind: 'ind', ymax: 1.25, exact: 0.5, ex: '1/2 = 1·λ(SVC)', iv: svcIv(12), lam: 0.5, rok: 0,
+    rv: '不可积（U → 1/2，L ≡ 0，永远夹不住）' },
+  dir: { kind: 'dir', ymax: 1.25, exact: 0, ex: '0 = 1·λ(ℚ)', rok: 0,
+    rv: '不可积（U ≡ 1，L ≡ 0）' }
+};
+const D_exact = key => {                         // ∫f 的真值（数值, 供右图画参照线）
+  const D = FDEF[key];
+  return typeof D.exact === 'number' ? D.exact : 0;
+};
+const SAMPC = {};
+function samples(key) {                       // 排序后的样本（用于水平集测度与递减重排）
+  if (SAMPC[key]) return SAMPC[key];
+  const f = FDEF[key].f, a = new Float64Array(NS);
+  for (let i = 0; i < NS; i++) a[i] = f((i + 0.5) / NS);
+  a.sort();
+  return SAMPC[key] = a;
+}
+function cntGT(arr, t) {                      // arr 升序, 返回 > t 的个数
+  let lo = 0, hi = arr.length;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (arr[m] > t) hi = m; else lo = m + 1; }
+  return arr.length - lo;
+}
+function measGT(key, t) {                     // λ({f > t})
+  const D = FDEF[key];
+  if (D.kind === 'dir') return 0;
+  if (D.kind === 'ind') return t < 1 ? D.lam : 0;
+  return cntGT(samples(key), t) / NS;
+}
+function compGT(key, t) {                     // {f > t} 的连通分支（画图用）
+  const D = FDEF[key];
+  if (D.kind === 'dir') return [];
+  if (D.kind === 'ind') return t < 1 ? D.iv : [];
+  const M = 3000, out = [];
+  let st = -1;
+  for (let i = 0; i <= M; i++) {
+    const x = i / M, on = i < M && D.f(Math.max(x, 1e-12)) > t;
+    if (on && st < 0) st = x;
+    if (!on && st >= 0) { out.push([st, x]); st = -1; }
+  }
+  return out;
+}
+function riemann(key, n) {                    // 上和/下和
+  const D = FDEF[key];
+  if (D.kind === 'dir') return { U: 1, L: 0, note: 'sup≡1, inf≡0（ℚ 与无理数都稠密）' };
+  if (D.kind === 'ind') {
+    const iv = D.iv; let hit = 0, p = 0;
+    for (let i = 0; i < n; i++) {
+      const a = i / n, b = (i + 1) / n;
+      while (p < iv.length && iv[p][1] < a) p++;
+      if (p < iv.length && iv[p][0] <= b) hit++;
+    }
+    return { U: hit / n, L: 0, note: `${hit}/${n} 段碰到集合；每段都含挖掉的点 ⇒ inf≡0` };
+  }
+  let U = 0, L = 0, inf = false;
+  const SUB = 400;
+  for (let i = 0; i < n; i++) {
+    let hi = -Infinity, lo = Infinity;
+    for (let j = 0; j <= SUB; j++) {
+      const x = (i + j / SUB) / n;
+      const v = D.f(Math.max(x, 1 / (2 * NS)));
+      if (v > hi) hi = v; if (v < lo) lo = v;
+    }
+    if (i === 0 && key === 'unbdd') inf = true;
+    U += hi / n; L += lo / n;
+  }
+  return { U: inf ? Infinity : U, L, note: inf ? '第一段 sup = +∞（函数无界）' : '' };
+}
+function drawInt() {
+  const n = +$('in').value, mL = +$('im').value, D = FDEF[IFN];
+  const showV = IVIEW === 'v', showH = IVIEW === 'h';
+  $('invwrap').style.display = showV ? 'inline' : 'none';
+  $('imvwrap').style.display = showH ? 'inline' : 'none';
+  $('icap1').innerHTML = showV
+    ? `<b>左 · 竖切（黎曼）</b>：把 [0,1] 切成 n 段，每段取 <span style="color:#c0392b">sup（红框 = 上和 U<sub>n</sub>）</span>
+       和 <span style="color:#27713d">inf（绿块 = 下和 L<sub>n</sub>）</span>。
+       <b>可积 ⟺ U<sub>n</sub> 和 L<sub>n</sub> 能夹住</b>（右图在看这件事）。`
+    : `<b>左 · 横切（勒贝格）</b>：把<b>值域</b>切成 m 层，第 i 层贴在高度 t<sub>i</sub> 上，
+       <span style="color:#2b5fb8">蓝块</span>的底边就是 {f &gt; t<sub>i</sub>}，它的总长度 = λ({f&gt;t<sub>i</sub>})（加粗蓝线画在 x 轴上）。
+       一层的面积 = Δt · λ({f&gt;t<sub>i</sub>})。`;
+  $('icap2').innerHTML = showV
+    ? `<b>右 · 黎曼的夹逼</b>：<span style="color:#c0392b">U<sub>n</sub></span> 从上、
+       <span style="color:#27713d">L<sub>n</sub></span> 从下（横轴 log₂n）。绿虚线 = 真值。
+       <b>合拢 ⟹ 黎曼可积；留一条缝不动 ⟹ 不可积</b>（试试胖康托集和 1<sub>ℚ</sub>）。`
+    : `<b>右 · 递减重排 f*</b>（把每层底边推到左端对齐）。横轴是<b>测度</b> λ({f&gt;t})，不是 x。
+       蓝色阶梯面积 = Σ Δt·λ({f&gt;t<sub>i</sub>}) = 勒贝格和。<b>两图面积相等</b> —— 积分只认"每个高度上有多长"。`;
+  $('inv').textContent = 'n = ' + n;
+  $('imv').textContent = 'm = ' + mL;
+  const ymax = D.ymax, dt = ymax / mL;
+  const PL = 40, PR = 14, PT = 14, PB = 28;
+  const g = I1.g; bg(I1);
+  const XA = x => PL + (I1.W - PL - PR) * x, YA = y => I1.H - PB - (I1.H - PT - PB) * y / ymax;
+  // 坐标
+  g.strokeStyle = '#eee'; g.fillStyle = '#888'; g.font = '10px Menlo';
+  for (let t = 0; t <= 10; t++) {
+    g.beginPath(); g.moveTo(XA(t / 10), PT); g.lineTo(XA(t / 10), I1.H - PB); g.stroke();
+    g.fillText((t / 10).toFixed(1), XA(t / 10) - 8, I1.H - PB + 12);
+  }
+  for (let i = 0; i <= 5; i++) {                 // y 轴刻度
+    const v = ymax * i / 5;
+    g.strokeStyle = '#eee'; g.beginPath(); g.moveTo(PL, YA(v)); g.lineTo(I1.W - PR, YA(v)); g.stroke();
+    g.fillStyle = '#888'; g.fillText(v.toFixed(2), 4, YA(v) + 3);
+  }
+  // 横切层
+  const hi0 = Math.max(1, Math.round(mL * 0.55));
+  let lebS = 0, hiLab = null;
+  for (let i = 1; i <= mL; i++) lebS += dt * measGT(IFN, i * dt);
+  if (showH) {
+    for (let i = 1; i <= mL; i++) {
+      const t = i * dt, comps = compGT(IFN, t);
+      g.fillStyle = i === hi0 ? 'rgba(26,99,216,0.45)' : 'rgba(26,99,216,0.17)';
+      for (const [a, b] of comps) g.fillRect(XA(a), YA(t), Math.max(0.7, XA(b) - XA(a)), YA(t - dt) - YA(t));
+      if (i === hi0) {                        // 这一层的底边推到 x 轴: 就是 {f>t}
+        g.strokeStyle = '#1a63d8'; g.lineWidth = 4;
+        for (const [a, b] of comps) {
+          g.beginPath(); g.moveTo(XA(a), I1.H - PB - 1); g.lineTo(Math.max(XA(a) + 0.8, XA(b)), I1.H - PB - 1); g.stroke();
+        }
+        g.lineWidth = 1;
+        g.strokeStyle = '#1a63d8'; g.setLineDash([4, 3]);
+        g.beginPath(); g.moveTo(PL, YA(t)); g.lineTo(I1.W - PR, YA(t)); g.stroke(); g.setLineDash([]);
+        hiLab = t;                            // 标注留到最后画, 免得被函数本体盖住
+      }
+    }
+  }
+  // 竖切上/下和
+  if (showV) {
+    for (let i = 0; i < n; i++) {
+      const a = i / n, b = (i + 1) / n;
+      let hi = -Infinity, lo = Infinity;
+      if (D.kind === 'cont') {
+        for (let j = 0; j <= 200; j++) {
+          const v = D.f(Math.max((i + j / 200) / n, 1 / (2 * NS)));
+          if (v > hi) hi = v; if (v < lo) lo = v;
+        }
+      } else if (D.kind === 'ind') {
+        hi = D.iv.some(([p, q]) => q >= a && p <= b) ? 1 : 0; lo = 0;
+      } else { hi = 1; lo = 0; }
+      const xa = XA(a), xb = XA(b);
+      g.fillStyle = 'rgba(39,113,61,0.28)';
+      g.fillRect(xa, YA(Math.min(lo, ymax)), xb - xa, I1.H - PB - YA(Math.min(lo, ymax)));
+      g.strokeStyle = '#c0392b'; g.lineWidth = 1;
+      g.strokeRect(xa + 0.5, YA(Math.min(hi, ymax)) + 0.5, xb - xa - 1, I1.H - PB - YA(Math.min(hi, ymax)) - 1);
+    }
+  }
+  // 函数本体
+  if (D.kind === 'cont') {
+    g.strokeStyle = '#111'; g.lineWidth = 1.6; g.beginPath();
+    for (let px = 0; px <= I1.W - PL - PR; px++) {
+      const x = px / (I1.W - PL - PR), v = Math.min(D.f(Math.max(x, 1 / (2 * NS))), ymax * 1.4);
+      px ? g.lineTo(PL + px, YA(v)) : g.moveTo(PL + px, YA(v));
+    }
+    g.stroke(); g.lineWidth = 1;
+  } else if (D.kind === 'ind') {
+    const wpx = I1.W - PL - PR;
+    g.fillStyle = '#111';
+    let p = 0;
+    for (let px = 0; px < wpx; px++) {
+      const a = px / wpx, b = (px + 1) / wpx;
+      while (p < D.iv.length && D.iv[p][1] < a) p++;
+      if (p < D.iv.length && D.iv[p][0] <= b) g.fillRect(PL + px, YA(1), 1, I1.H - PB - YA(1));
+    }
+  } else {
+    g.fillStyle = '#c0392b';
+    for (let q = 1; q <= 40; q++) for (let p = 0; p <= q; p++) {
+      if (gcd(p, q) !== 1) continue;
+      g.beginPath(); g.arc(XA(p / q), YA(1), 1.7, 0, 7); g.fill();
+    }
+    g.fillStyle = '#2b5fb8';
+    for (const ir of [Math.SQRT2 - 1, Math.PI - 3, Math.E - 2, (Math.sqrt(5) - 1) / 2, Math.log(2)]) {
+      g.beginPath(); g.arc(XA(ir), YA(0), 3, 0, 7); g.fill();
+    }
+    g.fillStyle = '#555'; g.font = '11px Menlo';
+    g.fillText('红 = 有理点 f=1（测度 0）　蓝 = 无理点 f=0（测度 1）', PL + 6, YA(0.5));
+  }
+  g.strokeStyle = '#333'; g.beginPath();
+  g.moveTo(PL, I1.H - PB); g.lineTo(I1.W - PR, I1.H - PB); g.stroke();
+  if (hiLab !== null) {
+    g.font = '11px Menlo';
+    const lb = `t=${hiLab.toFixed(3)}　λ({f>t}) = ${measGT(IFN, hiLab).toFixed(5)}`;
+    const tw = g.measureText(lb).width;
+    g.fillStyle = 'rgba(255,255,255,0.92)';
+    g.fillRect(I1.W - PR - tw - 9, YA(hiLab) - 16, tw + 8, 15);
+    g.fillStyle = '#1a63d8'; g.fillText(lb, I1.W - PR - tw - 5, YA(hiLab) - 5);
+  }
+
+  // ---- 右图 ----
+  const g2 = I2.g; bg(I2);
+  if (showV) {                                    // 黎曼的夹逼: U_n / L_n 随 n
+    const NS2 = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64];
+    const RU = [], RL = [];
+    for (const nn of NS2) { const R2 = riemann(IFN, nn); RU.push(R2.U); RL.push(R2.L); }
+    const fin = RU.filter(Number.isFinite);
+    const yhi = Math.max(0.2, (fin.length ? Math.max(...fin) : 1) * 1.12, D_exact(IFN) * 1.3);
+    const XR = i => PL + (I2.W - PL - PR) * i / (NS2.length - 1);
+    const YR = v => I2.H - PB - (I2.H - PT - PB) * Math.min(v, yhi) / yhi;
+    g2.strokeStyle = '#eee'; g2.fillStyle = '#888'; g2.font = '10px Menlo';
+    for (let i = 0; i <= 5; i++) {
+      const v = yhi * i / 5;
+      g2.beginPath(); g2.moveTo(PL, YR(v)); g2.lineTo(I2.W - PR, YR(v)); g2.stroke();
+      g2.fillText(v.toFixed(2), 4, YR(v) + 3);
+    }
+    NS2.forEach((nn, i) => {
+      if (i % 2) return;
+      g2.beginPath(); g2.moveTo(XR(i), PT); g2.lineTo(XR(i), I2.H - PB); g2.stroke();
+      g2.fillText(String(nn), XR(i) - 5, I2.H - PB + 12);
+    });
+    const exv = D_exact(IFN);
+    g2.strokeStyle = '#27713d'; g2.setLineDash([5, 4]); g2.lineWidth = 1.6;
+    g2.beginPath(); g2.moveTo(PL, YR(exv)); g2.lineTo(I2.W - PR, YR(exv)); g2.stroke();
+    g2.setLineDash([]); g2.lineWidth = 1;
+    g2.fillStyle = '#27713d'; g2.font = '12px Menlo';
+    g2.fillText('∫f = ' + exv, PL + 6, YR(exv) - 5);
+    const curve = (arr, c) => {
+      g2.strokeStyle = c; g2.lineWidth = 1.8; g2.beginPath();
+      let started = false;
+      arr.forEach((v, i) => {
+        if (!Number.isFinite(v)) return;
+        started ? g2.lineTo(XR(i), YR(v)) : g2.moveTo(XR(i), YR(v));
+        started = true;
+      });
+      g2.stroke(); g2.lineWidth = 1; g2.fillStyle = c;
+      arr.forEach((v, i) => {
+        if (!Number.isFinite(v)) return;
+        g2.beginPath(); g2.arc(XR(i), YR(v), 2.6, 0, 7); g2.fill();
+      });
+    };
+    curve(RU, '#c0392b'); curve(RL, '#27713d');
+    if (!Number.isFinite(RU[0])) {
+      g2.fillStyle = '#c0392b'; g2.font = '12px Menlo';
+      g2.fillText('U_n ≡ +∞（函数无界，上和根本不存在）', PL + 20, PT + 20);
+    }
+    g2.strokeStyle = '#333'; g2.beginPath();
+    g2.moveTo(PL, I2.H - PB); g2.lineTo(I2.W - PR, I2.H - PB); g2.stroke();
+    g2.fillStyle = '#555'; g2.font = '11px Menlo';
+    g2.fillText('分段数 n（对数刻度）', I2.W / 2 - 60, I2.H - PB + 24);
+    const gapN = Number.isFinite(RU[RU.length - 1]) ? RU[RU.length - 1] - RL[RL.length - 1] : Infinity;
+    g2.fillStyle = gapN < 0.02 ? '#27713d' : '#c0392b'; g2.font = '12px Menlo';
+    g2.fillText(`n=64 时 U−L = ${Number.isFinite(gapN) ? gapN.toFixed(6) : '∞'}`, PL + 6, PT + 14);
+  } else {
+  const X2 = s => PL + (I2.W - PL - PR) * s, Y2 = y => I2.H - PB - (I2.H - PT - PB) * y / ymax;
+  g2.strokeStyle = '#eee'; g2.fillStyle = '#888'; g2.font = '10px Menlo';
+  for (let t = 0; t <= 10; t++) {
+    g2.beginPath(); g2.moveTo(X2(t / 10), PT); g2.lineTo(X2(t / 10), I2.H - PB); g2.stroke();
+    g2.fillText((t / 10).toFixed(1), X2(t / 10) - 8, I2.H - PB + 12);
+  }
+  for (let i = 0; i <= 5; i++) {
+    const v = ymax * i / 5;
+    g2.beginPath(); g2.moveTo(PL, Y2(v)); g2.lineTo(I2.W - PR, Y2(v)); g2.stroke();
+    g2.fillStyle = '#888'; g2.fillText(v.toFixed(2), 4, Y2(v) + 3);
+  }
+  for (let i = 1; i <= mL; i++) {              // 勒贝格阶梯（面积 = 横切和）
+    const t = i * dt, mu = measGT(IFN, t);
+    if (mu <= 0) continue;
+    g2.fillStyle = i === hi0 ? 'rgba(26,99,216,0.45)' : 'rgba(26,99,216,0.17)';
+    g2.fillRect(X2(0), Y2(t), X2(mu) - X2(0), Y2(t - dt) - Y2(t));
+    g2.strokeStyle = 'rgba(26,99,216,0.55)';
+    g2.strokeRect(X2(0) + 0.5, Y2(t) + 0.5, Math.max(1, X2(mu) - X2(0) - 1), Y2(t - dt) - Y2(t) - 1);
+  }
+  g2.strokeStyle = '#111'; g2.lineWidth = 1.6; g2.beginPath();   // f*
+  const arr = D.kind === 'cont' ? samples(IFN) : null;
+  for (let px = 0; px <= I2.W - PL - PR; px++) {
+    const s = px / (I2.W - PL - PR);
+    let v;
+    if (D.kind === 'cont') v = Math.min(arr[Math.max(0, NS - 1 - Math.floor(s * NS))], ymax * 1.4);
+    else if (D.kind === 'ind') v = s < D.lam ? 1 : 0;
+    else v = 0;
+    px ? g2.lineTo(PL + px, Y2(v)) : g2.moveTo(PL + px, Y2(v));
+  }
+  g2.stroke(); g2.lineWidth = 1;
+  g2.strokeStyle = '#333'; g2.beginPath();
+  g2.moveTo(PL, I2.H - PB); g2.lineTo(I2.W - PR, I2.H - PB); g2.stroke();
+  g2.fillStyle = '#555'; g2.font = '11px Menlo';
+  g2.fillText('横轴 = 测度 λ({f>t})', I2.W - PR - 130, I2.H - PB + 24);
+  }
+
+  // ---- 读数 ----
+  const R = riemann(IFN, n);
+  const tail = IFN === 'unbdd' ? 1 / ymax : 0;      // ∫_ymax^∞ t^-2 dt = 1/ymax
+  const fin = lebS + tail;
+
+  $('ist').innerHTML =
+    (showV
+      ? `<b>┃ 竖切（黎曼）</b> n=${n}：上和 U = <span class="r">${Number.isFinite(R.U) ? R.U.toFixed(6) : '+∞'}</span>`
+        + `　下和 L = <span class="g">${R.L.toFixed(6)}</span>`
+        + `　<b>U−L = ${Number.isFinite(R.U) ? (R.U - R.L).toFixed(6) : '∞'}</b>`
+        + (R.note ? `　<span class="y">${R.note}</span>` : '')
+      : `<b>━ 横切（勒贝格）</b> m=${mL}, Δt=${dt.toFixed(4)}：Σ Δt·λ({f&gt;t_i}) = <b>${lebS.toFixed(6)}</b>`
+        + (tail ? `　+ 尾部 ∫<sub>${ymax}</sub><sup>∞</sup>λdt = ${tail.toFixed(6)}（闭式）= <b>${fin.toFixed(6)}</b>` : '')
+        + `　理论 ∫f dλ = <b class="y">${D.exact}</b>　误差 ${Math.abs(fin - D.exact).toExponential(2)}`)
+    + '<br>'
+    + `结论：黎曼 <span class="${D.rok ? 'g' : 'r'}">${D.rv}</span>`
+    + `　勒贝格 <span class="g">可积，∫ = ${D.ex}</span>`;
+  $('inote').innerHTML = INOTE[IFN];
+}
+const INOTE = {
+  smooth: `连续函数两边都行，是用来<b>校准这套机器</b>的：拖 n 看 U 和 L 从两侧夹到 0.9（差 ~C/n²，因为 f 光滑），
+    拖 m 看横切和从下方单调升到 0.9。<b>横切和永远 ≤ 真值</b>（用的是每层的右端点 t_i，是从下面逼近的简单函数
+    φ = Σ t_i·1<sub>{f&gt;t_i}</sub>），这正是勒贝格积分的定义方式：<b>对非负可测函数取所有下方简单函数积分的上确界</b>。`,
+  unbdd: `<b>无界函数暴露了两套定义的分工。</b>黎曼：第一段 sup = +∞，上和 = +∞，常义黎曼积分<b>不存在</b>，
+    必须另立"广义积分 lim<sub>a→0</sub>∫<sub>a</sub>¹"的门。<br>
+    勒贝格：一点特例都不需要 —— λ({f&gt;t}) = min(1, t<sup>−2</sup>)，层饼一路积到 ∞：
+    ∫₀¹1 dt + ∫₁<sup>∞</sup>t<sup>−2</sup>dt = 1+1 = <b>2</b>。图上只画到 t=6，剩下的尾巴 ∫₆<sup>∞</sup>t<sup>−2</sup>dt = 1/6 用闭式补上（读数里单列）。
+    <b>无界 = 无穷多层很薄但底边不空的层</b>，可积性就是问"这些层的面积和收敛吗"。`,
+  cantor: `1<sub>C</sub> 是<b>黎曼可积</b>的：上和 = 碰到 C 的小段总长 → 外若尔当容量 = 0，下和 ≡ 0，夹住了，∫=0。
+    （<b>勒贝格判据</b>：有界函数黎曼可积 ⟺ 不连续点集的<b>勒贝格测度为 0</b>。1<sub>C</sub> 的不连续点集正是 C，测度 0 ⟹ 可积。
+    对<b>紧</b>集，"测度 0"和"外若尔当容量 0"是一回事，所以上和才会掉到 0；换成 ℚ 这种非闭集就不然了 ——
+    托梅函数的不连续点集是 ℚ，测度 0 但若尔当容量 1，它照样黎曼可积。）<br>
+    拖 n 到 3 的幂附近看得最清楚：n=3<sup>j</sup> 时上和 = (2/3)<sup>j</sup>。图上梳齿是第 12 层近似（4096 段），
+    测度用的是精确值 0 而不是近似值。`,
+  svc: `<b>本页的关键反例。</b>胖康托集 A：闭、无内点、测度 1/2。于是
+    因为 A <b>无处稠密</b>，任何小区间里都有被挖掉的点 ⟹ 每段 inf = 0 ⟹ <b>下和恒等于 0</b>；
+    而碰到 A 的小段里必有 A 的点 ⟹ sup = 1，上和 = 这些小段的总长 → A 的外若尔当容量 = λ(A) = 1/2。
+    <b class="k">U→1/2 ≠ 0=L，黎曼不可积</b>（不连续点集 = A，测度 1/2 &gt; 0，正是勒贝格判据失效的那一条）。<br>
+    勒贝格那边毫无悬念：{1<sub>A</sub>&gt;t} = A 对一切 t∈[0,1)，层饼给出 1·λ(A) = <b>1/2</b>。
+    对比上一档（康托集，同样无处稠密却可积），差别<b>只在测度</b>：不连续点集测度为 0 才黎曼可积。`,
+  dir: `狄利克雷函数：上和 ≡ 1、下和 ≡ 0（有理数和无理数都稠密），<b>任何分割都夹不住</b>。
+    而 {1<sub>ℚ</sub>&gt;t} = ℚ 是测度 0 的集合，所有层的底边都是"长度 0"，右图的 f* 直接躺平在 0 上 ⟹ <b>∫ = 0</b>。<br>
+    这就是勒贝格积分"对位置乱免疫"的极端体现：它从不问"函数在小区间上抖不抖"，只问"每个高度上底边有多长"。`
+};
+
+// ===================== 调度 =====================
+let TAB = 'd2';
+const PANES = ['d2', 'int'];
+const DRAW = { d2: drawD2, int: drawInt };
+function draw() { if (DRAW[TAB]) DRAW[TAB](); }
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  TAB = b.dataset.t;
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  PANES.forEach(p => $('pane-' + p).style.display = p === TAB ? 'block' : 'none');
+  draw();
+}));
+document.querySelectorAll('button[data-f]').forEach(b => b.addEventListener('click', () => {
+  IFN = b.dataset.f;
+  document.querySelectorAll('button[data-f]').forEach(x => x.classList.toggle('on', x === b));
+  draw();
+}));
+for (const id of ['dk', 'dbr', 'in', 'im'])
+  $(id).addEventListener('input', () => requestAnimationFrame(draw));
+// ① 页：预设 / 画笔 / 涂抹
+document.querySelectorAll('button[data-s2]').forEach(b => b.addEventListener('click', () => {
+  D2KEY = b.dataset.s2;
+  document.querySelectorAll('button[data-s2]').forEach(x => x.classList.toggle('on', x === b));
+  rebuild2(); draw();
+}));
+$('drot').addEventListener('input', () => requestAnimationFrame(() => { rebuild2(); draw(); }));
+for (const [id, v] of [['dpe', 'paint'], ['dpx', 'erase']])
+  $(id).addEventListener('click', () => {
+    DPEN = v;
+    $('dpe').classList.toggle('on', v === 'paint');
+    $('dpx').classList.toggle('on', v === 'erase');
+  });
+$('dclr').addEventListener('click', () => {
+  mDraw = new Uint8Array(DN * DN);
+  mA = mDraw; mB = new Uint8Array(DN * DN);
+  build2(); draw();
+});
+window.addEventListener('resize', () => { if (TAB === 'd2') draw(); });
+let d2ing = false, dLast = null, d2pend = false, d2erase = false, d2Dirty = null;
+function dbrush(e) {
+  if (D2KEY !== 'draw2') return;
+  const rect = D0.c.getBoundingClientRect();
+  const sc = DN / rect.width;                     // CSS 像素 → 位图像素
+  const x = (e.clientX - rect.left) * sc, y = (e.clientY - rect.top) * sc;
+  const r = (+$('dbr').value / 2) * sc;
+  const p0 = dLast || [x, y];
+  dLast = [x, y];
+  stamp2(p0[0], p0[1], x, y, r, d2erase);
+  const bb = d2BBox(p0[0], p0[1], x, y, r);
+  d2Dirty = d2Dirty ? [Math.min(d2Dirty[0], bb[0]), Math.min(d2Dirty[1], bb[1]),
+                       Math.max(d2Dirty[2], bb[2]), Math.max(d2Dirty[3], bb[3])] : bb;
+  if (!d2pend) {
+    d2pend = true;
+    requestAnimationFrame(() => { d2pend = false; build2(d2Dirty); d2Dirty = null; draw(); });
+  }
+}
+D0.c.addEventListener('pointerdown', e => {
+  if (D2KEY !== 'draw2') return;
+  d2ing = true; dLast = null;
+  try { D0.c.setPointerCapture(e.pointerId); } catch (_) { }
+  d2erase = e.shiftKey || DPEN === 'erase';       // shift = 临时橡皮
+  dbrush(e);
+});
+D0.c.addEventListener('pointermove', e => { if (d2ing) dbrush(e); });
+D0.c.addEventListener('pointerup', () => { d2ing = false; dLast = null; build2(d2Dirty); d2Dirty = null; draw(); });
+draw();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>

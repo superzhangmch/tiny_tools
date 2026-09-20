@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>分形维数：三种定义 + 数格子验证</title>
+<style>
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; margin:12px 16px; color:#222; background:#fff; }
+  h1 { font-size:17px; margin:0 0 8px; }
+  canvas { border:1px solid #ddd; display:block; background:#fff; touch-action:none; }
+  button { font-size:12.5px; padding:3px 10px; border:1px solid #bbb; background:#fafafa;
+           border-radius:4px; cursor:pointer; color:#222; }
+  button:hover { background:#eef1f6; }
+  button.on { background:#1a63d8; border-color:#1a63d8; color:#fff; font-weight:600; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:12.5px; margin:6px 0; }
+  .tabs { border-bottom:1px solid #ccc; padding-bottom:7px; }
+  .tabs button { font-size:13px; padding:4px 12px; }
+  .cap { font-size:11.5px; color:#555; margin:3px 0 9px; line-height:1.7; }
+  .hint { color:#777; font-size:11px; }
+  .mono { font-family:Menlo,Consolas,monospace; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start; }
+  .st { font-family:Menlo,Consolas,monospace; font-size:12.5px; background:#0f1522; color:#dfe6f3;
+        padding:7px 11px; border-radius:4px; margin:6px 0; line-height:1.95; max-width:1120px; }
+  .st b { color:#7fd3c4; } .st .r { color:#ff8f7a; } .st .g { color:#8fe09a; } .st .y { color:#ffd27f; }
+  .step { background:#eef3fb; border-left:3px solid #2b5fb8; padding:7px 11px; font-size:12px;
+          margin:7px 0; line-height:1.75; max-width:1120px; }
+  .note { background:#f6f7fa; border-left:3px solid #9aa6bd; padding:7px 11px;
+          font-size:11.5px; color:#444; line-height:1.75; max-width:1120px; margin:7px 0; }
+  .warn { background:#fff4e5; border:1px solid #e0b070; border-radius:4px; padding:7px 11px;
+          font-size:12px; line-height:1.7; max-width:1120px; margin:7px 0; }
+  table.t2 { border-collapse:collapse; font-size:12px; margin:6px 0; }
+  table.t2 td, table.t2 th { border:1px solid #ccc; padding:3px 7px; text-align:right;
+    font-family:Menlo,Consolas,monospace; white-space:nowrap; }
+  table.t2 th { background:#eef1f6; text-align:center; font-family:inherit; }
+  table.t2 td.lb { text-align:left; font-family:inherit; background:#f7f8fa; }
+  b.k { color:#b03030; }
+  body.ctl-collapsed h1, body.ctl-collapsed .step, body.ctl-collapsed .note,
+  body.ctl-collapsed .cap, body.ctl-collapsed .warn { display:none !important; }
+</style>
+</head>
+<body>
+<h1>分形维数 —— <span style="font-size:12.5px;font-weight:400;color:#555">
+  维数不是"有几个坐标"，而是<b>"尺度缩小时，量变大得多快"</b>的那个指数。三种定义 + 真数格子验证</span></h1>
+
+<div class="bar tabs">
+  <button class="on" data-t="sim">① 相似维数：数副本</button>
+  <button data-t="box">② 盒计数维数：真数格子 + 拟合</button>
+  <button data-t="hau">③ 豪斯多夫测度：s 的相变</button>
+</div>
+
+<!-- ================== ① 相似维数 ================== -->
+<div id="pane-sim">
+<div class="step">
+  <b>先把"维数"改写成一句话：把尺子缩小到 1/k，需要的块数变成 k<sup>d</sup> 倍 —— 这个 d 就是维数。</b><br>
+  线段缩一半要 2 块（2 = 2<sup>1</sup>）、正方形要 4 块（4 = 2<sup>2</sup>）、立方体要 8 块（8 = 2<sup>3</sup>）。
+  于是对<b>由 N 个比例为 r 的副本拼成</b>的自相似集，直接解 <b>N·r<sup>d</sup> = 1</b>：
+  <b class="k">d = log N / log(1/r)</b>（相似维数 / similarity dimension）。<br>
+  这个式子对线段和正方形给出 1 和 2（和常识一致），对科赫曲线给出 1.2619 —— <b>同一个定义，只是答案不再是整数</b>。
+  右图是"把红色那一块放大 1/r 倍"，得到的正是整体：<b>副本数 N 和比例 r 都能在图上数出来</b>，不是背下来的。
+</div>
+<div class="bar">
+  <button class="on" data-s="seg">线段 (N=2,r=1/2)</button>
+  <button data-s="sq">正方形 (4,1/2)</button>
+  <button data-s="cantor">康托集 (2,1/3)</button>
+  <button data-s="koch">科赫曲线 (4,1/3)</button>
+  <button data-s="sierp">谢尔宾斯基三角 (3,1/2)</button>
+  <button data-s="carpet">谢尔宾斯基地毯 (8,1/3)</button>
+  <button data-s="dust">康托尘 C×C (4,1/3)</button>
+  <button data-s="vicsek">维切克雪花 (5,1/3)</button>
+  <button data-s="dragon">龙曲线 (2,1/√2)</button>
+</div>
+<div class="bar">
+  <span class="mono">迭代层数 k</span><input type="range" id="sk" min="0" max="12" value="5" style="width:200px">
+  <span class="mono" id="skv"></span>
+  <span class="mono">高亮第几个副本</span><input type="range" id="si" min="0" max="7" value="0" style="width:120px">
+  <span class="mono" id="siv"></span>
+</div>
+<div class="row">
+  <div style="width:470px"><canvas id="ac1" width="470" height="430"></canvas>
+    <div class="cap"><b>整体（第 k 层）</b>：<span style="color:#c0392b">红色</span> = 被高亮的那 1 个副本，
+      它是整体的 <b>r 倍缩小版</b>；灰色虚框是它的包围盒。</div></div>
+  <div style="width:300px"><canvas id="ac2" width="300" height="430"></canvas>
+    <div class="cap"><b>把红框放大 1/r 倍</b>：和左图一模一样（少一层细节 —— 因为左图只画到第 k 层）。
+      这就是"<b>自相似</b>"的操作性定义。</div></div>
+  <div style="width:300px"><canvas id="ac3" width="300" height="430"></canvas>
+    <div class="cap"><b>质量–尺度 log-log</b>：横轴 log(1/尺度)，纵轴 log(块数)。
+      斜率就是 d。灰虚线是斜率 1 和 2 的参照 —— 分形<b>夹在整数之间</b>。</div></div>
+</div>
+<div class="st" id="ast"></div>
+<div class="note">
+  <b>相似维数只对"严格自相似 + 副本几乎不重叠（开集条件）"的集合有效。</b>
+  它是个"作弊算法"：不用做覆盖的下确界，直接读 N 和 r。对于随机分形（布朗轨迹、海岸线）或只是"看起来粗糙"的曲线，
+  N 和 r 根本不存在，就必须回到 ② 的盒计数或 ③ 的豪斯多夫定义去<b>实测</b>。<br>
+  <b>龙曲线是个提醒</b>：N=2、r=1/√2 ⟹ d = log2/log√2 = <b>2</b>。图上画的折线是它的<b>逼近</b>（每层 2<sup>k</sup> 段、自不相交），
+  但极限集是一块<b>有内点、有面积的"龙瓷砖"</b>（能无缝铺满平面），所以 2 这个数是实打实的。<br>
+  想看"维数认不出形状差别"，对比 ② 里的<b>康托尘</b>和<b>科赫曲线</b>：两者维数都是 1.2619，
+  一个是完全断开的尘埃（拓扑维数 0），一个是连通曲线（拓扑维数 1）。<b>分形维数不认识连通性</b>。
+</div>
+</div>
+
+<!-- ================== ② 盒计数 ================== -->
+<div id="pane-box" style="display:none">
+<div class="step">
+  <b>盒计数维数（Minkowski–Bouligand）</b>：拿边长 ε 的方格网盖住图形，数<b>非空格子数 N(ε)</b>，
+  <b class="k">d<sub>box</sub> = lim<sub>ε→0</sub> log N(ε) / log(1/ε)</b>。
+  实操就是：对一串 ε 画 <b>log N(ε) 对 log(1/ε)</b> 的散点，<b>拟合直线的斜率</b>就是维数。<br>
+  本页是真在数：图形先栅格化成 1024×1024 的 0/1 位图，再用 2×2 逐级合并得到 ε = 2<sup>j</sup>/1024 各档的精确格子数。<br>
+  <b class="k">两端必然坏掉，这不是 bug，是有限尺度的宿命</b>：ε 接近整体尺寸时只剩几个格子（N 从 4 掉到 1 这种），
+  斜率被整数跳变支配，没有统计意义；ε 小于"构造深度 / 线宽 / 像素"时，图形在那个尺度下已经是光滑的
+  （曲线斜率→1、实心块→2）。
+  所以要看<b>局部斜率的平台</b>，并只在平台上拟合 —— 这正是真实数据（海岸线、星系、血管）上做分形分析的标准姿势。
+</div>
+<div class="bar">
+  <button class="on" data-f="koch">科赫曲线</button>
+  <button data-f="sierp">谢尔宾斯基三角</button>
+  <button data-f="carpet">地毯</button>
+  <button data-f="dust">康托尘</button>
+  <button data-f="circle">圆周（d=1）</button>
+  <button data-f="sqfill">实心方（d=2）</button>
+  <button data-f="fbm">分数布朗图像（d=2−H）</button>
+  <button data-f="bm2d">二维布朗轨迹（d=2）</button>
+  <button data-f="julia">朱利亚集（兔子）</button>
+  <button data-f="draw">手绘（自己画）</button>
+</div>
+<div class="bar">
+  <span class="mono">看 ε = 2<sup>j</sup>/1024 的网格，j</span>
+  <input type="range" id="bj" min="0" max="9" value="5" style="width:160px"><span class="mono" id="bjv"></span>
+  <span class="mono">拟合窗口</span>
+  <input type="range" id="bw1" min="0" max="9" value="1" style="width:110px">
+  <input type="range" id="bw2" min="0" max="9" value="4" style="width:110px">
+  <span class="mono" id="bwv"></span>
+  <span id="bhwrap" style="display:none"><span class="mono">H</span>
+    <input type="range" id="bh" min="5" max="95" value="70" style="width:120px"><span class="mono" id="bhv"></span></span>
+  <button id="bclr" style="display:none">清空手绘</button>
+</div>
+<div class="row">
+  <div style="width:512px"><canvas id="bc1" width="512" height="512"></canvas>
+    <div class="cap"><b>图形 + 当前 ε 的网格</b>：<span style="color:#1a63d8">蓝格</span> = 非空格子（被数进 N(ε) 的）。
+      手绘档可以直接在图上画线，实时出维数。</div></div>
+  <div style="width:470px">
+    <canvas id="bc2" width="470" height="300"></canvas>
+    <div class="cap"><b>log-log 与拟合</b>：橙点 = 实测 log₂N(ε)，<span style="color:#b03030">红线</span> = 在拟合窗口内的最小二乘直线，
+      灰虚线 = 理论斜率。<b>只在平台上拟合</b>。</div>
+    <canvas id="bc3" width="470" height="210"></canvas>
+    <div class="cap"><b>局部斜率</b> log₂(N<sub>j</sub>/N<sub>j+1</sub>)：相邻两档之间的斜率（横轴越往右 ε 越小）。
+      中间那段<b>平台</b>才是维数；<b>左端</b>格子只剩几个，斜率乱跳；<b>右端</b>细节用完，掉向 1（曲线）或 2（实心）。</div>
+  </div>
+</div>
+<div class="st" id="bst"></div>
+<div class="note" id="bnote"></div>
+</div>
+
+<!-- ================== ③ 豪斯多夫 ================== -->
+<div id="pane-hau" style="display:none">
+<div class="step">
+  <b>豪斯多夫测度（这才是原始定义，盒计数只是它的廉价替身）</b>：
+  <b>H<sup>s</sup><sub>δ</sub>(A) = inf { Σ<sub>i</sub> |U<sub>i</sub>|<sup>s</sup> : A ⊂ ⋃U<sub>i</sub>, |U<sub>i</sub>| ≤ δ }</b>，
+  再令 δ→0 得 <b>H<sup>s</sup>(A)</b>。注意指数 s 是<b>连续参数</b>，不必是整数。<br>
+  关键事实：把 s 从小往大扫，H<sup>s</sup>(A) 会在<b>某一个 s = d 处从 ∞ 跳到 0</b>，这个临界值就是
+  <b class="k">豪斯多夫维数 dim<sub>H</sub>A = inf{s : H<sup>s</sup>=0} = sup{s : H<sup>s</sup>=∞}</b>。
+  只在 s = d 这一点上 H<sup>s</sup> 可能是有限的正数。<br>
+  左图就在扫这个相变：对自相似集用<b>自然覆盖</b>（第 k 层的 N<sup>k</sup> 块，每块直径 r<sup>k</sup>），
+  Σ|U|<sup>s</sup> = <b>(N·r<sup>s</sup>)<sup>k</sup></b> —— 一个几何序列，公比 N·r<sup>s</sup> 大于/等于/小于 1 三种命运一目了然。
+</div>
+<div class="bar">
+  <button class="on" data-q="cantor">康托集 (d=log2/log3)</button>
+  <button data-q="koch">科赫曲线 (log4/log3)</button>
+  <button data-q="sierp">谢尔宾斯基三角 (log3/log2)</button>
+  <button data-q="seg">线段 (d=1)</button>
+  <button data-q="sq">正方形 (d=2)</button>
+</div>
+<div class="bar">
+  <span class="mono">试探指数 s</span><input type="range" id="hs" min="0" max="2200" value="500" style="width:300px">
+  <span class="mono" id="hsv"></span>
+  <button id="hsnap">吸附到 s = d</button>
+</div>
+<div class="row">
+  <div style="width:500px"><canvas id="hc1" width="500" height="320"></canvas>
+    <div class="cap"><b>Σ|U<sub>i</sub>|<sup>s</sup> 随覆盖层数 k</b>（纵轴 log₁₀）。公比 N·r<sup>s</sup>：
+      <span style="color:#b03030">&gt;1 ⟹ 爆到 ∞</span>（s 太小，"量"无穷多，说明 A 比 s 维大）；
+      <span style="color:#27713d">&lt;1 ⟹ 掉到 0</span>（s 太大）；
+      <b>=1 ⟹ 水平线</b>，只有这一个 s 让"量"既不 0 也不 ∞。</div></div>
+  <div style="width:430px"><canvas id="hc2" width="430" height="320"></canvas>
+    <div class="cap"><b>H<sup>s</sup>(A) 对 s 的相图</b>：一个阶跃函数，跳变点 = 维数。
+      红竖线是你当前的 s。<b>维数是"相变点"，不是"量"</b> —— 这是豪斯多夫定义最漂亮的地方。</div></div>
+</div>
+<div class="st" id="hst"></div>
+<div class="step">
+  <b>自然覆盖只给上界。下界要用"质量分布原理"：</b>若 A 上有质量 μ(A)=1 的测度，且存在常数 c 使
+  <b>μ(U) ≤ c·|U|<sup>d</sup></b> 对一切小集合 U 成立，则 <b>H<sup>d</sup>(A) ≥ 1/c &gt; 0</b>。
+  （道理一行：任何覆盖 1 = μ(A) ≤ Σμ(U<sub>i</sub>) ≤ cΣ|U<sub>i</sub>|<sup>d</sup>。）<br>
+  下图对康托集实测这个不等式：μ 取康托测度（每层 2<sup>k</sup> 块各分 2<sup>−k</sup> 质量，其分布函数正是<b>康托函数</b>），
+  随机抽几千个小区间 U，把 (|U|, μ(U)) 画成散点，和曲线 |U|<sup>d</sup> 比。
+</div>
+<div class="bar">
+  <span class="mono">抽样区间数</span><input type="range" id="hn" min="200" max="6000" value="2500" style="width:200px">
+  <span class="mono" id="hnv"></span>
+  <button id="hre">重抽</button>
+</div>
+<div class="row">
+  <div style="width:500px"><canvas id="hc3" width="500" height="330"></canvas>
+    <div class="cap"><b>质量分布原理实测</b>（双对数）：每个点是一个随机区间 U。
+      <span style="color:#b03030">红线 = |U|<sup>d</sup></span>，<span style="color:#e08a2e">橙线 = 4|U|<sup>d</sup></span>（理论上界）。
+      所有点都压在橙线下 ⟹ H<sup>d</sup>(C) ≥ 1/4 &gt; 0。另画两条斜率 s≠d 的参照：换成 s&gt;d 时点会冲到线上方（找不到常数 c），s&lt;d 时不等式松到无用。</div></div>
+  <div style="width:430px"><canvas id="hc4" width="430" height="330"></canvas>
+    <div class="cap"><b>比值 μ(U)/|U|<sup>s</sup> 的最大值随 s</b>：s ≤ d 时有限（不等式成立），
+      s &gt; d 时随抽样越细越往上跑 ⟹ 发散。<b>临界 s 又一次等于 d</b>。</div></div>
+</div>
+<div class="st" id="hst2"></div>
+<div class="warn">
+  <b>三种维数什么关系？</b>　dim<sub>拓扑</sub> ≤ dim<sub>H</sub> ≤ dim<sub>box</sub>（下盒 ≤ 上盒）。
+  对"乖"的自相似集（满足开集条件）三者中后两个相等，所以 ② 的实测能验证 ① 的公式。<br>
+  <b>但它们真会不等</b>：取 A = ℚ∩[0,1]。A 可数 ⟹ H<sup>s</sup>(A)=0 对一切 s&gt;0 ⟹ <b>dim<sub>H</sub> = 0</b>；
+  可 A 稠密，任何 ε 网格的<b>每个</b>格子都非空 ⟹ N(ε)=1/ε ⟹ <b>dim<sub>box</sub> = 1</b>。
+  盒计数不管"重数"、只管"占不占格子"，所以它会被稠密的稀疏集骗到；豪斯多夫维数靠的是可数多个<b>任意大小</b>的覆盖块，不会。
+  这也是为什么实测出来的斜率要叫"盒计数维数"而不能直接叫"豪斯多夫维数"。
+</div>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+function cx(id) { const c = $(id); return { c, g: c.getContext('2d'), W: c.width, H: c.height }; }
+function bg(o) { o.g.fillStyle = '#fff'; o.g.fillRect(0, 0, o.W, o.H); }
+const S3 = Math.sqrt(3);
+
+// ===================== 迭代函数系（仿射 [a,b,c,d,e,f]: x'=ax+by+e, y'=cx+dy+f） =====================
+function comp(T, m) {                          // T∘m
+  return [T[0] * m[0] + T[1] * m[2], T[0] * m[1] + T[1] * m[3],
+          T[2] * m[0] + T[3] * m[2], T[2] * m[1] + T[3] * m[3],
+          T[0] * m[4] + T[1] * m[5] + T[4], T[2] * m[4] + T[3] * m[5] + T[5]];
+}
+const ap = (T, x, y) => [T[0] * x + T[1] * y + T[4], T[2] * x + T[3] * y + T[5]];
+const sc = (k, e, f) => [k, 0, 0, k, e, f];
+const IFS = {
+  seg: { nm: '线段', prim: 'seg', r: 1 / 2, maps: [sc(.5, 0, 0), sc(.5, .5, 0)] },
+  sq: { nm: '正方形', prim: 'sq', r: 1 / 2, maps: [sc(.5, 0, 0), sc(.5, .5, 0), sc(.5, 0, .5), sc(.5, .5, .5)] },
+  cantor: { nm: '康托集', prim: 'seg', r: 1 / 3, maps: [sc(1 / 3, 0, 0), sc(1 / 3, 2 / 3, 0)] },
+  koch: { nm: '科赫曲线', prim: 'seg', r: 1 / 3, maps: [
+    sc(1 / 3, 0, 0),
+    [1 / 6, -S3 / 6, S3 / 6, 1 / 6, 1 / 3, 0],
+    [1 / 6, S3 / 6, -S3 / 6, 1 / 6, 1 / 2, S3 / 6],
+    sc(1 / 3, 2 / 3, 0)] },
+  sierp: { nm: '谢尔宾斯基三角', prim: 'tri', r: 1 / 2, maps: [sc(.5, 0, 0), sc(.5, .5, 0), sc(.5, .25, S3 / 4)] },
+  carpet: { nm: '谢尔宾斯基地毯', prim: 'sq', r: 1 / 3, maps: [
+    sc(1 / 3, 0, 0), sc(1 / 3, 1 / 3, 0), sc(1 / 3, 2 / 3, 0), sc(1 / 3, 0, 1 / 3),
+    sc(1 / 3, 2 / 3, 1 / 3), sc(1 / 3, 0, 2 / 3), sc(1 / 3, 1 / 3, 2 / 3), sc(1 / 3, 2 / 3, 2 / 3)] },
+  dust: { nm: '康托尘 C×C', prim: 'sq', r: 1 / 3, maps: [
+    sc(1 / 3, 0, 0), sc(1 / 3, 2 / 3, 0), sc(1 / 3, 0, 2 / 3), sc(1 / 3, 2 / 3, 2 / 3)] },
+  vicsek: { nm: '维切克雪花', prim: 'sq', r: 1 / 3, maps: [
+    sc(1 / 3, 0, 0), sc(1 / 3, 2 / 3, 0), sc(1 / 3, 1 / 3, 1 / 3), sc(1 / 3, 0, 2 / 3), sc(1 / 3, 2 / 3, 2 / 3)] },
+  dragon: { nm: '龙曲线', prim: 'seg', r: Math.SQRT1_2, maps: [[.5, -.5, .5, .5, 0, 0], [-.5, -.5, .5, -.5, 1, 0]] }
+};
+for (const k in IFS) {
+  const S = IFS[k];
+  S.N = S.maps.length;
+  S.d = Math.log(S.N) / Math.log(1 / S.r);
+}
+const PRIM = {                                 // 单位图元的顶点（world 坐标）
+  seg: [[0, 0], [1, 0]],
+  sq: [[0, 0], [1, 0], [1, 1], [0, 1]],
+  tri: [[0, 0], [1, 0], [.5, S3 / 2]]
+};
+function pieces(key, k, cap) {                 // 第 k 层的所有变换（字典序: 第一个下标 = 最外层副本）
+  const S = IFS[key];
+  let L = [[1, 0, 0, 1, 0, 0]];
+  for (let j = 0; j < k; j++) {
+    if (L.length * S.N > cap) break;
+    const nx = [];
+    for (const T of L) for (const m of S.maps) nx.push(comp(T, m));
+    L = nx;
+  }
+  return L;
+}
+function bbox(key, L) {
+  const pv = PRIM[IFS[key].prim];
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (const T of L) for (const [px, py] of pv) {
+    const [x, y] = ap(T, px, py);
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return [x0, y0, x1, y1];
+}
+// 把 world box 映射到画布（等比、y 向上），返回 [X(),Y(),scale]
+function fitter(box, W, H, pad) {
+  let [x0, y0, x1, y1] = box;
+  if (!(isFinite(x0) && isFinite(x1) && isFinite(y0) && isFinite(y1))) { x0 = y0 = 0; x1 = y1 = 1; }
+  const w = Math.max(x1 - x0, 1e-6), h = Math.max(y1 - y0, 1e-6);
+  const s = Math.min((W - 2 * pad) / w, (H - 2 * pad) / h);
+  const ox = (W - w * s) / 2 - x0 * s, oy = (H + h * s) / 2 + y0 * s;
+  return [x => ox + x * s, y => oy - y * s, s];
+}
+function drawPieces(g, key, L, X, Y, style, lw) {
+  const P = IFS[key].prim, pv = PRIM[P];
+  g.strokeStyle = style; g.fillStyle = style; g.lineWidth = lw || 1;
+  if (P === 'seg') {
+    g.beginPath();
+    for (const T of L) {
+      const [ax, ay] = ap(T, 0, 0), [bx, by] = ap(T, 1, 0);
+      g.moveTo(X(ax), Y(ay)); g.lineTo(X(bx), Y(by));
+    }
+    g.stroke();
+  } else {
+    g.beginPath();
+    for (const T of L) {
+      pv.forEach(([px, py], i) => {
+        const [x, y] = ap(T, px, py);
+        i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y));
+      });
+      g.closePath();
+    }
+    g.fill();
+  }
+}
+
+// ===================== ① 相似维数 =====================
+const A1 = cx('ac1'), A2 = cx('ac2'), A3 = cx('ac3');
+let SKEY = 'koch';
+const FLAT1D = key => key === 'seg' || key === 'cantor';       // 落在一条直线上, 画成逐层级联更清楚
+function drawCascade(o, key, kE, xr, hiIdx) {                  // 第 0..kE 层的构造级联
+  const S = IFS[key], g = o.g;
+  const L = 40, R = o.W - 14, wid = R - L, rowH = Math.min(44, (o.H - 52) / (kE + 1));
+  const X = x => L + (x - xr[0]) / (xr[1] - xr[0]) * wid;
+  g.font = '11px Menlo';
+  for (let j = 0; j <= kE; j++) {
+    const P = pieces(key, j, 60000), y = 18 + j * rowH, h = Math.max(4, rowH * 0.6);
+    const hiFrom = j >= 1 ? hiIdx * P.length / S.N : -1, hiTo = hiFrom + P.length / S.N;
+    g.fillStyle = '#888'; g.fillText('j=' + j, 6, y + h - 1);
+    P.forEach((T, i) => {
+      const [a] = ap(T, 0, 0), [b] = ap(T, 1, 0);
+      const x0 = X(Math.min(a, b)), x1 = X(Math.max(a, b));
+      if (x1 < L - 2 || x0 > R + 2) return;
+      g.fillStyle = (i >= hiFrom && i < hiTo) ? '#c0392b' : '#1a3c78';
+      g.fillRect(Math.max(x0, L), y, Math.max(0.7, Math.min(x1, R) - Math.max(x0, L)), h);
+    });
+  }
+  g.strokeStyle = '#333'; g.beginPath();
+  g.moveTo(L, o.H - 24); g.lineTo(R, o.H - 24); g.stroke();
+  g.fillStyle = '#333'; g.font = '11px Menlo';
+  g.fillText(xr[0].toPrecision(3), L - 6, o.H - 10);
+  g.fillText(xr[1].toPrecision(3), R - 24, o.H - 10);
+}
+function drawSim() {
+  const S = IFS[SKEY], k = +$('sk').value;
+  const idx = +$('si').value % S.N;
+  $('skv').textContent = 'k = ' + k;
+  $('siv').textContent = `第 ${idx} / ${S.N - 1} 个`;
+  const L = pieces(SKEY, k, 60000), kEff = Math.round(Math.log(L.length) / Math.log(S.N));
+  const box = bbox(SKEY, pieces(SKEY, Math.min(kEff, 6), 60000));
+  // 左: 整体 + 高亮副本
+  bg(A1);
+  const blkX = L.length / S.N;
+  if (FLAT1D(SKEY)) {                           // 一维集合: 画构造级联
+    drawCascade(A1, SKEY, kEff, [box[0], box[2]], idx);
+    A1.g.fillStyle = '#333'; A1.g.font = '12px Menlo';
+    A1.g.fillText(`${S.nm}　第 ${kEff} 层　${L.length} 块`, 44, A1.H - 34);
+    bg(A2);
+    const sbx = blkX >= 1 ? bbox(SKEY, L.slice(idx * blkX, (idx + 1) * blkX)) : box;
+    drawCascade(A2, SKEY, kEff, [sbx[0], sbx[2]], idx);
+    A2.g.fillStyle = '#c0392b'; A2.g.font = '12px Menlo';
+    A2.g.fillText(`放大 ${(1 / S.r).toFixed(3)} 倍`, 44, A2.H - 34);
+    drawSimPlot(S, kEff);
+    return;
+  }
+  const [X, Y] = fitter(box, A1.W, A1.H, 16);
+  const lw = S.prim === 'seg' ? (L.length > 20000 ? 0.6 : 1.2) : 1;
+  drawPieces(A1.g, SKEY, L, X, Y, '#1a3c78', lw);
+  const blk = L.length / S.N;
+  const sub = blk >= 1 ? L.slice(idx * blk, (idx + 1) * blk) : [];   // k=0 时还没有副本
+  bg(A2);
+  if (sub.length) {
+    drawPieces(A1.g, SKEY, sub, X, Y, '#c0392b', lw);
+    const sb = bbox(SKEY, sub);
+    A1.g.strokeStyle = '#888'; A1.g.setLineDash([4, 3]); A1.g.lineWidth = 1;
+    A1.g.strokeRect(X(sb[0]), Y(sb[3]), X(sb[2]) - X(sb[0]), Y(sb[1]) - Y(sb[3]));
+    A1.g.setLineDash([]);
+    const [X2, Y2] = fitter(sb, A2.W, A2.H, 12);                     // 中: 放大红框
+    drawPieces(A2.g, SKEY, L, X2, Y2, '#1a3c78', lw);
+    A2.g.fillStyle = '#c0392b'; A2.g.font = '12px Menlo';
+    A2.g.fillText(`放大 ${(1 / S.r).toFixed(3)} 倍`, 10, A2.H - 10);
+  } else {
+    A2.g.fillStyle = '#888'; A2.g.font = '13px Menlo';
+    A2.g.fillText('k = 0：还没有副本，', 40, A2.H / 2);
+    A2.g.fillText('把 k 拖大试试', 40, A2.H / 2 + 22);
+  }
+  A1.g.fillStyle = '#333'; A1.g.font = '12px Menlo';
+  A1.g.fillText(`${S.nm}　第 ${kEff} 层　${L.length} 块`, 10, A1.H - 10);
+  drawSimPlot(S, kEff);
+}
+function drawSimPlot(S, kEff) {                 // 右: 质量-尺度 log-log + 读数
+  bg(A3);
+  const g3 = A3.g, PL = 40, PB = 34, PT = 14, PR = 12;
+  const kk = Math.max(kEff, 4), xm = kk * Math.log10(1 / S.r), ym = Math.max(xm * 2.05, kk * Math.log10(S.N));
+  const X3 = v => PL + (A3.W - PL - PR) * v / xm, Y3 = v => A3.H - PB - (A3.H - PT - PB) * v / ym;
+  g3.strokeStyle = '#eee';
+  for (let i = 0; i <= 4; i++) {
+    g3.beginPath(); g3.moveTo(PL, Y3(ym * i / 4)); g3.lineTo(A3.W - PR, Y3(ym * i / 4)); g3.stroke();
+    g3.beginPath(); g3.moveTo(X3(xm * i / 4), PT); g3.lineTo(X3(xm * i / 4), A3.H - PB); g3.stroke();
+  }
+  g3.strokeStyle = '#bbb'; g3.setLineDash([4, 3]); g3.font = '11px Menlo'; g3.fillStyle = '#999';
+  for (const sl of [1, 2]) {
+    g3.beginPath(); g3.moveTo(X3(0), Y3(0));
+    g3.lineTo(X3(Math.min(xm, ym / sl)), Y3(Math.min(xm * sl, ym))); g3.stroke();
+    g3.fillText('斜率 ' + sl, X3(Math.min(xm, ym / sl)) - 46, Y3(Math.min(xm * sl, ym)) + (sl === 1 ? 14 : 12));
+  }
+  g3.setLineDash([]);
+  g3.strokeStyle = '#c0392b'; g3.lineWidth = 1.8; g3.beginPath();
+  for (let j = 0; j <= kk; j++) {
+    const x = j * Math.log10(1 / S.r), y = j * Math.log10(S.N);
+    j ? g3.lineTo(X3(x), Y3(y)) : g3.moveTo(X3(x), Y3(y));
+  }
+  g3.stroke(); g3.lineWidth = 1;
+  g3.fillStyle = '#e08a2e';
+  for (let j = 0; j <= kk; j++) {
+    g3.beginPath(); g3.arc(X3(j * Math.log10(1 / S.r)), Y3(j * Math.log10(S.N)), 3, 0, 7); g3.fill();
+  }
+  g3.strokeStyle = '#333'; g3.beginPath();
+  g3.moveTo(PL, A3.H - PB); g3.lineTo(A3.W - PR, A3.H - PB); g3.stroke();
+  g3.beginPath(); g3.moveTo(PL, PT); g3.lineTo(PL, A3.H - PB); g3.stroke();
+  g3.fillStyle = '#555'; g3.font = '11px Menlo';
+  g3.fillText('log(1/尺度)', A3.W / 2 - 34, A3.H - 8);
+  g3.save(); g3.translate(12, A3.H / 2 + 22); g3.rotate(-Math.PI / 2);
+  g3.fillText('log(块数)', 0, 0); g3.restore();
+  g3.fillStyle = '#c0392b'; g3.font = '12px Menlo';
+  g3.fillText('斜率 = d = ' + S.d.toFixed(4), PL + 8, PT + 14);
+
+  const L1 = Math.pow(S.N * S.r, kEff), A2d = Math.pow(S.N * S.r * S.r, kEff);
+  $('ast').innerHTML =
+    `<b>${S.nm}</b>：副本数 <b>N = ${S.N}</b>，比例 <b>r = ${S.r.toFixed(6)}</b>（1/r = ${(1 / S.r).toFixed(4)}）<br>`
+    + `<b>d = log N / log(1/r) = ${Math.log(S.N).toFixed(6)} / ${Math.log(1 / S.r).toFixed(6)} = `
+    + `<span class="y">${S.d.toFixed(6)}</span></b>　校验 N·r^d = ${(S.N * Math.pow(S.r, S.d)).toFixed(12)} = 1<br>`
+    + `用 <b>1 维</b>的尺子量它（块数×长度）：(N·r)^k = <span class="${S.N * S.r > 1.0001 ? 'r' : 'g'}">${L1.toExponential(3)}</span>`
+    + `　用 <b>2 维</b>的尺子（块数×面积）：(N·r²)^k = <span class="${S.N * S.r * S.r < 0.9999 ? 'r' : 'g'}">${A2d.toExponential(3)}</span>`
+    + `　用 <b>d 维</b>：(N·r^d)^k = <span class="g">${Math.pow(S.N * Math.pow(S.r, S.d), kEff).toFixed(9)}</span>`
+    + `　<span class="y">←只有 d 维量出有限非零值</span>`;
+}
+
+// ===================== ② 盒计数 =====================
+const B1 = cx('bc1'), B2 = cx('bc2'), B3 = cx('bc3');
+const MR = 1024, JMAX = 10;
+const off = document.createElement('canvas'); off.width = off.height = MR;
+const offg = off.getContext('2d');
+let BKEY = 'koch', PYR = null, CNT = [], STROKES = [], PENDING = false;
+let g1 = 0, g2 = 0, gHave = false;
+function gauss() {                              // Box–Muller
+  if (gHave) { gHave = false; return g2; }
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  v = Math.random();
+  const s = Math.sqrt(-2 * Math.log(u));
+  g1 = s * Math.cos(2 * Math.PI * v); g2 = s * Math.sin(2 * Math.PI * v);
+  gHave = true; return g1;
+}
+function fbmSeries(H) {                         // 中点位移（Hurst = H）⇒ 图像盒维数理论 2−H
+  const N = 1024, y = new Float64Array(N + 1);
+  y[0] = 0; y[N] = gauss() * 0.5;
+  let step = N, scale = 0.5;
+  while (step > 1) {
+    const h = step >> 1;
+    for (let i = h; i <= N; i += step) y[i] = (y[i - h] + y[i + h]) / 2 + gauss() * scale;
+    scale *= Math.pow(0.5, H); step = h;
+  }
+  return y;
+}
+function ifsDepth(key) {
+  const S = IFS[key];
+  let k = 0;
+  while (Math.pow(S.N, k + 1) <= 300000 && Math.pow(S.r, k + 1) * MR >= 1.2) k++;
+  return k;
+}
+function drawShape(key) {
+  offg.setTransform(1, 0, 0, 1, 0, 0);
+  offg.clearRect(0, 0, MR, MR);
+  offg.strokeStyle = '#000'; offg.fillStyle = '#000'; offg.lineWidth = 1; offg.lineJoin = 'round';
+  if (IFS[key]) {
+    const k = ifsDepth(key), L = pieces(key, k, 300000);
+    const [X, Y] = fitter(bbox(key, L), MR, MR, 26);
+    drawPieces(offg, key, L, X, Y, '#000', 1);
+    return { depth: k, cnt: L.length };
+  }
+  if (key === 'circle') {
+    offg.beginPath(); offg.arc(MR / 2, MR / 2, MR * 0.45, 0, 7); offg.stroke();
+    return {};
+  }
+  if (key === 'sqfill') { offg.fillRect(MR * 0.06, MR * 0.06, MR * 0.88, MR * 0.88); return {}; }
+  if (key === 'fbm') {
+    const H = +$('bh').value / 100, y = fbmSeries(H);
+    let lo = Infinity, hi = -Infinity;
+    for (const v of y) { if (v < lo) lo = v; if (v > hi) hi = v; }
+    offg.beginPath();
+    for (let i = 0; i < y.length; i++) {
+      const px = i / (y.length - 1) * (MR - 20) + 10;
+      const py = MR - 20 - (y[i] - lo) / Math.max(hi - lo, 1e-9) * (MR - 40);
+      i ? offg.lineTo(px, py) : offg.moveTo(px, py);
+    }
+    offg.stroke();
+    return { H };
+  }
+  if (key === 'bm2d') {
+    const n = 220000, xs = new Float64Array(n), ys = new Float64Array(n);
+    let x = 0, y = 0, x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 2 * Math.PI;
+      x += Math.cos(a); y += Math.sin(a);
+      xs[i] = x; ys[i] = y;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    const s = Math.min((MR - 24) / Math.max(x1 - x0, 1e-9), (MR - 24) / Math.max(y1 - y0, 1e-9));
+    offg.beginPath();
+    for (let i = 0; i < n; i++) {
+      const px = 12 + (xs[i] - x0) * s, py = 12 + (ys[i] - y0) * s;
+      i ? offg.lineTo(px, py) : offg.moveTo(px, py);
+    }
+    offg.stroke();
+    return { steps: n };
+  }
+  if (key === 'julia') {                        // 反向迭代 z ← ±√(z−c)
+    const cr = -0.123, ci = 0.745, n = 400000;
+    const img = offg.createImageData(MR, MR), D = img.data;
+    let zr = 0.5, zi = 0.3;
+    const SC = MR / 3.0;
+    for (let i = 0; i < n; i++) {
+      const ar = zr - cr, ai = zi - ci;
+      const m = Math.hypot(ar, ai);
+      let sr = Math.sqrt(Math.max((m + ar) / 2, 0)), si = Math.sqrt(Math.max((m - ar) / 2, 0));
+      if (ai < 0) si = -si;
+      if (Math.random() < 0.5) { sr = -sr; si = -si; }
+      zr = sr; zi = si;
+      if (i < 40) continue;
+      const px = Math.round(MR / 2 + zr * SC), py = Math.round(MR / 2 - zi * SC);
+      if (px >= 0 && px < MR && py >= 0 && py < MR) {
+        const o = (py * MR + px) * 4;
+        D[o] = D[o + 1] = D[o + 2] = 0; D[o + 3] = 255;
+      }
+    }
+    offg.putImageData(img, 0, 0);
+    return { pts: n };
+  }
+  if (key === 'draw') {
+    offg.lineWidth = 2.2;
+    for (const st of STROKES) {
+      offg.beginPath();
+      st.forEach(([x, y], i) => i ? offg.lineTo(x, y) : offg.moveTo(x, y));
+      if (st.length === 1) offg.lineTo(st[0][0] + 1, st[0][1]);
+      offg.stroke();
+    }
+    return { strokes: STROKES.length };
+  }
+  return {};
+}
+function buildPyramid() {
+  const dat = offg.getImageData(0, 0, MR, MR).data;
+  let cur = new Uint8Array(MR * MR);
+  for (let i = 0, n = MR * MR; i < n; i++) cur[i] = dat[i * 4 + 3] > 40 ? 1 : 0;
+  const pyr = [], cnts = [];
+  let sz = MR;
+  for (;;) {
+    let c = 0;
+    for (let i = 0; i < sz * sz; i++) c += cur[i];
+    pyr.push({ sz, occ: cur }); cnts.push(c);
+    if (sz === 1) break;
+    const ns = sz >> 1, nx = new Uint8Array(ns * ns);
+    for (let y = 0; y < ns; y++) for (let x = 0; x < ns; x++) {
+      const i = 2 * y * sz + 2 * x;
+      nx[y * ns + x] = (cur[i] | cur[i + 1] | cur[i + sz] | cur[i + sz + 1]) ? 1 : 0;
+    }
+    cur = nx; sz = ns;
+  }
+  PYR = pyr; CNT = cnts;
+}
+let BMETA = {};
+function rebuild() { BMETA = drawShape(BKEY); buildPyramid(); }
+function lsq(xs, ys) {                          // 最小二乘 + R²
+  const n = xs.length;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0, syy = 0;
+  for (let i = 0; i < n; i++) { sx += xs[i]; sy += ys[i]; sxx += xs[i] * xs[i]; sxy += xs[i] * ys[i]; syy += ys[i] * ys[i]; }
+  const den = n * sxx - sx * sx;
+  const a = (n * sxy - sx * sy) / den, b = (sy - a * sx) / n;
+  let ss = 0, st = 0;
+  for (let i = 0; i < n; i++) { const p = a * xs[i] + b; ss += (ys[i] - p) ** 2; st += (ys[i] - sy / n) ** 2; }
+  const se = Math.sqrt(ss / Math.max(n - 2, 1) * n / den);
+  return { a, b, r2: st > 0 ? 1 - ss / st : 1, se };
+}
+const BTH = {
+  koch: () => Math.log(4) / Math.log(3), sierp: () => Math.log(3) / Math.log(2),
+  carpet: () => Math.log(8) / Math.log(3), dust: () => Math.log(4) / Math.log(3),
+  circle: () => 1, sqfill: () => 2, fbm: () => 2 - +$('bh').value / 100,
+  bm2d: () => 2, julia: () => null, draw: () => 1
+};
+function drawBox() {
+  const j = +$('bj').value;
+  let w1 = +$('bw1').value, w2 = +$('bw2').value;
+  if (w1 > w2) { const t = w1; w1 = w2; w2 = t; }
+  if (w2 - w1 < 2) w2 = Math.min(JMAX - 1, w1 + 2);
+  $('bjv').textContent = `ε = ${(Math.pow(2, j) / MR).toFixed(5)}（${1 << j} px）`;
+  $('bwv').textContent = `j ∈ [${w1}, ${w2}]`;
+  $('bhv').textContent = 'H = ' + (+$('bh').value / 100).toFixed(2);
+  $('bhwrap').style.display = BKEY === 'fbm' ? 'inline' : 'none';
+  $('bclr').style.display = BKEY === 'draw' ? 'inline' : 'none';
+  if (!PYR) rebuild();
+  // 左: 图形 + 网格
+  const g = B1.g; bg(B1);
+  g.drawImage(off, 0, 0, MR, MR, 0, 0, B1.W, B1.H);
+  const cell = B1.W / (MR >> j);                // 一个格子在屏幕上的像素
+  const lv = PYR[j];
+  if (cell >= 3) {                              // 格子太小就不描了(65 万次 fillRect 没意义)
+    g.fillStyle = 'rgba(26,99,216,0.30)';
+    for (let y = 0; y < lv.sz; y++) for (let x = 0; x < lv.sz; x++)
+      if (lv.occ[y * lv.sz + x]) g.fillRect(x * cell, y * cell, cell, cell);
+    g.drawImage(off, 0, 0, MR, MR, 0, 0, B1.W, B1.H);
+  }
+  if (cell >= 5) {
+    g.strokeStyle = 'rgba(0,0,0,0.18)'; g.lineWidth = 1; g.beginPath();
+    for (let i = 0; i <= lv.sz; i++) {
+      g.moveTo(i * cell, 0); g.lineTo(i * cell, B1.H);
+      g.moveTo(0, i * cell); g.lineTo(B1.W, i * cell);
+    }
+    g.stroke();
+  }
+  g.fillStyle = 'rgba(255,255,255,0.86)'; g.fillRect(6, B1.H - 26, 300, 20);
+  g.fillStyle = '#1a63d8'; g.font = '13px Menlo';
+  g.fillText(`ε = ${1 << j}px　N(ε) = ${CNT[j]}`, 10, B1.H - 11);
+
+  // 右上: log-log
+  const th = BTH[BKEY]();
+  const xs = [], ys = [];
+  for (let i = 0; i <= JMAX; i++) { xs.push(JMAX - i); ys.push(Math.log2(Math.max(CNT[i], 1))); }
+  const fx = [], fy = [];
+  for (let i = w1; i <= w2; i++) { fx.push(JMAX - i); fy.push(ys[i]); }
+  const F = lsq(fx, fy);
+  const gg = B2.g; bg(B2);
+  const PL = 44, PB = 30, PT = 14, PR = 14;
+  const ymx = Math.max(...ys) * 1.08 + 0.5;
+  const X = v => PL + (B2.W - PL - PR) * v / JMAX, Y = v => B2.H - PB - (B2.H - PT - PB) * v / ymx;
+  gg.strokeStyle = '#eee'; gg.fillStyle = '#888'; gg.font = '10px Menlo';
+  for (let i = 0; i <= JMAX; i += 2) {
+    gg.beginPath(); gg.moveTo(X(i), PT); gg.lineTo(X(i), B2.H - PB); gg.stroke();
+    gg.fillText(String(i), X(i) - 4, B2.H - PB + 12);
+  }
+  for (let v = 0; v <= ymx; v += 4) {
+    gg.beginPath(); gg.moveTo(PL, Y(v)); gg.lineTo(B2.W - PR, Y(v)); gg.stroke();
+    gg.fillText(String(v), 6, Y(v) + 3);
+  }
+  gg.fillStyle = 'rgba(26,99,216,0.10)';
+  gg.fillRect(X(JMAX - w2), PT, X(JMAX - w1) - X(JMAX - w2), B2.H - PB - PT);
+  if (th) {                                     // 理论斜率参照（过窗口中点）
+    const mx = (JMAX - w1 + JMAX - w2) / 2, my = (ys[w1] + ys[w2]) / 2;
+    gg.strokeStyle = '#999'; gg.setLineDash([5, 4]); gg.beginPath();
+    gg.moveTo(X(0), Y(my + th * (0 - mx))); gg.lineTo(X(JMAX), Y(my + th * (JMAX - mx)));
+    gg.stroke(); gg.setLineDash([]);
+  }
+  gg.strokeStyle = '#c0392b'; gg.lineWidth = 2; gg.beginPath();
+  gg.moveTo(X(JMAX - w2), Y(F.a * (JMAX - w2) + F.b));
+  gg.lineTo(X(JMAX - w1), Y(F.a * (JMAX - w1) + F.b));
+  gg.stroke(); gg.lineWidth = 1;
+  gg.fillStyle = '#e08a2e';
+  for (let i = 0; i <= JMAX; i++) { gg.beginPath(); gg.arc(X(xs[i]), Y(ys[i]), 3, 0, 7); gg.fill(); }
+  gg.strokeStyle = '#333'; gg.beginPath();
+  gg.moveTo(PL, B2.H - PB); gg.lineTo(B2.W - PR, B2.H - PB); gg.stroke();
+  gg.beginPath(); gg.moveTo(PL, PT); gg.lineTo(PL, B2.H - PB); gg.stroke();
+  gg.fillStyle = '#555'; gg.font = '11px Menlo';
+  gg.fillText('log₂(1/ε)', B2.W - 80, B2.H - PB + 22);
+  gg.fillStyle = '#c0392b'; gg.font = '12px Menlo';
+  gg.fillText(`拟合斜率 = ${F.a.toFixed(4)}`, PL + 8, PT + 14);
+  if (th) { gg.fillStyle = '#666'; gg.fillText(`理论 ${th.toFixed(4)}`, PL + 8, PT + 29); }
+
+  // 右下: 局部斜率
+  const g3 = B3.g; bg(B3);
+  const sl = [];
+  for (let i = 0; i < JMAX; i++) sl.push(ys[i] - ys[i + 1]);
+  const smax = Math.max(2.2, ...sl) * 1.05;
+  const X4 = v => PL + (B3.W - PL - PR) * v / JMAX, Y4 = v => B3.H - PB - (B3.H - PT - PB) * v / smax;
+  g3.strokeStyle = '#eee'; g3.fillStyle = '#888'; g3.font = '10px Menlo';
+  for (let v = 0; v <= smax; v += 0.5) {
+    g3.beginPath(); g3.moveTo(PL, Y4(v)); g3.lineTo(B3.W - PR, Y4(v)); g3.stroke();
+    g3.fillText(v.toFixed(1), 8, Y4(v) + 3);
+  }
+  for (let i = 0; i <= JMAX; i += 2) {
+    g3.beginPath(); g3.moveTo(X4(i), PT); g3.lineTo(X4(i), B3.H - PB); g3.stroke();
+    g3.fillText(String(i), X4(i) - 4, B3.H - PB + 12);
+  }
+  g3.fillStyle = 'rgba(26,99,216,0.10)';
+  g3.fillRect(X4(JMAX - w2), PT, X4(JMAX - w1) - X4(JMAX - w2), B3.H - PB - PT);
+  if (th) {
+    g3.strokeStyle = '#999'; g3.setLineDash([5, 4]); g3.beginPath();
+    g3.moveTo(PL, Y4(th)); g3.lineTo(B3.W - PR, Y4(th)); g3.stroke(); g3.setLineDash([]);
+    g3.fillStyle = '#666'; g3.fillText('理论 d = ' + th.toFixed(4), B3.W - 130, Y4(th) - 5);
+  }
+  g3.strokeStyle = '#1a63d8'; g3.lineWidth = 1.8; g3.beginPath();
+  sl.forEach((v, i) => { const x = X4(JMAX - i - 0.5); i ? g3.lineTo(x, Y4(v)) : g3.moveTo(x, Y4(v)); });
+  g3.stroke(); g3.lineWidth = 1;
+  g3.fillStyle = '#1a63d8';
+  sl.forEach((v, i) => { g3.beginPath(); g3.arc(X4(JMAX - i - 0.5), Y4(v), 2.6, 0, 7); g3.fill(); });
+  g3.strokeStyle = '#333'; g3.beginPath();
+  g3.moveTo(PL, B3.H - PB); g3.lineTo(B3.W - PR, B3.H - PB); g3.stroke();
+  g3.fillStyle = '#555'; g3.font = '11px Menlo';
+  g3.fillText('log₂(1/ε)', B3.W - 80, B3.H - PB + 22);
+
+  const meta = Object.entries(BMETA).map(([k, v]) => `${k}=${v}`).join(' ');
+  if (!CNT[0]) {
+    $('bst').innerHTML = `<span class="y">图上还什么都没有 —— 在左边画布上拖几笔，格子数和维数会实时算出来。</span>`;
+    $('bnote').innerHTML = BNOTE[BKEY];
+    return;
+  }
+  $('bst').innerHTML =
+    `N(ε) 实测：` + CNT.slice(0, JMAX + 1).map((c, i) => `<span class="${i >= w1 && i <= w2 ? 'y' : ''}">2^${i}px:${c}</span>`).join(' ')
+    + `　<span class="hint">${meta}</span><br>`
+    + `窗口 j∈[${w1},${w2}] 最小二乘：<b>d_box = ${F.a.toFixed(4)} ± ${F.se.toFixed(4)}</b>`
+    + `　R² = ${F.r2.toFixed(6)}`
+    + (th === null ? `　理论 <span class="y">无闭式</span>`
+      : `　理论 <b class="y">${th.toFixed(4)}</b>　<span class="${Math.abs(F.a - th) < 0.06 ? 'g' : 'r'}">相对误差 ${(Math.abs(F.a - th) / th * 100).toFixed(2)}%</span>`)
+    + `<br>局部斜率：` + sl.map(v => v.toFixed(3)).join('  ');
+  $('bnote').innerHTML = BNOTE[BKEY];
+}
+const BNOTE = {
+  koch: `每迭代一次长度 ×4/3，所以<b>科赫曲线长度无穷</b>，却装在有限区域里 —— 用"长度"量它只会得到 ∞，
+    必须换 1.2619 维的尺子。拟合窗口默认 j∈[1,4]（局部斜率在那儿是平的 ≈1.29）：j=0 已经到构造深度极限
+    （第 6 层的小段只有 1.4 px，再细就是直线了），j≥5 时整条曲线只剩几十个格子，斜率开始乱跳。`,
+  sierp: `log3/log2 = 1.58496。它由 3 个半尺寸副本拼成，<b>面积为 0</b>（每次去掉 1/4，(3/4)^k→0）
+    但比任何曲线都"胖"。注意局部斜率在中段非常平 —— 严格自相似集的盒维数收敛得很干净。`,
+  carpet: `log8/log3 = 1.89279，很接近 2 但<b>面积仍是 0</b>（(8/9)^k→0）。
+    维数接近 2 的后果是它"几乎处处都占着格子"，所以细端很快饱和到 2：
+    这档最能说明<b>为什么要看平台而不是端点</b>。`,
+  dust: `康托尘 = C×C（两个方向各做一次康托），log4/log3 = 1.26186 —— 
+    和科赫曲线<b>维数相同</b>，一个是完全断开的尘埃、一个是连通曲线。<b>维数不认识连通性</b>，
+    拓扑维数才认识（尘埃 0，曲线 1）。`,
+  circle: `校准档之一：光滑曲线的盒维数 = <b>1</b>，因为 N(ε) ≈ 周长/ε。
+    这正是"盒计数维数对普通图形给出常识答案"的检验；同时也说明<b>光滑 ⟹ 平台在 1</b>，
+    所以 ② 里测到 1.26 这种数不是数值误差，而是真有更多细节。`,
+  sqfill: `校准档之二：实心区域 N(ε) ≈ 面积/ε²，斜率 <b>2</b>。
+    它顺便给出上界：平面里任何集合的盒维数 ≤ 2。`,
+  fbm: `<b>随机分形</b>：中点位移生成的分数布朗图像，理论盒维数 = <b>2 − H</b>
+    （H 越小越粗糙、维数越高；H=1/2 是标准布朗运动，维数 1.5）。拖 H 看拟合斜率跟着走 —— 
+    这是"<b>相似维数完全用不上、只能靠盒计数实测</b>"的典型场合，也是海岸线/股价/地形分析里的实际做法。
+    注意细端会掉向 1：因为序列只有 1024 段，比这更细就是直线了。`,
+  bm2d: `二维布朗运动的<b>轨迹</b>（不是图像）维数 = <b>2</b>（Taylor 1953），
+    虽然它的<b>面积为 0</b>（勒贝格测度 0）—— 又一个"维数 2 但测度 0"的例子，和地毯（1.89 且面积 0）形成对照。
+    有限步数的模拟在粗尺度上会偏低（轨迹还没填满），细尺度上是折线（斜率→1），平台在中段。`,
+  julia: `朱利亚集 J(c)，c = −0.123+0.745i（<b>Douady 兔子</b>），用反向迭代 z ← ±√(z−c) 打点。
+    它的维数<b>没有闭式</b>（Ruelle 有公式只在 |c| 很小时可展开），文献数值 ≈1.39，所以这一档只给实测斜率。
+    <b>这才是盒计数的主战场</b>：对象由动力系统定义，没有 N 和 r 可数。<br>
+    提醒：反向迭代打的点分布很不均匀（有测度偏置），点少的区域会漏格子，所以这里的实测值比真值偏低是正常的。`,
+  draw: `<b>自己画</b>：在左图上拖动。可求长（有限长度）的曲线不管画得多抖，<b>极限维数都是 1</b> —— 
+    但在<b>有限尺度上</b>抖得越厉害，中段斜率就越高（这正是"海岸线维数"的实际含义：
+    它是<b>某个尺度区间内</b>的标度指数，不是理想极限）。<br>
+    试试画一条长长的来回折线：局部斜率会在 1.2~1.6 之间，直到 ε 小于笔迹起伏才掉回 1。`
+};
+
+// ===================== ③ 豪斯多夫测度 =====================
+const H1 = cx('hc1'), H2 = cx('hc2'), H3 = cx('hc3'), H4 = cx('hc4');
+let HKEY = 'cantor', SAMP = null;
+function cantorVal(x) {                         // 康托函数 = 康托测度的分布函数 μ([0,x])
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  let v = 0, p = 0.5;
+  for (let i = 0; i < 60; i++) {
+    x *= 3;
+    const dg = Math.floor(x);
+    x -= dg;
+    if (dg === 1) { v += p; break; }
+    if (dg === 2) v += p;
+    p /= 2;
+    if (p === 0) break;
+  }
+  return v;
+}
+function resample(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const u = 0.3 + Math.random() * 4.7, L = Math.pow(10, -u);
+    const a = Math.random() * (1 - L), b = a + L;
+    out.push([L, cantorVal(b) - cantorVal(a)]);
+  }
+  SAMP = out;
+}
+function drawHau() {
+  const S = IFS[HKEY], d = S.d, s = +$('hs').value / 1000, n = +$('hn').value;
+  $('hsv').textContent = `s = ${s.toFixed(3)}　（d = ${d.toFixed(4)}）`;
+  $('hnv').textContent = n + ' 个';
+  const rho = S.N * Math.pow(S.r, s);
+  // --- hc1: Σ|U|^s 随 k ---
+  const g = H1.g; bg(H1);
+  const PL = 52, PB = 32, PT = 16, PR = 14, KM = 30;
+  const ylim = Math.max(4, Math.min(14, Math.abs(KM * Math.log10(rho)) * 1.15));
+  const X = k => PL + (H1.W - PL - PR) * k / KM, Y = v => PT + (H1.H - PT - PB) * (1 - (v + ylim) / (2 * ylim));
+  g.strokeStyle = '#eee'; g.fillStyle = '#888'; g.font = '10px Menlo';
+  for (let v = -ylim; v <= ylim + 1e-9; v += ylim / 3) {
+    g.beginPath(); g.moveTo(PL, Y(v)); g.lineTo(H1.W - PR, Y(v)); g.stroke();
+    g.fillText('1e' + v.toFixed(0), 6, Y(v) + 3);
+  }
+  for (let k = 0; k <= KM; k += 5) {
+    g.beginPath(); g.moveTo(X(k), PT); g.lineTo(X(k), H1.H - PB); g.stroke();
+    g.fillText(String(k), X(k) - 4, H1.H - PB + 12);
+  }
+  g.strokeStyle = '#333'; g.lineWidth = 1.4; g.beginPath();
+  g.moveTo(PL, Y(0)); g.lineTo(H1.W - PR, Y(0)); g.stroke(); g.lineWidth = 1;
+  g.fillStyle = '#333'; g.fillText('Σ = 1', H1.W - PR - 44, Y(0) - 5);
+  const col = rho > 1.0001 ? '#c0392b' : (rho < 0.9999 ? '#27713d' : '#1a63d8');
+  g.strokeStyle = col; g.lineWidth = 2; g.beginPath();
+  for (let k = 0; k <= KM; k++) {
+    const y = Math.max(-ylim, Math.min(ylim, k * Math.log10(rho)));
+    k ? g.lineTo(X(k), Y(y)) : g.moveTo(X(k), Y(y));
+  }
+  g.stroke(); g.lineWidth = 1;
+  g.fillStyle = col;
+  for (let k = 0; k <= KM; k += 2) {
+    const y = k * Math.log10(rho);
+    if (Math.abs(y) > ylim) continue;
+    g.beginPath(); g.arc(X(k), Y(y), 2.6, 0, 7); g.fill();
+  }
+  g.font = '12px Menlo';
+  g.fillText(`公比 N·r^s = ${rho.toFixed(6)}`, PL + 8, PT + 14);
+  g.fillText(rho > 1.0001 ? '→ ∞（s < d）' : (rho < 0.9999 ? '→ 0（s > d）' : '≡ 1（s = d，临界!）'), PL + 8, PT + 30);
+  g.fillStyle = '#555'; g.font = '11px Menlo';
+  g.fillText('覆盖层数 k', H1.W / 2 - 28, H1.H - 8);
+
+  // --- hc2: 各 k 的曲线族 → 阶跃 ---
+  const g2 = H2.g; bg(H2);
+  const SM = 2.2, yl2 = 10;
+  const X2 = v => PL + (H2.W - PL - PR) * v / SM, Y2 = v => PT + (H2.H - PT - PB) * (1 - (v + yl2) / (2 * yl2));
+  g2.strokeStyle = '#eee'; g2.fillStyle = '#888'; g2.font = '10px Menlo';
+  for (let v = -yl2; v <= yl2 + 1e-9; v += yl2 / 2) {
+    g2.beginPath(); g2.moveTo(PL, Y2(v)); g2.lineTo(H2.W - PR, Y2(v)); g2.stroke();
+    g2.fillText('1e' + v.toFixed(0), 6, Y2(v) + 3);
+  }
+  for (let v = 0; v <= SM; v += 0.5) {
+    g2.beginPath(); g2.moveTo(X2(v), PT); g2.lineTo(X2(v), H2.H - PB); g2.stroke();
+    g2.fillText(v.toFixed(1), X2(v) - 8, H2.H - PB + 12);
+  }
+  g2.strokeStyle = '#333'; g2.beginPath(); g2.moveTo(PL, Y2(0)); g2.lineTo(H2.W - PR, Y2(0)); g2.stroke();
+  const KS = [5, 10, 20, 40, 120];
+  KS.forEach((kk, i) => {
+    const a = 0.25 + 0.75 * i / (KS.length - 1);
+    g2.strokeStyle = `rgba(26,99,216,${a.toFixed(2)})`; g2.lineWidth = i === KS.length - 1 ? 2 : 1.2;
+    g2.beginPath();
+    for (let px = 0; px <= H2.W - PL - PR; px++) {
+      const sv = px / (H2.W - PL - PR) * SM;
+      const y = Math.max(-yl2, Math.min(yl2, kk * Math.log10(S.N * Math.pow(S.r, sv))));
+      px ? g2.lineTo(PL + px, Y2(y)) : g2.moveTo(PL + px, Y2(y));
+    }
+    g2.stroke();
+    g2.fillStyle = `rgba(26,99,216,${a.toFixed(2)})`; g2.font = '10px Menlo';
+    const yk = Math.max(-yl2, Math.min(yl2, kk * Math.log10(S.N * Math.pow(S.r, SM * 0.97))));
+    g2.fillText('k=' + kk, X2(SM * 0.97) - 30, Y2(yk) - 4);
+  });
+  g2.lineWidth = 1;
+  g2.strokeStyle = '#27713d'; g2.setLineDash([5, 3]);
+  g2.beginPath(); g2.moveTo(X2(d), PT); g2.lineTo(X2(d), H2.H - PB); g2.stroke(); g2.setLineDash([]);
+  g2.fillStyle = '#27713d'; g2.font = '12px Menlo';
+  g2.fillText('d = ' + d.toFixed(4), X2(d) + 4, PT + 13);
+  g2.strokeStyle = '#c0392b';
+  g2.beginPath(); g2.moveTo(X2(s), PT); g2.lineTo(X2(s), H2.H - PB); g2.stroke();
+  g2.fillStyle = '#c0392b'; g2.fillText('s', X2(s) - 3, H2.H - PB + 24);
+  g2.fillStyle = '#555'; g2.font = '11px Menlo';
+  g2.fillText('试探指数 s', H2.W / 2 - 26, H2.H - 8);
+  g2.fillText('↑ H^s = ∞', PL + 6, PT + 12);
+  g2.fillText('↓ H^s = 0', PL + 6, H2.H - PB - 6);
+
+  $('hst').innerHTML =
+    `<b>${S.nm}</b>　N = ${S.N}，r = ${S.r.toFixed(6)}，<b>d = log N/log(1/r) = ${d.toFixed(6)}</b><br>`
+    + `当前 s = ${s.toFixed(3)}：公比 N·r^s = <b>${rho.toFixed(8)}</b>　`
+    + `自然覆盖给出 Σ|U|^s = (N·r^s)^k = `
+    + `<span class="${rho > 1.0001 ? 'r' : (rho < 0.9999 ? 'g' : 'y')}">`
+    + (rho > 1.0001 ? `${Math.pow(rho, 30).toExponential(3)} (k=30) → +∞` : (rho < 0.9999 ? `${Math.pow(rho, 30).toExponential(3)} (k=30) → 0` : '1（恒定）'))
+    + `</span>　⟹ ` + (Math.abs(s - d) < 5e-4 ? `<b class="y">s = d：临界指数，H^d 有限非零</b>`
+      : (s < d ? `s &lt; d，用 s 维量出 ∞ ⟹ <b>dim_H ≥ s</b>` : `s &gt; d，用 s 维量出 0 ⟹ <b>dim_H ≤ s</b>`))
+    + `<br><span class="hint">注意：自然覆盖只给上界 H^s ≤ (N r^s)^k；s&lt;d 时"这个覆盖发散"并不直接等于"所有覆盖都发散"，下界要靠下面的质量分布原理。</span>`;
+
+  // --- hc3: 质量分布原理（固定在康托集上） ---
+  if (!SAMP || SAMP.length !== n) resample(n);
+  const dC = Math.log(2) / Math.log(3);
+  const g3 = H3.g; bg(H3);
+  const xlo = -5.2, xhi = 0, ylo = -5.2, yhi = 0.3;
+  const X3 = v => PL + (H3.W - PL - PR) * (v - xlo) / (xhi - xlo);
+  const Y3 = v => H3.H - PB - (H3.H - PT - PB) * (v - ylo) / (yhi - ylo);
+  g3.strokeStyle = '#eee'; g3.fillStyle = '#888'; g3.font = '10px Menlo';
+  for (let v = -5; v <= 0; v++) {
+    g3.beginPath(); g3.moveTo(X3(v), PT); g3.lineTo(X3(v), H3.H - PB); g3.stroke();
+    g3.fillText('1e' + v, X3(v) - 12, H3.H - PB + 12);
+    g3.beginPath(); g3.moveTo(PL, Y3(v)); g3.lineTo(H3.W - PR, Y3(v)); g3.stroke();
+    g3.fillText('1e' + v, 6, Y3(v) + 3);
+  }
+  let zero = 0, maxR = 0, maxRs = 0;
+  g3.fillStyle = 'rgba(26,99,216,0.45)';
+  for (const [L, mu] of SAMP) {
+    if (mu <= 0) { zero++; continue; }
+    const r1 = mu / Math.pow(L, dC), r2 = mu / Math.pow(L, s);
+    if (r1 > maxR) maxR = r1;
+    if (r2 > maxRs) maxRs = r2;
+    const px = X3(Math.log10(L)), py = Y3(Math.log10(mu));
+    if (py > PT) g3.fillRect(px, py, 1.8, 1.8);
+  }
+  const line = (sl, ic, color, dash, lbl) => {
+    g3.strokeStyle = color; g3.setLineDash(dash); g3.lineWidth = 1.6;
+    g3.beginPath(); g3.moveTo(X3(xlo), Y3(sl * xlo + ic)); g3.lineTo(X3(xhi), Y3(sl * xhi + ic));
+    g3.stroke(); g3.setLineDash([]); g3.lineWidth = 1;
+    g3.fillStyle = color; g3.font = '11px Menlo';
+    g3.fillText(lbl, X3(xlo) + 6, Y3(sl * xlo + ic) - 5);
+  };
+  line(dC, 0, '#c0392b', [], '|U|^d');
+  line(dC, Math.log10(4), '#e08a2e', [5, 4], '4|U|^d（理论上界）');
+  if (Math.abs(s - dC) > 0.02) line(s, 0, '#1a63d8', [3, 3], `|U|^s (s=${s.toFixed(2)})`);
+  g3.strokeStyle = '#333'; g3.beginPath();
+  g3.moveTo(PL, H3.H - PB); g3.lineTo(H3.W - PR, H3.H - PB); g3.stroke();
+  g3.fillStyle = '#555'; g3.font = '11px Menlo';
+  g3.fillText('|U|', H3.W - 40, H3.H - PB + 22);
+  g3.save(); g3.translate(14, H3.H / 2 + 16); g3.rotate(-Math.PI / 2); g3.fillText('μ(U)', 0, 0); g3.restore();
+
+  // --- hc4: max μ(U)/|U|^s 随 s（粗/细两族） ---
+  const g4 = H4.g; bg(H4);
+  const coarse = SAMP.filter(p => p[1] > 0 && p[0] > 1e-2), fine = SAMP.filter(p => p[1] > 0 && p[0] < 1e-4);
+  const SS = [];
+  for (let i = 0; i <= 60; i++) SS.push(0.3 + i / 60 * 0.9);
+  const mr = fam => SS.map(sv => {
+    let m = 0;
+    for (const [L, mu] of fam) { const q = mu / Math.pow(L, sv); if (q > m) m = q; }
+    return m > 0 ? Math.log10(m) : 0;
+  });
+  const cc = mr(coarse), ff = mr(fine);
+  const y4hi = Math.max(1, ...ff, ...cc) * 1.1, y4lo = Math.min(-1, ...cc, ...ff);
+  const X5 = v => PL + (H4.W - PL - PR) * (v - 0.3) / 0.9;
+  const Y5 = v => H4.H - PB - (H4.H - PT - PB) * (v - y4lo) / (y4hi - y4lo);
+  g4.strokeStyle = '#eee'; g4.fillStyle = '#888'; g4.font = '10px Menlo';
+  for (let v = Math.ceil(y4lo); v <= y4hi; v++) {
+    g4.beginPath(); g4.moveTo(PL, Y5(v)); g4.lineTo(H4.W - PR, Y5(v)); g4.stroke();
+    g4.fillText('1e' + v, 6, Y5(v) + 3);
+  }
+  for (let v = 0.4; v <= 1.2; v += 0.2) {
+    g4.beginPath(); g4.moveTo(X5(v), PT); g4.lineTo(X5(v), H4.H - PB); g4.stroke();
+    g4.fillText(v.toFixed(1), X5(v) - 8, H4.H - PB + 12);
+  }
+  const curve = (arr, color, lw) => {
+    g4.strokeStyle = color; g4.lineWidth = lw; g4.beginPath();
+    arr.forEach((v, i) => { const x = X5(SS[i]); i ? g4.lineTo(x, Y5(v)) : g4.moveTo(x, Y5(v)); });
+    g4.stroke(); g4.lineWidth = 1;
+  };
+  curve(cc, '#888', 1.6); curve(ff, '#c0392b', 2);
+  g4.strokeStyle = '#27713d'; g4.setLineDash([5, 3]);
+  g4.beginPath(); g4.moveTo(X5(dC), PT); g4.lineTo(X5(dC), H4.H - PB); g4.stroke(); g4.setLineDash([]);
+  g4.fillStyle = '#27713d'; g4.font = '12px Menlo';
+  g4.fillText('d = 0.6309', X5(dC) + 4, PT + 13);
+  g4.fillStyle = '#c0392b'; g4.fillText('细 |U|<1e−4', PL + 8, PT + 14);
+  g4.fillStyle = '#888'; g4.fillText('粗 |U|>1e−2', PL + 8, PT + 30);
+  g4.strokeStyle = '#333'; g4.beginPath();
+  g4.moveTo(PL, H4.H - PB); g4.lineTo(H4.W - PR, H4.H - PB); g4.stroke();
+  g4.fillStyle = '#555'; g4.font = '11px Menlo';
+  g4.fillText('s', H4.W / 2, H4.H - 8);
+
+  $('hst2').innerHTML =
+    `康托测度实测（${SAMP.length} 个随机区间，其中 ${zero} 个完全落在挖空处 ⟹ μ=0，不等式自动成立）<br>`
+    + `<b>抽样 max μ(U)/|U|^d = ${maxR.toFixed(4)}</b>（d = ${dC.toFixed(6)}）　`
+    + `<span class="${maxR <= 4.0001 ? 'g' : 'r'}">≤ 4（理论保证的 c）${maxR <= 4.0001 ? ' ✓' : ' ✗'}</span>`
+    + `　<span class="hint">随机抽样只给下界；真正的 sup 恰是 1，由与构造对齐的区间达到</span><br>`
+    + `⟹ 用理论常数 c=4 得 <b>H^d(C) ≥ 1/4</b>，用 sup=1 得 <b>H^d(C) ≥ 1</b>；`
+    + `上界（自然覆盖）<b>H^d(C) ≤ 1</b>　⟹ <b class="y">0 &lt; H^d(C) &lt; ∞，故 dim_H C = d = ${dC.toFixed(6)}</b>`
+    + `，且 H^d(C) = 1<br>`
+    + `当前 s = ${s.toFixed(3)} 时 max μ(U)/|U|^s = <span class="${s > dC + 0.01 ? 'r' : 'y'}">${maxRs.toExponential(3)}</span>`
+    + `　<span class="hint">${s > dC + 0.01 ? '——把抽样区间取得更细，这个上界会一路涨到 ∞：s>d 时不存在常数 c' : '——有限，不等式可用'}</span>`;
+}
+
+// ===================== 调度 =====================
+let TAB = 'sim';
+const PANES = ['sim', 'box', 'hau'];
+const DRAW = { sim: drawSim, box: drawBox, hau: drawHau };
+function draw() { DRAW[TAB](); }
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  TAB = b.dataset.t;
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  PANES.forEach(p => $('pane-' + p).style.display = p === TAB ? 'block' : 'none');
+  draw();
+}));
+document.querySelectorAll('button[data-s]').forEach(b => b.addEventListener('click', () => {
+  SKEY = b.dataset.s;
+  document.querySelectorAll('button[data-s]').forEach(x => x.classList.toggle('on', x === b));
+  draw();
+}));
+document.querySelectorAll('button[data-f]').forEach(b => b.addEventListener('click', () => {
+  BKEY = b.dataset.f;
+  document.querySelectorAll('button[data-f]').forEach(x => x.classList.toggle('on', x === b));
+  rebuild(); draw();
+}));
+document.querySelectorAll('button[data-q]').forEach(b => b.addEventListener('click', () => {
+  HKEY = b.dataset.q;
+  document.querySelectorAll('button[data-q]').forEach(x => x.classList.toggle('on', x === b));
+  draw();
+}));
+for (const id of ['sk', 'si', 'bj', 'bw1', 'bw2', 'hs'])
+  $(id).addEventListener('input', () => requestAnimationFrame(draw));
+$('bh').addEventListener('input', () => requestAnimationFrame(() => {
+  if (BKEY === 'fbm') rebuild();                // H 只影响分数布朗那一档, 别白重算
+  draw();
+}));
+$('hn').addEventListener('input', () => requestAnimationFrame(() => { SAMP = null; draw(); }));
+$('hre').addEventListener('click', () => { SAMP = null; draw(); });
+$('hsnap').addEventListener('click', () => { $('hs').value = Math.round(IFS[HKEY].d * 1000); draw(); });
+$('bclr').addEventListener('click', () => { STROKES = []; rebuild(); draw(); });
+// 手绘
+let pen = null;
+B1.c.addEventListener('pointerdown', e => {
+  if (BKEY !== 'draw') return;
+  try { B1.c.setPointerCapture(e.pointerId); } catch (_) { }   // 合成事件/某些浏览器会抛
+  pen = [[e.offsetX * MR / B1.W, e.offsetY * MR / B1.H]];
+  STROKES.push(pen);
+});
+B1.c.addEventListener('pointermove', e => {
+  if (!pen) return;
+  pen.push([e.offsetX * MR / B1.W, e.offsetY * MR / B1.H]);
+  if (!PENDING) {
+    PENDING = true;
+    requestAnimationFrame(() => { PENDING = false; rebuild(); draw(); });
+  }
+});
+B1.c.addEventListener('pointerup', () => { if (pen) { pen = null; rebuild(); draw(); } });
+draw();
+</script>
+<script>
+(function () {                                  // 控制区收起/展开(手机: 高>宽 默认收起)
+  const b = document.createElement('button');
+  b.style.cssText = 'position:fixed;top:8px;right:8px;z-index:999;opacity:0.92;';
+  document.body.appendChild(b);
+  const sync = () => { b.textContent = document.body.classList.contains('ctl-collapsed') ? '⚙ 展开' : '⚙ 收起'; };
+  b.addEventListener('click', () => { document.body.classList.toggle('ctl-collapsed'); sync(); });
+  if (window.innerHeight > window.innerWidth) document.body.classList.add('ctl-collapsed');
+  sync();
+})();
+</script>
+</body>
+</html>
