@@ -29,6 +29,8 @@ html,body{margin:0;height:100%;background:var(--page);color:var(--ink);
 #toolbar button.on{background:var(--s1);color:#fff;border-color:var(--s1)}
 #toolbar button.tab{font-weight:600;padding:3px 11px}
 #toolbar button.tab.sm{font-weight:400;font-size:11.5px;padding:3px 8px;color:var(--ink2)}
+#toolbar button.tab.det{border-style:dashed;color:var(--ink2)}
+#toolbar button.tab.det.on{background:#b07a1f;color:#fff;border-color:#b07a1f;border-style:solid}
 #toolbar button.subv{font-size:12px;padding:3px 9px}
 #toolbar button.subv.on{background:var(--s3);color:#fff;border-color:var(--s3)}
 #toolbar label{color:var(--ink2)}
@@ -105,15 +107,18 @@ code{background:#f0efec;padding:0 3px;border-radius:3px;font-size:12px}
 <div id="app">
   <div id="toolbar">
    <div class="trow">
-    <span class="tlab">不同纠错码：</span>
+    <span class="tlab">能纠错的：</span>
     <button class="tab on" data-tab="a0">重复码</button>
-    <button class="tab" data-tab="a1">奇偶校验</button>
     <button class="tab" data-tab="a2">汉明码</button>
-    <button class="tab" data-tab="a3">CRC 检错不纠</button>
     <button class="tab" data-tab="a4">RS 码</button>
     <button class="tab" data-tab="a5">卷积码</button>
     <button class="tab" data-tab="a6">LDPC</button>
     <span class="sep"></span>
+    <span class="tlab">只检错、不纠错：</span>
+    <button class="tab det" data-tab="a1">奇偶校验</button>
+    <button class="tab det" data-tab="a3">CRC</button>
+    <span class="sep"></span>
+    <span class="tlab">对比：</span>
     <button class="tab sm" data-tab="cmp">七码对比</button>
     <button class="tab sm" data-tab="ber">BER 擂台</button>
     <span id="stats"></span>
@@ -1344,8 +1349,8 @@ function tanAdvance(){
    ================================================================== */
 let tab='a0',sub='pipe',lastSide=0;
 const SUBS={
-  def:[['pipe','① 比特流水线'],['pay','② 纠一份看得懂的数据']],
-  a6:[['pipe','① 比特流水线'],['pay','② 纠一份看得懂的数据'],
+  def:[['pipe','① 比特流水线'],['pay','② 传一份看得懂的数据']],
+  a6:[['pipe','① 比特流水线'],['pay','② 传一份看得懂的数据'],
       ['img','③ 逐轮修复一张图'],['tan','④ 方程之间怎么商量']]};
 const PANE={pipe:'pAlg',pay:'pPay',img:'pImg',tan:'pTan',cmp:'pLab',ber:'pBer'};
 const CTLOF={pipe:'alg',pay:'pay',img:'img',tan:'tan',cmp:'cmp',ber:'ber'};
@@ -1454,42 +1459,98 @@ function rsSynd(r){const S=[];
   return S;}
 function rsDecode(r){
   const out=r.slice(),S=rsSynd(r);
-  if(S.every(v=>v===0))return {cw:out,pos:[],mag:[],fail:false};
+  if(S.every(v=>v===0))return {cw:out,pos:[],mag:[],fail:false,S,lam:null};
   const [S1,S2,S3,S4]=S,D=gm(S2,S2)^gm(S1,S3);
-  let pos=[],mag=[];
+  let pos=[],mag=[],lam=null;
   if(D){
-    const L1=gdiv(gm(S3,S2)^gm(S1,S4),D),L2=gdiv(gm(S2,S4)^gm(S3,S3),D);
+    const L1=gdiv(gm(S3,S2)^gm(S1,S4),D),L2=gdiv(gm(S2,S4)^gm(S3,S3),D);lam=[L1,L2];
     for(let i=0;i<RS_N&&pos.length<3;i++){
       const xi=GX[(15-i)%15];
       if((1^gm(L1,xi)^gm(L2,gm(xi,xi)))===0)pos.push(i);
     }
-    if(pos.length!==2)return {cw:out,pos:[],mag:[],fail:true};
+    if(pos.length!==2)return {cw:out,pos:[],mag:[],fail:true,S,lam};
     const X1=GX[pos[0]],X2=GX[pos[1]],DD=gm(X1,gm(X2,X2))^gm(X2,gm(X1,X1));
-    if(!DD)return {cw:out,pos:[],mag:[],fail:true};
+    if(!DD)return {cw:out,pos:[],mag:[],fail:true,S,lam};
     mag=[gdiv(gm(S1,gm(X2,X2))^gm(X2,S2),DD),gdiv(gm(X1,S2)^gm(S1,gm(X1,X1)),DD)];
   }else{
-    if(!S1)return {cw:out,pos:[],mag:[],fail:true};
+    if(!S1)return {cw:out,pos:[],mag:[],fail:true,S,lam};
     const X1=gdiv(S2,S1);
-    if(gm(S2,X1)!==S3||gm(S3,X1)!==S4)return {cw:out,pos:[],mag:[],fail:true};
-    pos=[GL[X1]];mag=[gdiv(gm(S1,S1),S2)];
+    if(gm(S2,X1)!==S3||gm(S3,X1)!==S4)return {cw:out,pos:[],mag:[],fail:true,S,lam};
+    pos=[GL[X1]];mag=[gdiv(gm(S1,S1),S2)];lam=[X1,0];
   }
   const kpos=[];
   for(let q=0;q<pos.length;q++){
     const k=RS_N-1-pos[q];
-    if(k<0||k>=RS_N)return {cw:out,pos:[],mag:[],fail:true};
+    if(k<0||k>=RS_N)return {cw:out,pos:[],mag:[],fail:true,S,lam};
     out[k]^=mag[q];kpos.push(k);
   }
-  if(!rsSynd(out).every(v=>v===0))return {cw:out,pos:[],mag:[],fail:true};
-  return {cw:out,pos:kpos,mag,fail:false};
+  if(!rsSynd(out).every(v=>v===0))return {cw:out,pos:[],mag:[],fail:true,S,lam};
+  return {cw:out,pos:kpos,mag,fail:false,S,lam};
 }
 const b2s=(b,ns)=>{const s=[];for(let i=0;i<ns;i++)
   s.push((b[4*i]<<3)|(b[4*i+1]<<2)|(b[4*i+2]<<1)|b[4*i+3]);return s;};
 const s2b=(s,b)=>s.forEach((v,i)=>{b[4*i]=(v>>3)&1;b[4*i+1]=(v>>2)&1;b[4*i+2]=(v>>1)&1;b[4*i+3]=v&1;});
 const HEX='0123456789ABCDEF';
+const SUP=['⁰','¹','²','³','⁴','⁵','⁶','⁷','⁸','⁹'];
+const supN=n=>String(n).split('').map(c=>SUP[+c]).join('');
+const SUB=['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'];
+const subN=n=>String(n).split('').map(c=>SUB[+c]).join('');
+function polyStrCap(cf,maxTerms){            // 项太多就中间省略
+  const parts=polyStr(cf).split(' + ');
+  if(parts.length<=maxTerms)return parts.join(' + ');
+  return parts.slice(0,maxTerms-2).join(' + ')+' + … + '+parts.slice(-2).join(' + ');
+}
+function polyStr(cf){                        // cf[0] 是最高次项的系数
+  const d0=cf.length-1,t=[];
+  cf.forEach((c,i)=>{
+    if(!c)return;
+    const d=d0-i;
+    t.push((c===1&&d>0?'':HEX[c])+(d>1?'x'+supN(d):d===1?'x':''));
+  });
+  return t.length?t.join(' + '):'0';
+}
 // ---------- CRC-8 ----------
 const crcTab=(function(){const t=new Uint8Array(256);
   for(let i=0;i<256;i++){let c=i;for(let j=0;j<8;j++)c=(c&0x80)?((c<<1)^0x07)&0xff:(c<<1)&0xff;t[i]=c;}
   return t;})();
+const CRC_G=[1,0,0,0,0,0,1,1,1];             // G(x)=x⁸+x²+x+1
+function crcLongDiv(data,nd){                 // 课本式长除法：每次消掉当前最高的那个 1
+  const L=nd+8,w=new Uint8Array(L);
+  for(let i=0;i<nd;i++)w[i]=data[i];
+  const steps=[];
+  for(let i=0;i<nd;i++)if(w[i]){
+    steps.push({at:i,before:w.slice()});
+    for(let j=0;j<9;j++)w[i+j]^=CRC_G[j];
+  }
+  let rem=0;for(let i=0;i<8;i++)rem=(rem<<1)|w[nd+i];
+  return {steps,rem,tail:w};
+}
+function crcRem(arr,n){                      // 移位寄存器版，和查表法等价
+  let r=0;for(let i=0;i<n;i++){r=(r<<1)|arr[i];if(r&0x100)r^=0x107;}
+  return r&0xff;
+}
+function crcAudit(d){                         // 就拿眼前这 24 位，穷举各种错误图样看漏不漏
+  const w=new Uint8Array(32);
+  for(let i=0;i<24;i++)w[i]=d[i];
+  const c0=crcRem(w,32)?0:0;                  // 先算出正确的 CRC 填进去
+  const tmp=new Uint8Array(32);tmp.set(d.subarray(0,24));
+  const rem=crcRem(tmp,32);
+  for(let i=0;i<8;i++)w[24+i]=(rem>>(7-i))&1;
+  const t=new Uint8Array(32);
+  const clean=()=>t.set(w);
+  let m1=0,m2=0,t2=0,mB=0,tB=0;
+  for(let i=0;i<32;i++){clean();t[i]^=1;if(crcRem(t,32)===0)m1++;}
+  for(let i=0;i<32;i++)for(let j=i+1;j<32;j++){clean();t[i]^=1;t[j]^=1;t2++;if(crcRem(t,32)===0)m2++;}
+  for(let st0=0;st0<32;st0++)for(let len=1;len<=8;len++){
+    if(st0+len>32)continue;
+    for(let pat=1;pat<(1<<len);pat+=2){       // 突发：第一位必错
+      clean();
+      for(let q=0;q<len;q++)if((pat>>q)&1)t[st0+q]^=1;
+      tB++;if(crcRem(t,32)===0)mB++;
+    }
+  }
+  return {m1,m2,t2,mB,tB};
+}
 function crc8(bits,nbytes,off){let c=0;off=off||0;
   for(let B=0;B<nbytes;B++){let v=0;for(let i=0;i<8;i++)v=(v<<1)|bits[off+B*8+i];c=crcTab[c^v];}
   return c;}
@@ -1668,7 +1729,7 @@ const ALGS=[
   bad:'错 2 位时它会<b>自信地纠到另一个码字</b>——数据被改坏而且不报警；对突发错毫无办法。',
   use:'ECC 内存（扩展成 SECDED：纠 1 检 2）、CPU 缓存、寄存器文件。'}},
 
-{id:'crc',name:'CRC-8（只检不纠）',k:24,n:32,ch:440,
+{id:'crc',name:'CRC-8（只检不纠）',k:24,n:32,ch:880,
  row:{cell:18,per:32,group:8},rowIn:{cell:18,per:24,group:8},amt:2,amax:10,
  intro:`<h2>CRC：不纠错，但几乎骗不过它</h2>
   <p>互联网的选择和前面几个都不一样：<b>干脆不纠错</b>，只求"绝不把坏数据当好数据"。发现坏了就让对方重发。</p>
@@ -1682,6 +1743,63 @@ const ALGS=[
    const v=crc8(r,3,0);let g=0;for(let i=0;i<8;i++)g=(g<<1)|r[24+i];
    return {detected:v!==g,fail:v!==g,calc:v,got:g};},
  detail(ctx,x,y,w,st){
+   // —— 先把编码时的长除法摆出来 ——
+   secLabel(ctx,x,y,'它是怎么算出来的：把数据当成一个多项式，除以生成多项式 G(x)，余数就是 CRC');
+   ctx.font='12.5px system-ui';ctx.fillStyle='#52514e';ctx.textAlign='left';ctx.textBaseline='top';
+   ctx.fillText('G(x) = x⁸ + x² + x + 1  →  1 0000 0111（9 位）。这是 CRC-8 标准写死的常数（0x07），'+
+     '收发两端一样，换数据它不变。',x,y+22);
+   const fitC=(t,ty,col)=>{ctx.fillStyle=col||'#52514e';ctx.font='12.5px system-ui';
+     if(ctx.measureText(t).width>w-8)ctx.font='11px system-ui';
+     ctx.fillText(t,x,ty);};
+   fitC('被除数（数据）M(x) = '+polyStrCap([...st.data].slice(0,24),16)+
+     '　← 24 位数据就是它的系数，最左是 x²³，最右是 x⁰',y+40,'#0b0b0b');
+   fitC('真正拿去除的是 M(x)·x⁸（数据后面补 8 个 0，给余数腾位置）——下面第一行格子就是它。',y+58);
+   ctx.fillStyle='#0b0b0b';ctx.font='bold 12.5px system-ui';
+   ctx.fillText('这个 G(x) 不是随便挑的：',x,y+80);
+   fitC('· 次数 8 → 余数 8 位 → 256 种可能，坏数据蒙混过关的概率 1/256（CRC-32 是 1/40 亿）。',y+98);
+   fitC('· 它能被 (x+1) 整除：G(x) = (x+1)(x⁷+x⁶+x⁵+x⁴+x³+x²+1) → 凡是"奇数个错"，余数必不为 0，一定抓得住。',y+116);
+   fitC('· 那个 7 次因子是本原多项式，周期 127 → 数据短于 127 位时，任意两位错（哪怕隔得很远）也必被抓。',y+134);
+   fitC('· 任何 ≤8 位的突发错 100% 抓住：这种错误图样本身次数 < 8，不可能被 8 次的 G(x) 整除。',y+152);
+   const au=st.auditKey===st.data?st.audit:(st.audit=crcAudit(st.data),st.auditKey=st.data,st.audit);
+   fitC(`就拿上面这 24 位穷举验证了一遍：32 种单比特错漏 ${au.m1} 个，${au.t2} 种双比特错漏 ${au.m2} 个，`+
+     `${au.tB} 种 ≤8 位突发错漏 ${au.mB} 个。`,y+174,(au.m1+au.m2+au.mB)?'#d03b3b':'#0ca30c');
+   const dv=crcLongDiv(st.data,24),dc=Math.max(7,Math.min(13,Math.floor((w-150)/32)-1));
+   const show=Math.min(4,dv.steps.length);
+   let yy=y+202;
+   const rowBits=(arr,at,lab,dim)=>{
+     for(let i=0;i<32;i++){
+       const bx=x+60+i*(dc+1),on=at>=0&&i>=at&&i<at+9;
+       ctx.fillStyle=arr[i]?(dim&&i<at?'#c9c7c0':C_I1):(dim&&i<at?'#f3f2ee':C_I0);
+       ctx.fillRect(bx,yy,dc,dc+2);
+       ctx.strokeStyle=on?'#eb6834':'rgba(11,11,11,.12)';ctx.lineWidth=on?1.6:1;
+       ctx.strokeRect(bx+.5,yy+.5,dc-1,dc+1);
+       if(i===23){ctx.strokeStyle='#2a78d6';ctx.lineWidth=1.5;
+         ctx.beginPath();ctx.moveTo(bx+dc+1,yy-2);ctx.lineTo(bx+dc+1,yy+dc+4);ctx.stroke();}
+     }
+     ctx.fillStyle='#898781';ctx.font='11px system-ui';ctx.textAlign='right';
+     ctx.fillText(lab,x+54,yy+2);ctx.textAlign='left';
+     yy+=dc+5;
+   };
+   rowBits(dv.steps.length?dv.steps[0].before:dv.tail,dv.steps.length?dv.steps[0].at:-1,'被除数');
+   for(let i=1;i<show;i++)rowBits(dv.steps[i].before,dv.steps[i].at,'第'+(i+1)+'次',true);
+   ctx.fillStyle='#898781';ctx.font='11.5px system-ui';
+   if(dv.steps.length>show)
+     ctx.fillText(`…（一共异或 ${dv.steps.length} 次，每次把当前最高的那个 1 消掉，同理）…`,x+60,yy+1);
+   yy+=18;
+   rowBits(dv.tail,-1,'余数');
+   ctx.fillStyle='#2a78d6';ctx.font='11.5px system-ui';
+   ctx.fillText('↑ 蓝线左边被除干净了（全 0），右边 8 位就是 CRC = '+
+     dv.rem.toString(2).padStart(8,'0'),x+60,yy+1);
+   yy+=18;
+   ctx.fillStyle='#0b0b0b';ctx.font='12px system-ui';
+   ctx.fillText('写成多项式：余数 R(x) = '+
+     polyStr([...dv.tail].slice(24))+
+     '　→ 发出去的是 M(x)·x⁸ + R(x)，它一定能被 G(x) 整除。',x+60,yy+1);
+   yy+=20;
+   ctx.strokeStyle='#e1e0d9';ctx.lineWidth=1;
+   ctx.beginPath();ctx.moveTo(x,yy);ctx.lineTo(x+w,yy);ctx.stroke();
+   yy+=10;
+   y=yy;
    secLabel(ctx,x,y,'它是怎么判的：拿收到的数据重算一遍余数，跟包尾带来的那 8 位对一对');
    const {calc,got}=st.res,cell=22;
    const bit=(v,i)=>(v>>(7-i))&1;
@@ -1706,13 +1824,13 @@ const ALGS=[
    ctx.fillText('CRC 的本事全在"发现"上：任何 ≤8 位的突发错 100% 抓住，随机错漏检概率约 1/256（CRC-32 是 1/40 亿）。',x,y+34+2*cell+40);
    ctx.fillStyle='#898781';
    ctx.fillText('它从头到尾没打算修任何东西 —— 网络里重发一次比纠错便宜多了。',x,y+34+2*cell+60);
-   return 2*cell+110;},
+   return (yy-y)+2*cell+110;},
  card:{able:'检错极强，纠错为零',dmin:0,
   good:'<b>几乎不可能漏检</b>，而且算得飞快（查表移位异或）。',
   bad:'一个错也纠不了，发现了只能要求重传——在卫星、硬盘这种"没法重传"的场合就不够用。',
   use:'以太网帧、TCP/UDP、ZIP/PNG/gzip、硬盘扇区。'}},
 
-{id:'rs',name:'RS(15,11) 里德-所罗门',k:44,n:60,ch:520,
+{id:'rs',name:'RS(15,11) 里德-所罗门',k:44,n:60,ch:820,
  row:{cell:12,per:60,group:4},rowIn:{cell:12,per:44,group:4},amt:4,amax:14,
  intro:`<h2>RS 码：不按位，按"字符"纠错</h2>
   <p>前面几个码都是一位一位地算。RS 把 <b>4 位捆成一个符号</b>（正好 0~F 一个十六进制字符），
@@ -1725,9 +1843,58 @@ const ALGS=[
  decode(r,o){const rv=b2s(r,RS_N),res=rsDecode(rv);
    const bits=new Uint8Array(60);s2b(res.cw,bits);
    for(let i=0;i<44;i++)o[i]=bits[i];
-   return {detected:res.fail,fail:res.fail,pos:res.pos,mag:res.mag,rv,cw:res.cw};},
+   return {detected:res.fail,fail:res.fail,pos:res.pos,mag:res.mag,rv,cw:res.cw,S:res.S,lam:res.lam};},
  detail(ctx,x,y,w,st){
-   secLabel(ctx,x,y,'它是怎么判的：先看 15 个符号里哪几个"不对劲"');
+   // —— 先把多项式运算摆出来 ——
+   const y0_=y;
+   secLabel(ctx,x,y,'它是怎么算的：符号不是数字，是 GF(16) 里的元素，整段数据是一个多项式');
+   ctx.font='12.5px system-ui';ctx.textAlign='left';ctx.textBaseline='top';
+   const sup='⁰¹²³⁴';
+   const gpoly=polyStr(RS_G);
+   const msym=b2s(st.data,RS_K),psym=b2s(st.cw,RS_N).slice(RS_K);
+   const mpoly=polyStr(msym),ppoly=polyStr(psym);
+   const txsym=b2s(st.cw,RS_N),rxsym=st.res.rv||txsym;
+   const esym=txsym.map((v,i)=>v^rxsym[i]);
+   const epoly=esym.some(v=>v)?polyStr(esym):'0';
+   const par=psym.map(v=>HEX[v]).join(' ');
+   const L=[
+     ['GF(16)：','4 位一个符号（0~F）。加法就是异或；乘法是多项式相乘后模 x⁴+x+1 —— 这样 16 个符号构成一个有限域，可以做除法、解方程。'],
+     ['生成多项式：','g(x) = (x+α)(x+α²)(x+α³)(x+α⁴) = '+gpoly+'　（固定不变，写死在收发两端，跟数据无关）'],
+     ['为什么是它：','要纠 2 个符号错，每个错有"在哪、错成了啥"两个未知数 → 4 个方程 → 4 个校验符号 → g(x) 取 4 个连续根 α…α⁴，次数正好 4。α 是生成元 2，系数十六进制。'],
+     ['数据多项式：','m(x) = '+mpoly+'　← 我要发的东西。只有按「换一组数据」它才变；'],
+     ['','　　点第 ③ 行翻比特，改的是"路上收到的"，不是"我发的"，所以 m(x) 不动。'],
+     ['编码：','算 m(x)·x⁴ ÷ g(x)，余数 = '+ppoly+'　→ 系数 [ '+par+' ] 就是最后 4 个校验符号'],
+     ['','码字 c(x) = m(x)·x⁴ + 余数，共 15 个符号，一定能被 g(x) 整除。'],
+     ['收到的：','y(x) = c(x) + e(x)，其中 e(x) 是信道塞进来的<b>错误多项式</b>（只有被翻的符号非零）：'],
+     ['','e(x) = '+epoly+'　← 翻一个比特，这一行立刻跟着变'],
+   ];
+   const fitText=(t,tx,ty,col)=>{            // 太长就自动缩一号，别顶出画布
+     ctx.fillStyle=col;ctx.font='12px system-ui';
+     if(ctx.measureText(t).width>w-86)ctx.font='11px system-ui';
+     ctx.fillText(t,tx,ty);
+   };
+   L.forEach((ln,i)=>{
+     ctx.fillStyle='#0b0b0b';ctx.font='bold 12px system-ui';
+     ctx.fillText(ln[0],x,y+24+i*19);
+     fitText(ln[1].replace(/<\/?b>/g,''),x+78,y+24+i*19,'#52514e');
+   });
+   const S=st.res.S||[0,0,0,0],lam=st.res.lam;
+   ctx.fillStyle='#0b0b0b';ctx.font='bold 12px system-ui';
+   ctx.fillText('检验：',x,y+24+10*19);
+   fitText('把 y(x) 代进 α, α², α³, α⁴ 四个点（叫伴随式）：'+
+     `S₁=${HEX[S[0]]}  S₂=${HEX[S[1]]}  S₃=${HEX[S[2]]}  S₄=${HEX[S[3]]}`,x+78,y+24+10*19,'#52514e');
+   fitText('S_i = y(α^i) = c(α^i) + e(α^i) = 0 + e(α^i) —— c(x) 能被 g(x) 整除，在这四个点上恒为 0，'+
+     '所以伴随式只反映 e(x)，跟你发的是什么数据毫无关系。',x+78,y+24+11*19,'#0b0b0b');
+   fitText(S.every(v=>!v)?'　→ 四个全是 0：y(x) 能被 g(x) 整除，判定没错。'
+     :(lam?`　→ 不全为 0，解出错误定位多项式 Λ(x) = 1 + ${HEX[lam[0]]}x`+
+        (lam[1]?` + ${HEX[lam[1]]}x²`:'')+'，求它的根，根的倒数就指出错在第几个符号。'
+          :'　→ 不全为 0，但方程组解不出来（错得太多，超过 2 个符号）。'),
+     x+78,y+24+12*19,S.every(v=>!v)?'#0ca30c':'#b07a1f');
+   y+=24+13*19;
+   ctx.strokeStyle='#e1e0d9';ctx.lineWidth=1;
+   ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.stroke();
+   y+=10;
+   secLabel(ctx,x,y,'对照一下 15 个符号，看哪几个"不对劲"');
    const tx=b2s(st.cw,RS_N),rv=st.res.rv,cell=Math.max(14,Math.min(26,Math.floor((w-80)/15)-4));
    ctx.font='12.5px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
    let dirty=0;
@@ -1760,13 +1927,13 @@ const ALGS=[
    ctx.fillStyle='#898781';
    ctx.fillStyle='#898781';
    ctx.fillText('把破坏方式切成"集中突发"，同样翻这么多位，看脏符号数怎么掉下来。',x,yy+64);
-   return 2*cell+140;},
+   return (y-y0_)+2*cell+140;},
  card:{able:'纠 2 个符号错（每符号 4 位）',dmin:5,
   good:'<b>天生克突发</b>：连错 5 位以内最多脏 2 个符号，照修不误。CD 用的 RS(255,223) 能扛一百多位连错。',
   bad:'孤立随机错最亏：4 个散错就占掉 4 个名额，直接投降；译码要解方程，比查表贵。',
   use:'CD/DVD/蓝光（划痕）、二维码（挡住一角还能扫）、旅行者号、RAID-6。'}},
 
-{id:'conv',name:'卷积码 K=7 + 维特比',k:16,n:44,ch:500,
+{id:'conv',name:'卷积码 K=7 + 维特比',k:16,n:44,ch:700,
  row:{cell:16,per:44,group:2},rowIn:{cell:16,per:16,group:1},amt:3,amax:12,
  intro:`<h2>卷积码：没有"块"，数据像水一样流过去</h2>
   <p>前面的码都是切成一块一块编。卷积码不切块：数据<b>流过一个 6 位的移位寄存器</b>，每进 1 位就吐出 2 位——
@@ -1784,6 +1951,54 @@ const ALGS=[
    let d=0;for(let i=0;i<44;i++)if(re[i]!==r[i])d++;
    return {re,dist:d};},
  detail(ctx,x,y,w,st){
+   // —— 先把编码器摊开 ——
+   const y0c=y;
+   secLabel(ctx,x,y,'它是怎么编的：一个 7 格移位寄存器 + 两个固定的生成多项式');
+   const gp=g=>{const b=g.toString(2).padStart(7,'0'),t=[];
+     for(let i=0;i<7;i++)if(b[i]==='1'){const d=6-i;t.push(d>1?'x'+supN(d):d===1?'x':'1');}
+     return t.join('+');};
+   const fitV=(t,ty,col,bold)=>{ctx.fillStyle=col||'#52514e';
+     ctx.font=(bold?'bold ':'')+'12px system-ui';
+     if(ctx.measureText(t).width>w-8)ctx.font='11px system-ui';
+     ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(t,x,ty);};
+   fitV('生成多项式（固定不变，跟数据无关；这是深空探测和 GSM 用的那一对）：',y+22,'#0b0b0b',true);
+   fitV(`g₁ = 133₈ = ${CV_G[0].toString(2).padStart(7,'0')}₂ = ${gp(CV_G[0])}`+
+        `　　g₂ = 171₈ = ${CV_G[1].toString(2).padStart(7,'0')}₂ = ${gp(CV_G[1])}`,y+40);
+   fitV('寄存器 7 格 = 当前输入 + 前 6 个输入。每进 1 位，按两个多项式各挑出自己那几格做异或，吐 2 位：',y+58);
+   // 前 4 步实算
+   const pr=v=>{v^=v>>4;v^=v>>2;v^=v>>1;return v&1;};
+   let sReg=0,cx0=x+8,hy=y+80;
+   ctx.font='11.5px system-ui';ctx.fillStyle='#898781';ctx.textAlign='left';
+   ['步','输入','寄存器（左=当前输入）','g₁ 抽头异或','g₂ 抽头异或','输出'].forEach((h,i)=>
+     ctx.fillText(h,cx0+[0,34,86,250,340,430][i],hy));
+   for(let t=0;t<4;t++){
+     const u=st.data[t],reg=(u<<6)|sReg,o0=pr(reg&CV_G[0]),o1=pr(reg&CV_G[1]);
+     const ty=hy+18+t*19;
+     ctx.fillStyle='#52514e';ctx.font='12px system-ui';
+     ctx.fillText(String(t+1),cx0,ty);
+     ctx.fillText(String(u),cx0+34,ty);
+     for(let b=0;b<7;b++){                       // 寄存器 7 格，被 g₁ 抽到的描橙边
+       const bit=(reg>>(6-b))&1,bx=cx0+86+b*17;
+       ctx.fillStyle=bit?C_I1:C_I0;ctx.fillRect(bx,ty-1,14,14);
+       const tap1=(CV_G[0]>>(6-b))&1;
+       ctx.strokeStyle=tap1?'#eb6834':'rgba(11,11,11,.15)';ctx.lineWidth=tap1?1.6:1;
+       ctx.strokeRect(bx+.5,ty-.5,13,13);
+       ctx.fillStyle=bit?'#fff':'#898781';ctx.font='10px system-ui';ctx.textAlign='center';
+       ctx.fillText(bit,bx+7,ty+6);ctx.textAlign='left';ctx.font='12px system-ui';
+     }
+     ctx.fillStyle='#52514e';
+     ctx.fillText('= '+o0,cx0+250,ty);
+     ctx.fillText('= '+o1,cx0+340,ty);
+     ctx.fillStyle='#0b0b0b';ctx.font='bold 12px system-ui';
+     ctx.fillText(''+o0+o1,cx0+430,ty);
+     sReg=reg>>1;
+   }
+   ctx.font='11.5px system-ui';ctx.fillStyle='#898781';
+   ctx.fillText('橙框 = g₁ 抽的那几格（g₂ 抽的是另几格）。这 4 步吐出的 8 位，就是上面第 ② 行开头那 8 格。',cx0,hy+18+4*19+4);
+   y=hy+18+4*19+26;
+   ctx.strokeStyle='#e1e0d9';ctx.lineWidth=1;
+   ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.stroke();
+   y+=10;
    secLabel(ctx,x,y,'它是怎么判的：挑一条"最像收到的"的合法序列');
    const cell=Math.max(5,Math.min(16,Math.floor((w-190)/44)-2)),re=st.res.re;
    ctx.font='12.5px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
@@ -1807,13 +2022,13 @@ const ALGS=[
    ctx.fillStyle='#898781';
    ctx.fillText('错误散开时，没有哪条假序列能同时解释这么多分散的错，真相很容易胜出；',x,yy+44);
    ctx.fillText('错误连成一片时，另一条完全不同的序列反而可能更"像"——它就被骗了。切"集中突发"试试。',x,yy+62);
-   return 2*cell+140;},
+   return (y-y0c)+2*cell+140;},
  card:{able:'看错误分布：散错纠得动，连错纠不动',dmin:10,
   good:'边收边译、延迟小；软判决用起来特别顺手，比不编码好约 5 dB。',
   bad:'<b>最怕突发</b>：一片连错会把正确路径整个冲掉，现实中必须配交织器。',
   use:'GSM/3G、卫星通信、深空探测（外面再套一层 RS 成为经典级联码）。'}},
 
-{id:'ldpc',name:'LDPC (1008,504)',k:504,n:1008,ch:710,
+{id:'ldpc',name:'LDPC (1008,504)',k:504,n:1008,ch:900,
  row:{cell:6,per:112},rowIn:{cell:6,per:112},amt:60,amax:160,
  intro:`<h2>LDPC：几百条稀疏方程，反复商量出答案</h2>
   <p>汉明码用 3 条校验方程管 7 位。LDPC 把规模放大、把连线打散：<b>1008 位配 504 条方程</b>，
@@ -1833,6 +2048,45 @@ const ALGS=[
    const bad=hist[hist.length-1];
    return {hist,detected:bad>0,fail:bad>0};},
  detail(ctx,x,y,w,st){
+   // —— 先把校验方程本身列出来 ——
+   const y0l=y,cg=LD1.cg;
+   secLabel(ctx,x,y,'它的"校验位"是什么：504 条异或方程，每条只管几个比特');
+   const fitL=(t,ty,col,bold)=>{ctx.fillStyle=col||'#52514e';
+     ctx.font=(bold?'bold ':'')+'12px system-ui';
+     if(ctx.measureText(t).width>w-8)ctx.font='11px system-ui';
+     ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(t,x,ty);};
+   fitL('没有生成多项式那种简洁公式，它就是一张随机连线图（PEG 算法当场造的）：'+
+     '1008 个比特、504 条方程，每个比特恰好被 3 条方程管着，每条方程管 6 个比特上下（少数 5 或 7）—— 这就是"低密度"。',y+22);
+   const eqStr=(i,withVal)=>{
+     const t=[];
+     for(let e=cg.cStart[i];e<cg.cStart[i+1];e++){
+       const v=cg.eVar[e];
+       t.push('c'+subN(v)+(withVal?'('+st.rx[v]+')':''));
+     }
+     let p=0;for(let e=cg.cStart[i];e<cg.cStart[i+1];e++)p^=st.rx[cg.eVar[e]];
+     return {s:t.join(' ⊕ '),p};
+   };
+   const okEq=[],badEq=[];
+   for(let i=0;i<cg.m&&(okEq.length<2||badEq.length<2);i++){
+     const q=eqStr(i,true);
+     (q.p?badEq:okEq).push({i,...q});
+   }
+   fitL('随便挑两条（括号里是收到的值）：',y+42,'#0b0b0b');
+   okEq.slice(0,2).forEach((q,k)=>
+     fitL(`　第 ${q.i} 条：  ${q.s}  =  0　✓ 满足`,y+60+k*18,'#0ca30c'));
+   let ny=y+60+Math.min(2,okEq.length)*18;
+   if(badEq.length){
+     fitL('不满足的（这些就是译码器要修的线索）：',ny+4,'#0b0b0b');
+     badEq.slice(0,2).forEach((q,k)=>
+       fitL(`　第 ${q.i} 条：  ${q.s}  =  1　✗ 不满足`,ny+22+k*18,'#d03b3b'));
+     ny+=22+Math.min(2,badEq.length)*18;
+   }else{ fitL('　这一次收到的码字，504 条全部满足。',ny+4,'#0ca30c'); ny+=22; }
+   fitL('编码时就是解这 504 个方程，把 504 个校验位算出来，让所有方程都成立；'+
+     '译码时反过来，从"哪些方程不成立"倒推是哪些比特被翻了。',ny+6);
+   y=ny+30;
+   ctx.strokeStyle='#e1e0d9';ctx.lineWidth=1;
+   ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w,y);ctx.stroke();
+   y+=10;
    const H=st.res.hist;
    secLabel(ctx,x,y,'它是怎么判的：一轮一轮地猜，看"还没被满足的方程"怎么掉下去');
    const bw=Math.min(16,(w-60)/Math.max(12,H.length)),h0=74,y0=y+28;
@@ -1858,7 +2112,7 @@ const ALGS=[
    ctx.fillText('注意它纠的错误数量：几十位错在别的码那里是天塌了，在这里只是几轮迭代的事。',x,yy+22);
    ctx.fillStyle='#898781';
    ctx.fillText('代价是块很长（1008 位）、要迭代几十次。上面切"② 纠一张真图""③ 方程之间怎么商量"看更细的。',x,yy+42);
-   return h0+130;},
+   return (y-y0l)+h0+130;},
  card:{able:'约 8% 以内的错误几乎都能救',dmin:0,
   good:'同样的错误<b>比例</b>下几乎无敌，逼近香农极限；可大规模并行，吞吐极高。',
   bad:'块要够长才厉害（几百位以下没优势）；迭代几十次，<b>延迟和功耗都不低</b>。',
