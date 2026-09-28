@@ -1,0 +1,2570 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>纠错码擂台：LDPC 到底有多逼近香农极限</title>
+<style>
+:root{
+  --surface:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --base:#c3c2b7; --border:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#8b5cd6; --s5:#c9a227;
+  --down:#d03b3b; --good:#0ca30c;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--page);color:var(--ink);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+#app{display:flex;flex-direction:column;height:100%}
+#toolbar{background:var(--surface);border-bottom:1px solid var(--grid);font-size:13px;padding:5px 10px}
+#toolbar .trow{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;min-height:30px}
+#toolbar .trow+.trow{border-top:1px dashed var(--grid);margin-top:4px;padding-top:5px}
+#toolbar .tlab{color:var(--muted);font-size:12px}
+#pPay{overflow-y:auto;display:none}
+#pPay.show{display:block}
+#payWrap{max-width:1020px;margin:0 auto;padding:6px 12px 30px}
+#cPay{width:100%;height:560px;border:1px solid var(--grid);border-radius:8px;background:var(--surface)}
+#toolbar button{font:12px system-ui;padding:3px 9px;border:1px solid var(--base);border-radius:5px;
+  background:var(--surface);color:var(--ink);cursor:pointer}
+#toolbar button:hover{background:#f0efec}
+#toolbar button.on{background:var(--s1);color:#fff;border-color:var(--s1)}
+#toolbar button.tab{font-weight:600;padding:3px 11px}
+#toolbar button.tab.sm{font-weight:400;font-size:11.5px;padding:3px 8px;color:var(--ink2)}
+#toolbar button.subv{font-size:12px;padding:3px 9px}
+#toolbar button.subv.on{background:var(--s3);color:#fff;border-color:var(--s3)}
+#toolbar label{color:var(--ink2)}
+#toolbar .sep{width:1px;height:18px;background:var(--grid)}
+#toolbar .ctl{display:none;gap:6px 10px;align-items:center;flex-wrap:wrap}
+#toolbar .ctl.show{display:flex}
+#stats{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+#main{flex:1;display:flex;min-height:0}
+#cwrap{flex:1;position:relative;min-width:0;overflow:hidden}
+.pane{position:absolute;inset:0;display:none;flex-direction:column;padding:8px}
+#pImg{justify-content:center;overflow-y:auto}
+.pane.show{display:flex}
+canvas{display:block;background:var(--surface)}
+#cBer{flex:1;min-height:0;width:100%;border:1px solid var(--grid);border-radius:8px}
+#side{width:370px;overflow-y:auto;background:var(--surface);border-left:1px solid var(--grid);
+  padding:8px 10px;flex-shrink:0}
+#side details{margin-bottom:8px;border:1px solid var(--grid);border-radius:8px;padding:6px 9px}
+#side summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ink2)}
+#side h4{margin:7px 0 3px;font-size:12px;color:var(--muted);font-weight:600}
+#side p{margin:5px 0;font-size:12.5px;color:var(--ink2)}
+#side li{margin:3px 0;font-size:12.5px;color:var(--ink2)}
+#side ul{padding-left:18px;margin:4px 0}
+.sideblk{display:none}.sideblk.show{display:block}
+table.t{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+table.t th,table.t td{border-bottom:1px solid var(--grid);padding:2px 5px;text-align:right;color:var(--ink2)}
+table.t th{color:var(--muted);font-weight:600}
+table.t td.l,table.t th.l{text-align:left}
+.sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:baseline}
+.codesel{display:flex;flex-direction:column;gap:2px;font-size:12.5px}
+.codesel label{display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--ink2)}
+.imgrow{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;align-items:flex-start}
+.imgbox{text-align:center}
+.imgbox canvas{image-rendering:pixelated;border:1px solid var(--base);border-radius:4px;
+  width:min(256px,21vw);height:min(256px,21vw);background:#fff}
+.imgbox .cap{font-size:12px;color:var(--ink2);margin-top:3px;max-width:256px}
+.imgbox .cap b{font-variant-numeric:tabular-nums}
+#cIter{width:100%;max-width:820px;height:170px;border:1px solid var(--grid);border-radius:8px;margin:6px auto 0}
+#cTan{flex:1;min-height:0;width:100%;border:1px solid var(--grid);border-radius:8px}
+#pLab{overflow-y:auto;display:none}
+#pLab.show{display:block}
+#cLab{width:100%;height:1090px;border:1px solid var(--grid);border-radius:8px;margin:0 auto;display:block}
+#pAlg{overflow-y:auto;display:none}
+#pAlg.show{display:block}
+#algWrap{max-width:1000px;margin:0 auto;padding:6px 14px 30px}
+#algHead h2{font-size:19px;margin:8px 0 2px}
+#algHead p{font-size:13.5px;line-height:1.8;color:var(--ink2);margin:6px 0}
+#algHead b{color:var(--ink)}
+#cAlg{width:100%;height:520px;border:1px solid var(--grid);border-radius:8px;
+  background:var(--surface);margin-top:6px;cursor:pointer}
+#algFoot{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.7}
+
+#lSteps button{font:12px system-ui;padding:3px 9px;border:1px solid var(--base);border-radius:14px;
+  background:var(--surface);color:var(--ink2);cursor:pointer}
+#lSteps button.on{background:var(--s1);color:#fff;border-color:var(--s1)}
+
+#lText p{font-size:13.5px;line-height:1.8;color:var(--ink2);margin:7px 0}
+#lText b{color:var(--ink)}
+#cLearn{width:100%;height:340px;border:1px solid var(--grid);border-radius:8px;
+  background:var(--surface);margin-top:8px}
+#lCtl{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:9px 0;font-size:13px;color:var(--ink2)}
+#lCtl button{font:12px system-ui;padding:3px 9px;border:1px solid var(--base);border-radius:5px;
+  background:var(--surface);cursor:pointer}
+#lCtl button.on{background:var(--s1);color:#fff;border-color:var(--s1)}
+#lTake{background:#fdf9e8;border-left:3px solid #c9a227;padding:8px 11px;font-size:13.2px;
+  line-height:1.75;margin-top:12px;border-radius:0 6px 6px 0;color:var(--ink2)}
+.note{font-size:12px;color:var(--muted);text-align:center;margin-top:4px}
+mark{background:#fdf3c8;padding:0 2px;border-radius:2px}
+code{background:#f0efec;padding:0 3px;border-radius:3px;font-size:12px}
+@media (max-width:900px){#main{flex-direction:column}
+  #side{width:100%;max-height:45%;border-left:none;border-top:1px solid var(--grid)}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+   <div class="trow">
+    <span class="tlab">不同纠错码：</span>
+    <button class="tab on" data-tab="a0">重复码</button>
+    <button class="tab" data-tab="a1">奇偶校验</button>
+    <button class="tab" data-tab="a2">汉明码</button>
+    <button class="tab" data-tab="a3">CRC 检错不纠</button>
+    <button class="tab" data-tab="a4">RS 码</button>
+    <button class="tab" data-tab="a5">卷积码</button>
+    <button class="tab" data-tab="a6">LDPC</button>
+    <span class="sep"></span>
+    <button class="tab sm" data-tab="cmp">七码对比</button>
+    <button class="tab sm" data-tab="ber">BER 擂台</button>
+    <span id="stats"></span>
+   </div>
+   <div class="trow">
+    <span class="tlab" id="subLab">看哪一面：</span>
+    <span id="subBar"></span>
+    <span class="sep" id="subSep"></span>
+
+    <span class="ctl show" data-for="alg">
+      <label>破坏方式 <select id="aMode">
+        <option value="rand">随机散错</option><option value="burst">集中突发</option>
+      </select></label>
+      <label>翻几位 <input id="aAmt" type="range" min="0" max="10" step="1" value="1"
+        style="width:120px;vertical-align:middle"> <span id="aAmtT"></span></label>
+      <button id="aNewData">🎲 换一组数据</button>
+      <button id="aNewErr">⟳ 重新破坏</button>
+      <span style="color:var(--muted)">也可以直接点第 ③ 行的格子，自己翻</span>
+    </span>
+
+    <span class="ctl" data-for="ber">
+      <button id="bRun">▶ 开始仿真</button>
+      <button id="bReset">↺ 清空重跑</button>
+      <label><input type="checkbox" id="kFer"> 看误块率 FER</label>
+      <label><input type="checkbox" id="kLimit" checked> 香农极限</label>
+      <label><input type="checkbox" id="kTheory" checked> 未编码理论曲线</label>
+    </span>
+
+    <span class="ctl" data-for="img">
+      <label>Eb/N0 <input id="rSnr" type="range" min="0" max="6" step="0.25" value="2"
+        style="width:110px;vertical-align:middle"> <span id="tSnr">2.00 dB</span></label>
+      <label>图案 <select id="selPat">
+        <option value="han">香农</option><option value="face">笑脸</option>
+        <option value="grid">网格字</option></select></label>
+      <button id="bNoise">🎲 重采噪声</button>
+      <button id="bPlay">▶ 一直跑到译完</button>
+      <button id="bStep1">单步迭代</button>
+      <span id="imgInfo" style="color:var(--muted)"></span>
+    </span>
+
+    <span class="ctl" data-for="tan">
+      <label>Eb/N0 <input id="rSnr2" type="range" min="-2" max="6" step="0.25" value="0"
+        style="width:100px;vertical-align:middle"> <span id="tSnr2">1.00 dB</span></label>
+      <button id="bNoise2">🎲 重采噪声</button>
+      <button id="bPlay2">▶ 一直跑到收敛</button>
+      <button id="bStep2">单步半迭代</button>
+      <span id="tanInfo" style="color:var(--muted)"></span>
+    </span>
+
+    <span class="ctl" data-for="pay">
+      <label>载荷 <select id="pKind">
+        <option value="tbl">乘法口诀表</option><option value="img">一张图</option>
+      </select></label>
+      <label>信道每位翻转概率 <input id="pErr" type="range" min="0" max="12" step="0.25" value="3"
+        style="width:130px;vertical-align:middle"> <span id="pErrT">3%</span></label>
+      <button id="pRedo">⟳ 重新过一遍信道</button>
+      <span id="pInfo" style="color:var(--muted)"></span>
+    </span>
+
+    <span class="ctl" data-for="cmp">
+      <label>破坏方式 <select id="cMode">
+        <option value="burst">集中突发</option><option value="rand">随机散错</option>
+      </select></label>
+      <label>错误量 <input id="cAmt" type="range" min="0.5" max="20" step="0.5" value="4"
+        style="width:120px;vertical-align:middle"> <span id="cAmtT"></span></label>
+      <label><input type="checkbox" id="cInter"> 加交织器</label>
+      <button id="cRedo">↺ 重跑统计</button>
+      <button id="cSweep">↺ 重测一遍极限</button>
+      <span id="cSwInfo" style="color:var(--muted)"></span>
+    </span>
+
+   </div>
+  </div>
+
+  <div id="main">
+    <div id="cwrap">
+      <div class="pane show" id="pAlg"><div id="algWrap">
+        <div id="algHead"></div>
+        <canvas id="cAlg"></canvas>
+        <div id="algFoot"></div>
+      </div></div>
+
+      <div class="pane" id="pPay"><div id="payWrap"><canvas id="cPay"></canvas></div></div>
+
+      <div class="pane" id="pBer"><canvas id="cBer"></canvas></div>
+
+      <div class="pane" id="pImg">
+        <div class="imgrow">
+          <div class="imgbox"><canvas id="imSrc" width="64" height="64"></canvas>
+            <div class="cap">原图 4096 bit</div></div>
+          <div class="imgbox"><canvas id="imSoft" width="64" height="64"></canvas>
+            <div class="cap">未编码·信道软值（灰度）</div></div>
+          <div class="imgbox"><canvas id="imHard" width="64" height="64"></canvas>
+            <div class="cap">未编码·硬判决 <b id="capHard"></b></div></div>
+          <div class="imgbox"><canvas id="imLdpc" width="64" height="64"></canvas>
+            <div class="cap">LDPC 译码 <b id="capLdpc"></b></div></div>
+        </div>
+        <canvas id="cIter"></canvas>
+        <div class="note">同一个 Eb/N0（每<b>信息</b>比特能量相同）。左边没编码、每符号信噪比其实更高，右边一半符号是校验位。</div>
+      </div>
+
+      <div class="pane" id="pTan"><canvas id="cTan"></canvas></div>
+
+      <div class="pane" id="pLab"><canvas id="cLab"></canvas></div>
+    </div>
+
+    <div id="side">
+      <div class="sideblk show" data-for="alg pay">
+        <details open><summary>这个码的档案</summary><div id="algCard"></div></details>
+        <details open id="peerBox"><summary>同样的破坏，别的码怎么样</summary><div id="algPeer"></div>
+          <p style="color:var(--muted);font-size:12px">点上面的"七码对比"看完整统计。</p></details>
+        <details><summary>术语小抄</summary><div id="gloss"></div></details>
+      </div>
+
+      <div class="sideblk" data-for="ber">
+        <p style="background:#eef4fd;border-left:3px solid #2a78d6;padding:6px 9px;border-radius:0 5px 5px 0;margin:2px 0 8px">看不懂这里的词？先去 <b>① 从零开始</b> 走一遍七步，五分钟，回来这一屏就全通了。</p>
+        <details open><summary>参赛选手（点掉可关闭仿真）</summary>
+          <div class="codesel" id="codeList"></div>
+          <div style="margin-top:6px"><table class="t" id="tabStats"></table></div>
+        </details>
+        <details open><summary>香农极限（码率 1/2）</summary><div id="limitBox"></div></details>
+        <details open><summary>怎么读这张图</summary>
+          <p>横轴 <code>Eb/N0</code> 是<b>每信息比特</b>的能量信噪比——这是唯一公平的比法：加了校验位就要多发符号，每个符号分到的能量就得摊薄。纵轴是误码率，越低越好。<mark>曲线越靠左越强。</mark></p>
+          <p>三条竖线是同一个码率 1/2 下的理论天花板，右边是能做到的、左边是<b>数学上不可能</b>的：</p>
+          <ul>
+            <li><b>0 dB</b>：不限制输入分布的香农极限。</li>
+            <li><b>0.19 dB</b>：输入只许 ±1（BPSK）时的极限，这才是这些码真正的对手。</li>
+            <li><b>1.77 dB</b>：先把每个符号硬判成 0/1 再纠错的极限。<mark>光是扔掉软信息就白送 1.6 dB。</mark></li>
+          </ul>
+          <p>点全都是<b>实时蒙特卡洛跑出来</b>的，不是查表画的。低误码率的点要攒很久，空心下箭头表示"这么多比特里一个错都没有，真值在箭头下面"。</p>
+        </details>
+        <details><summary>结论剧透</summary>
+          <ul>
+            <li><b>重复码</b>是反面教材：重复 3 遍看着很稳，但为此码率掉到 1/3，换算成 Eb/N0 反而比不编码还差。（软判决合并的重复码则恰好与未编码<b>完全重合</b>——一点增益都没有。）</li>
+            <li><b>汉明码 (7,4)</b> 能纠 1 个错，高信噪比下小赚，低信噪比下赔本（一块里错两个反而被纠成更多错）。</li>
+            <li><b>卷积码 K=7 + 软判决维特比</b>是卫星/GSM 时代的主力，1e-5 处比不编码好约 5 dB，离极限还有 4 dB 多。</li>
+            <li><b>LDPC + 和积（BP）</b>：瀑布区直接怼到极限附近几个分贝内，而且 n 越长越贴——这就是"逼近香农极限"的实感。</li>
+            <li>同一个 LDPC 码换成<b>硬判决比特翻转</b>，立刻掉到 1.77 dB 那条线右边去。<mark>一半的功劳属于"软信息"，另一半属于码本身。</mark></li>
+          </ul>
+        </details>
+      </div>
+
+      <div class="sideblk" data-for="img">
+        <p style="background:#eef4fd;border-left:3px solid #2a78d6;padding:6px 9px;border-radius:0 5px 5px 0;margin:2px 0 8px">看不懂这里的词？先去 <b>① 从零开始</b> 走一遍七步，五分钟，回来这一屏就全通了。</p>
+        <details open><summary>这一屏在干什么</summary>
+          <p>把一张 64×64 的黑白图（4096 bit）切成 <span id="nblk"></span> 块，每块用 LDPC 码 <span id="ldpcSpec"></span> 编码后过同一个 AWGN 信道，再用和积算法迭代译码。</p>
+          <p>左二是<b>没编码</b>直接发的接收软值——灰度就是信道给出的"我觉得它是 0 还是 1，有多确信"。左三把它硬判成黑白：一堆椒盐噪声，这就是不纠错的下场。</p>
+          <p>最右是 LDPC 一次次迭代的结果。<mark>看它怎么从满屏雪花，几次迭代内"啪"地一下全对。</mark>下面的曲线是"还没被满足的校验方程数"，它归零的那一刻就是译码成功。</p>
+          <h4>可玩的</h4>
+          <ul>
+            <li>把 Eb/N0 拖到 1.5 dB 以下，LDPC 也开始扛不住了——瀑布区的边缘就在那儿。</li>
+            <li>拖到 4 dB，未编码仍然一身麻子，LDPC 两三次迭代就干净了。</li>
+            <li>"重采噪声"多按几次：在瀑布区边缘，同样的信噪比有时成功有时失败，这就是<b>误块率</b>的来源。</li>
+          </ul>
+        </details>
+      </div>
+
+      <div class="sideblk" data-for="cmp">
+        <p style="font-size:12.5px;color:var(--ink2)">给七个码<b>同一种破坏</b>，各跑几十次，看它们分别活成什么样。
+        绿=完好无损，黄=知道自己错了（可以要求重发），红=输出了错数据还一声不吭（最危险的一种）。</p>
+        <details open><summary>七个码一眼对照</summary><div id="labTable"></div></details>
+        <details open><summary>值得试的三组对比</summary>
+          <ul>
+            <li><b>突发 ↔ 散错</b>来回切：RS 码和卷积码的成绩会几乎<b>对调</b>。RS 按"符号"纠错，一片连错只脏掉少数几个符号；卷积码靠上下文推理，一片连错直接把推理链冲断。</li>
+            <li><b>勾上交织器</b>（发之前打乱顺序、收到后还原，把连错撒成散错）：卷积码起死回生，RS 码反被害死。CD 和深空探测用的"RS + 交织 + 卷积"级联就是这么来的。</li>
+            <li><b>把错误量拉大</b>：每个码都有一道断崖。注意红色（悄悄出错）什么时候开始长出来——那才是真正危险的区域。</li>
+          </ul>
+        </details>
+      </div>
+
+      <div class="sideblk" data-for="tan">
+        <p style="background:#eef4fd;border-left:3px solid #2a78d6;padding:6px 9px;border-radius:0 5px 5px 0;margin:2px 0 8px">看不懂这里的词？先去 <b>① 从零开始</b> 走一遍七步，五分钟，回来这一屏就全通了。</p>
+        <details open><summary>和积算法（BP）在做什么</summary>
+          <p>这是一个玩具 LDPC 码的 <b>Tanner 图</b>：下排圆圈是 <span style="color:var(--s1)">变量节点</span>（每个 = 一个比特），上排方块是 <span style="color:var(--s2)">校验节点</span>（每个 = 一条异或方程"我连的这些比特加起来必须是偶数"）。</p>
+          <p>译码就是这两排人反复交换<b>置信度（LLR）</b>：</p>
+          <ul>
+            <li><b>变量 → 校验</b>：我把信道给我的意见、加上<b>除你之外</b>其他校验对我的意见，汇总后告诉你。</li>
+            <li><b>校验 → 变量</b>：我看我连的<b>其他</b>比特都说自己是啥，推出你应该是啥。符号相乘、幅度取最小——<mark>一群人里最不确定的那个决定了这条推断有多可信。</mark></li>
+          </ul>
+          <p>关键在那个"除你之外"：不把你自己的话再还给你，信息才不会自我循环放大。图上有环（girth），所以这只是近似——但在长码上近似得惊人地好。</p>
+          <h4>颜色</h4>
+          <p>绿=倾向 0（发的是全零码字，所以绿色是对的），红=倾向 1（错），越深越确信。校验方块红色=当前不满足。</p>
+          <p>点一个<b>校验方块</b>看它这一轮的具体算式；点一个<b>变量圆圈</b>可以手动把它的信道值翻成错的，看 BP 怎么把它救回来（或者救不回来）。</p>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script id="core">
+'use strict';
+/* ==================================================================
+   第一部分：纯算法核心（完全不碰 DOM，可单独拿去 node 里跑）
+   ================================================================== */
+
+// ---------- 随机数 ----------
+function mulberry32(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+let RND=mulberry32(20260926);
+let _spare=null;
+function randn(){
+  if(_spare!==null){const v=_spare;_spare=null;return v;}
+  let u=0;while(u===0)u=RND();
+  const r=Math.sqrt(-2*Math.log(u)),th=2*Math.PI*RND();
+  _spare=r*Math.sin(th);return r*Math.cos(th);
+}
+function reseed(s){RND=mulberry32(s>>>0);_spare=null;}
+
+// ---------- 特殊函数 ----------
+function erfc(x){ // Numerical Recipes，相对误差 < 1.2e-7
+  const z=Math.abs(x),t=1/(1+0.5*z);
+  const ans=t*Math.exp(-z*z-1.26551223+t*(1.00002368+t*(0.37409196+t*(0.09678418+
+    t*(-0.18628806+t*(0.27886807+t*(-1.13520398+t*(1.48851587+
+    t*(-0.82215223+t*0.17087277)))))))));
+  return x>=0?ans:2-ans;
+}
+const SQRT2=Math.SQRT2;
+function Q(x){return 0.5*erfc(x/SQRT2);}          // 高斯尾概率
+function Qinv(p){                                  // 二分求逆
+  let lo=-10,hi=10;
+  for(let i=0;i<200;i++){const m=(lo+hi)/2;if(Q(m)>p)lo=m;else hi=m;}
+  return (lo+hi)/2;
+}
+function H2(p){ if(p<=0||p>=1)return 0; return -p*Math.log2(p)-(1-p)*Math.log2(1-p); }
+function log2_1pexp_neg(L){ // log2(1+e^{-L})，数值稳定
+  return L>0 ? Math.log1p(Math.exp(-L))/Math.LN2
+             : (-L+Math.log1p(Math.exp(L)))/Math.LN2;
+}
+
+// ---------- 三种香农极限（全部现算，不是查表）----------
+// 二进制输入 AWGN 的容量：C = 1 - E_{y~N(1,s^2)}[ log2(1+e^{-2y/s^2}) ]
+function biawgnCapacity(sigma){
+  const s2=sigma*sigma,N=1201,lo=1-12*sigma,hi=1+12*sigma,h=(hi-lo)/(N-1);
+  let sum=0;
+  for(let i=0;i<N;i++){
+    const y=lo+i*h;
+    const pdf=Math.exp(-(y-1)*(y-1)/(2*s2))/(Math.sqrt(2*Math.PI)*sigma);
+    const w=(i===0||i===N-1)?1:(i&1?4:2);
+    sum+=w*pdf*log2_1pexp_neg(2*y/s2);
+  }
+  return 1-sum*h/3;
+}
+function limitBIAWGN_dB(R){            // 输入 ±1 的极限
+  let lo=0.01,hi=20;                   // C 随 sigma 单调递减
+  for(let i=0;i<80;i++){const m=(lo+hi)/2;if(biawgnCapacity(m)>R)lo=m;else hi=m;}
+  const s=(lo+hi)/2;
+  return 10*Math.log10(1/(2*R*s*s));
+}
+function limitHard_dB(R){              // 先硬判决（BSC）的极限
+  let lo=1e-6,hi=0.5;
+  for(let i=0;i<200;i++){const m=(lo+hi)/2;if(1-H2(m)>R)lo=m;else hi=m;}
+  const p=(lo+hi)/2,x=Qinv(p);
+  return 10*Math.log10(x*x/(2*R));
+}
+function limitAWGN_dB(R){              // 不限输入分布的经典极限
+  return 10*Math.log10((Math.pow(2,2*R)-1)/(2*R));
+}
+
+// ---------- 信道 ----------
+// BPSK: bit 0 -> +1, bit 1 -> -1; y = x + sigma*n; LLR = 2y/sigma^2 （>0 偏向 0）
+function sigmaFor(ebn0dB,rate){
+  const e=Math.pow(10,ebn0dB/10);
+  return 1/Math.sqrt(2*rate*e);
+}
+
+// ==================== LDPC：构图（PEG）====================
+// Progressive Edge Growth：每加一条边都挑"离当前变量节点最远"的校验节点，
+// 尽量把短环推走（girth 大 → BP 近似得更准）。
+function pegConstruct(n,dv,dc,seed){
+  const rnd=mulberry32(seed);
+  const m=Math.round(n*dv/dc);
+  const vN=[],cN=[];
+  for(let i=0;i<n;i++)vN.push([]);
+  for(let i=0;i<m;i++)cN.push([]);
+  const cd=new Int32Array(m),vseen=new Uint8Array(n);
+  for(let j=0;j<n;j++){
+    for(let e=0;e<dv;e++){
+      let cands;
+      if(e===0){
+        cands=[];for(let c=0;c<m;c++)cands.push(c);
+      }else{
+        // 从 j 出发做 BFS，量出每个校验节点的深度
+        cd.fill(-1);vseen.fill(0);
+        let cur=[j];vseen[j]=1;let d=0,maxd=-1;
+        while(cur.length){
+          const nc=[];
+          for(const v of cur)for(const c of vN[v])if(cd[c]<0){cd[c]=d;nc.push(c);}
+          if(!nc.length)break;
+          maxd=d;
+          const nv=[];
+          for(const c of nc)for(const v of cN[c])if(!vseen[v]){vseen[v]=1;nv.push(v);}
+          if(!nv.length)break;
+          cur=nv;d++;
+        }
+        const un=[];for(let c=0;c<m;c++)if(cd[c]<0)un.push(c);
+        if(un.length)cands=un;                                   // 还没连通的：最理想
+        else{cands=[];for(let c=0;c<m;c++)if(cd[c]===maxd)cands.push(c);}
+        cands=cands.filter(c=>vN[j].indexOf(c)<0);
+        if(!cands.length){cands=[];for(let c=0;c<m;c++)if(vN[j].indexOf(c)<0)cands.push(c);}
+      }
+      // 候选里取当前度数最小的，随机打破平手
+      let best=-1,bd=1e9;
+      for(const c of cands){
+        const deg=cN[c].length+rnd()*0.5;
+        if(deg<bd){bd=deg;best=c;}
+      }
+      vN[j].push(best);cN[best].push(j);
+    }
+  }
+  return {n,m,vN,cN};
+}
+
+// 把图编译成 CSR 边表（按校验节点分组），BP 用
+function compileGraph(g){
+  const {n,m,vN,cN}=g;
+  let E=0;for(let i=0;i<m;i++)E+=cN[i].length;
+  const cStart=new Int32Array(m+1),eVar=new Int32Array(E);
+  let p=0;
+  for(let i=0;i<m;i++){cStart[i]=p;for(const v of cN[i])eVar[p++]=v;}
+  cStart[m]=p;
+  // 变量节点侧：它连的那些边的编号
+  const vDeg=new Int32Array(n);
+  for(let e=0;e<E;e++)vDeg[eVar[e]]++;
+  const vStart=new Int32Array(n+1);
+  for(let j=0,s=0;j<n;j++){vStart[j]=s;s+=vDeg[j];vStart[n]=s;}
+  const fill=new Int32Array(n),vEdge=new Int32Array(E);
+  for(let i=0;i<m;i++)for(let e=cStart[i];e<cStart[i+1];e++){
+    const v=eVar[e];vEdge[vStart[v]+fill[v]++]=e;
+  }
+  const eCheck=new Int32Array(E);
+  for(let i=0;i<m;i++)for(let e=cStart[i];e<cStart[i+1];e++)eCheck[e]=i;
+  return {n,m,E,cStart,eVar,vStart,vEdge,eCheck};
+}
+
+// ==================== LDPC：把 H 化成行最简，得到编码器 ====================
+function buildEncoder(g){
+  const {n,m,cN}=g,W=(n+31)>>5;
+  const rows=[];
+  for(let i=0;i<m;i++){
+    const r=new Uint32Array(W);
+    for(const v of cN[i])r[v>>5]^=(1<<(v&31));
+    rows.push(r);
+  }
+  const pivotCol=[];
+  let rank=0;
+  for(let col=0;col<n&&rank<m;col++){
+    const w=col>>5,bit=1<<(col&31);
+    let p=-1;
+    for(let r=rank;r<m;r++)if(rows[r][w]&bit){p=r;break;}
+    if(p<0)continue;
+    const t=rows[rank];rows[rank]=rows[p];rows[p]=t;
+    const pr=rows[rank];
+    for(let r=0;r<m;r++){
+      if(r===rank||!(rows[r][w]&bit))continue;
+      const rr=rows[r];
+      for(let q=0;q<W;q++)rr[q]^=pr[q];
+    }
+    pivotCol.push(col);rank++;
+  }
+  const isPivot=new Uint8Array(n);
+  for(const c of pivotCol)isPivot[c]=1;
+  const infoCol=[];
+  for(let c=0;c<n;c++)if(!isPivot[c])infoCol.push(c);
+  // 每个主元行只保留信息列部分：c[pivot_i] = XOR_{j in info} row_i[j] * u_j
+  const mask=[];
+  for(let i=0;i<rank;i++){
+    const r=new Uint32Array(W);
+    r.set(rows[i]);
+    for(const c of pivotCol)r[c>>5]&=~(1<<(c&31));
+    mask.push(r);
+  }
+  const k=n-rank;
+  function popPar(a,b,W){
+    let x=0;
+    for(let q=0;q<W;q++){
+      let v=a[q]&b[q];
+      v=v^(v>>>16);v=v^(v>>>8);v=v^(v>>>4);v=v^(v>>>2);v=v^(v>>>1);
+      x^=(v&1);
+    }
+    return x;
+  }
+  const ubits=new Uint32Array(W);
+  // info: Uint8Array(k) -> codeword Uint8Array(n)
+  function encode(info,out){
+    const c=out||new Uint8Array(n);
+    c.fill(0);ubits.fill(0);
+    for(let i=0;i<k;i++)if(info[i]){const col=infoCol[i];c[col]=1;ubits[col>>5]^=(1<<(col&31));}
+    for(let i=0;i<rank;i++)c[pivotCol[i]]=popPar(mask[i],ubits,W);
+    return c;
+  }
+  return {k,rank,infoCol,pivotCol,encode,rate:k/n};
+}
+
+// ==================== LDPC：和积（BP）译码 ====================
+// log(1+e^{-x}) 查表，供精确 boxplus 用
+const CORR_N=1024,CORR_MAX=14,CORR_STEP=CORR_MAX/CORR_N;
+const CORR=new Float32Array(CORR_N+1);
+for(let i=0;i<=CORR_N;i++)CORR[i]=Math.log1p(Math.exp(-i*CORR_STEP));
+function corr(x){
+  if(x>=CORR_MAX)return 0;
+  const i=(x/CORR_STEP)|0;
+  return CORR[i];
+}
+// 精确 boxplus: sign*min(|a|,|b|) + log(1+e^{-|a+b|}) - log(1+e^{-|a-b|})
+function boxplus(a,b){
+  const neg=((a<0)!==(b<0));
+  const aa=a<0?-a:a,ab=b<0?-b:b;
+  const mn=aa<ab?aa:ab;
+  return (neg?-mn:mn)+corr(Math.abs(a+b))-corr(Math.abs(a-b));
+}
+const LCLIP=22;
+
+class BPDecoder{
+  constructor(cg){
+    this.g=cg;
+    this.v2c=new Float32Array(cg.E);
+    this.c2v=new Float32Array(cg.E);
+    this.tot=new Float32Array(cg.n);
+    this.bits=new Uint8Array(cg.n);
+    this.F=new Float32Array(64);this.B=new Float32Array(64);
+    this.llr0=new Float32Array(cg.n);
+    this.iter=0;
+  }
+  start(llr0){
+    const g=this.g;
+    this.llr0.set(llr0);
+    for(let j=0;j<g.n;j++)for(let e=g.vStart[j];e<g.vStart[j+1];e++)this.v2c[g.vEdge[e]]=llr0[j];
+    this.c2v.fill(0);
+    for(let j=0;j<g.n;j++){this.tot[j]=llr0[j];this.bits[j]=llr0[j]<0?1:0;}
+    this.iter=0;
+    return this.unsatisfied();
+  }
+  unsatisfied(){
+    const g=this.g;let bad=0;
+    for(let i=0;i<g.m;i++){
+      let s=0;
+      for(let e=g.cStart[i];e<g.cStart[i+1];e++)s^=this.bits[g.eVar[e]];
+      if(s)bad++;
+    }
+    return bad;
+  }
+  // 半迭代 ①：校验节点 → 变量节点
+  stepCheck(){
+    const g=this.g,v2c=this.v2c,c2v=this.c2v,F=this.F,B=this.B;
+    for(let i=0;i<g.m;i++){              // 校验节点：前向-后向 boxplus，天然排除自己
+      const s=g.cStart[i],t=g.cStart[i+1],d=t-s;
+      F[0]=1e9;
+      for(let q=0;q<d;q++)F[q+1]=q===0?v2c[s]:boxplus(F[q],v2c[s+q]);
+      B[d]=1e9;
+      for(let q=d-1;q>=0;q--)B[q]=q===d-1?v2c[s+q]:boxplus(B[q+1],v2c[s+q]);
+      for(let q=0;q<d;q++){
+        let r;
+        if(d===1)r=0;
+        else if(q===0)r=B[1];
+        else if(q===d-1)r=F[d-1];
+        else r=boxplus(F[q],B[q+1]);
+        c2v[s+q]=r>LCLIP?LCLIP:(r<-LCLIP?-LCLIP:r);
+      }
+    }
+  }
+  // 半迭代 ②：变量节点 → 校验节点（顺便更新硬判决）
+  stepVar(){
+    const g=this.g,v2c=this.v2c,c2v=this.c2v;
+    for(let j=0;j<g.n;j++){
+      let sum=this.llr0[j];
+      for(let e=g.vStart[j];e<g.vStart[j+1];e++)sum+=c2v[g.vEdge[e]];
+      this.tot[j]=sum;
+      this.bits[j]=sum<0?1:0;
+      for(let e=g.vStart[j];e<g.vStart[j+1];e++){
+        const ed=g.vEdge[e];
+        let x=sum-c2v[ed];
+        v2c[ed]=x>LCLIP?LCLIP:(x<-LCLIP?-LCLIP:x);
+      }
+    }
+    this.iter++;
+    return this.unsatisfied();
+  }
+  // 一次完整迭代，返回未满足校验数
+  step(){ this.stepCheck(); return this.stepVar(); }
+  run(llr0,maxIt){
+    let bad=this.start(llr0);
+    let it=0;
+    while(bad>0&&it<maxIt){bad=this.step();it++;}
+    return {bad,iters:it};
+  }
+}
+
+// ==================== LDPC：硬判决比特翻转（对照组）====================
+function bitFlipDecode(cg,hard,maxIt){
+  const bits=hard;
+  const cnt=new Int32Array(cg.n);
+  const syn=new Uint8Array(cg.m);
+  for(let it=0;it<maxIt;it++){
+    let bad=0;
+    for(let i=0;i<cg.m;i++){
+      let s=0;
+      for(let e=cg.cStart[i];e<cg.cStart[i+1];e++)s^=bits[cg.eVar[e]];
+      syn[i]=s;if(s)bad++;
+    }
+    if(!bad)return {bits,bad:0,iters:it};
+    cnt.fill(0);
+    for(let i=0;i<cg.m;i++)if(syn[i])
+      for(let e=cg.cStart[i];e<cg.cStart[i+1];e++)cnt[cg.eVar[e]]++;
+    let mx=0;for(let j=0;j<cg.n;j++)if(cnt[j]>mx)mx=cnt[j];
+    if(mx<2)break;                      // 没人被多数指认，再翻就是瞎猜
+    const th=Math.max(2,mx);            // 只翻"最众叛亲离"的那批
+    for(let j=0;j<cg.n;j++)if(cnt[j]>=th)bits[j]^=1;
+  }
+  let bad=0;
+  for(let i=0;i<cg.m;i++){
+    let s=0;for(let e=cg.cStart[i];e<cg.cStart[i+1];e++)s^=bits[cg.eVar[e]];
+    if(s)bad++;
+  }
+  return {bits,bad,iters:maxIt};
+}
+
+// ==================== 汉明码 (7,4) ====================
+// 位置 1..7，数据在 3,5,6,7，校验在 1,2,4；症状值直接等于出错的位置
+function hammingEncode(d,c){ // d: 4 bits, c: 7 bits (index 0..6 = 位置 1..7)
+  c[2]=d[0];c[4]=d[1];c[5]=d[2];c[6]=d[3];
+  c[0]=c[2]^c[4]^c[6];
+  c[1]=c[2]^c[5]^c[6];
+  c[3]=c[4]^c[5]^c[6];
+  return c;
+}
+function hammingDecode(r,d){
+  const s=(r[0]^r[2]^r[4]^r[6])|((r[1]^r[2]^r[5]^r[6])<<1)|((r[3]^r[4]^r[5]^r[6])<<2);
+  if(s)r[s-1]^=1;
+  d[0]=r[2];d[1]=r[4];d[2]=r[5];d[3]=r[6];
+  return d;
+}
+
+// ==================== 卷积码 K=7 (133,171)_8 + 软判决维特比 ====================
+const CV_K=7,CV_S=1<<(CV_K-1),CV_G=[0o133,0o171];
+const CV_OUT=new Uint8Array(CV_S*2*2),CV_NXT=new Int32Array(CV_S*2);
+(function(){
+  const par=x=>{x^=x>>4;x^=x>>2;x^=x>>1;return x&1;};
+  for(let s=0;s<CV_S;s++)for(let u=0;u<2;u++){
+    const reg=(u<<(CV_K-1))|s;
+    CV_OUT[(s*2+u)*2]=par(reg&CV_G[0]);
+    CV_OUT[(s*2+u)*2+1]=par(reg&CV_G[1]);
+    CV_NXT[s*2+u]=reg>>1;
+  }
+})();
+function convEncode(info,out){ // info 长 k，输出 2*(k+6) 个比特（带归零尾）
+  const k=info.length,T=k+CV_K-1;
+  let s=0,p=0;
+  for(let t=0;t<T;t++){
+    const u=t<k?info[t]:0;
+    out[p++]=CV_OUT[(s*2+u)*2];out[p++]=CV_OUT[(s*2+u)*2+1];
+    s=CV_NXT[s*2+u];
+  }
+  return out;
+}
+function viterbiDecode(y,k,out){ // y: 软值（+1 表示比特 0），最大化相关度
+  const T=k+CV_K-1;
+  const pm=new Float32Array(CV_S).fill(-1e30),npm=new Float32Array(CV_S);
+  pm[0]=0;
+  const prev=new Uint8Array(T*CV_S);
+  for(let t=0;t<T;t++){
+    npm.fill(-1e30);
+    const y0=y[2*t],y1=y[2*t+1];
+    for(let s=0;s<CV_S;s++){
+      const p=pm[s];
+      if(p<-1e29)continue;
+      for(let u=0;u<2;u++){
+        const b0=CV_OUT[(s*2+u)*2],b1=CV_OUT[(s*2+u)*2+1];
+        const met=p+(b0?-y0:y0)+(b1?-y1:y1);
+        const ns=CV_NXT[s*2+u];
+        if(met>npm[ns]){npm[ns]=met;prev[t*CV_S+ns]=s;}
+      }
+    }
+    pm.set(npm);
+  }
+  let s=0;                       // 尾比特把状态逼回 0
+  for(let t=T-1;t>=0;t--){
+    const ps=prev[t*CV_S+s];
+    if(t<k)out[t]=s>>(CV_K-2);   // 输入比特 = 下一状态的最高位
+    s=ps;
+  }
+  return out;
+}
+</script>
+
+<script>
+'use strict';
+/* ==================================================================
+   第二部分：界面
+   ================================================================== */
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+function fit(cv){
+  const r=cv.getBoundingClientRect();
+  const dpr=Math.min(2,window.devicePixelRatio||1);
+  const w=Math.max(30,Math.round(r.width*dpr)),h=Math.max(30,Math.round(r.height*dpr));
+  if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;}
+  const ctx=cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w:r.width,h:r.height};
+}
+const fmtE=v=>{
+  if(v<=0)return '0';
+  const e=Math.floor(Math.log10(v)),m=v/Math.pow(10,e);
+  return m.toFixed(1)+'e'+e;
+};
+const fmtBits=b=>b>=1e6?(b/1e6).toFixed(1)+'M':b>=1e3?(b/1e3).toFixed(0)+'k':''+b;
+
+// ---------- 码本体 ----------
+const KBLK=504;                                  // 统一的信息块长度，误块率才可比
+const LD1=(()=>{const g=pegConstruct(1008,3,6,7);const cg=compileGraph(g);
+  return {g,cg,dec:new BPDecoder(cg),enc:buildEncoder(g),n:1008};})();
+let LD2=null;                                    // 长码，稍后后台构建
+const THREE_LIMITS={awgn:limitAWGN_dB(0.5),bi:limitBIAWGN_dB(0.5),hard:limitHard_dB(0.5)};
+
+// —— 各码一次"一个信息块"的蒙特卡洛 ——
+// 全部发送全零码字：线性码 + 对称信道下误码率与发哪个码字无关（标准做法，省掉编码开销）
+function simUncoded(db){
+  const s=sigmaFor(db,1);let e=0;
+  for(let i=0;i<KBLK;i++)if(1+s*randn()<0)e++;
+  return {bits:KBLK,errs:e};
+}
+function simRep3(db){
+  const s=sigmaFor(db,1/3);let e=0;
+  for(let i=0;i<KBLK;i++){
+    let v=0;for(let r=0;r<3;r++)if(1+s*randn()<0)v++;
+    if(v>=2)e++;
+  }
+  return {bits:KBLK,errs:e};
+}
+const hamR=new Uint8Array(7);
+function simHamming(db){
+  const s=sigmaFor(db,4/7);let e=0;
+  for(let w=0;w<KBLK/4;w++){
+    for(let i=0;i<7;i++)hamR[i]=(1+s*randn())<0?1:0;
+    const syn=(hamR[0]^hamR[2]^hamR[4]^hamR[6])|((hamR[1]^hamR[2]^hamR[5]^hamR[6])<<1)
+             |((hamR[3]^hamR[4]^hamR[5]^hamR[6])<<2);
+    if(syn)hamR[syn-1]^=1;
+    e+=hamR[2]+hamR[4]+hamR[5]+hamR[6];
+  }
+  return {bits:KBLK,errs:e};
+}
+const CV_T=KBLK+CV_K-1, cvY=new Float32Array(2*CV_T), cvOut=new Uint8Array(KBLK);
+const CV_RATE=KBLK/(2*CV_T);
+function simConv(db){
+  const s=sigmaFor(db,CV_RATE);
+  for(let i=0;i<2*CV_T;i++)cvY[i]=1+s*randn();
+  viterbiDecode(cvY,KBLK,cvOut);
+  let e=0;for(let i=0;i<KBLK;i++)e+=cvOut[i];
+  return {bits:KBLK,errs:e};
+}
+const bfHard=new Uint8Array(1008);
+function simBF(db){
+  const s=sigmaFor(db,0.5);
+  for(let j=0;j<1008;j++)bfHard[j]=(1+s*randn())<0?1:0;
+  bitFlipDecode(LD1.cg,bfHard,50);
+  let e=0;for(let j=0;j<1008;j++)e+=bfHard[j];
+  return {bits:1008,errs:e};
+}
+function mkBP(getL){
+  let buf=null;
+  return function(db){
+    const L=getL();if(!L)return null;
+    const n=L.n;if(!buf||buf.length!==n)buf=new Float32Array(n);
+    const s=sigmaFor(db,0.5),f=2/(s*s);
+    for(let j=0;j<n;j++)buf[j]=f*(1+s*randn());
+    L.dec.run(buf,50);
+    let e=0;for(let j=0;j<n;j++)e+=L.dec.bits[j];
+    return {bits:n,errs:e};
+  };
+}
+const CODES=[
+  {id:'unc', name:'未编码 BPSK',            rate:1,       color:'#8a8880', sim:simUncoded, lo:0,   hi:9,  cap:8e6, on:true},
+  {id:'rep3',name:'重复码 (3,1) 硬判决',    rate:1/3,     color:'#c9a227', sim:simRep3,    lo:0,   hi:9,  cap:6e6, on:true},
+  {id:'ham', name:'汉明码 (7,4) 硬判决',    rate:4/7,     color:'#8b5cd6', sim:simHamming, lo:0,   hi:9,  cap:6e6, on:true},
+  {id:'conv',name:'卷积码 K=7 软判决维特比',rate:CV_RATE, color:'#eb6834', sim:simConv,    lo:0,   hi:7,  cap:3e6, on:true},
+  {id:'bf',  name:'LDPC n=1008 比特翻转(硬)',rate:0.5,    color:'#1baf7a', sim:simBF,      lo:1,   hi:8,  cap:3e6, on:true},
+  {id:'bp1', name:'LDPC n=1008 和积 BP',    rate:0.5,     color:'#2a78d6', sim:mkBP(()=>LD1), lo:0,hi:4.5,cap:3e6, on:true},
+  {id:'bp4', name:'LDPC n=4032 和积 BP',    rate:0.5,     color:'#0b2e6b', sim:mkBP(()=>LD2), lo:0,hi:4.5,cap:4e6, on:true,
+   ready:()=>LD2!==null},
+];
+const SNRS=[];for(let d=0;d<=9.001;d+=0.5)SNRS.push(+d.toFixed(2));
+const TASKS=[];
+for(const c of CODES){
+  c.pts=new Map();c.limit=limitBIAWGN_dB(c.rate);
+  for(const db of SNRS)if(db>=c.lo-1e-9&&db<=c.hi+1e-9){
+    const pt={db,bits:0,errs:0,blocks:0,blkErrs:0,done:false};
+    c.pts.set(db,pt);TASKS.push({c,pt});
+  }
+}
+let cursor=0,running=false,simBits=0,simT0=performance.now(),kbps=0;
+function resetSim(){
+  for(const c of CODES)for(const pt of c.pts.values()){
+    pt.bits=0;pt.errs=0;pt.blocks=0;pt.blkErrs=0;pt.done=false;
+  }
+  cursor=0;simBits=0;simT0=performance.now();
+}
+// 每个点的"测够了没"：攒够 200 个错、或攒够上限那么多比特，就算 1.0
+function taskScore(t){return Math.max(t.pt.errs/200,t.pt.bits/t.c.cap);}
+function simTick(budget){
+  const t0=performance.now();let did=0;
+  while(performance.now()-t0<budget){
+    let found=null,bs=Infinity;                   // 永远去补当前最没底的那个点
+    for(const t of TASKS){
+      if(!t.c.on)continue;
+      if(t.c.ready&&!t.c.ready())continue;        // 长码还在后台构建
+      const sc=taskScore(t);
+      if(sc<bs){bs=sc;found=t;}
+    }
+    if(!found)break;
+    const r=found.c.sim(found.pt.db);
+    if(!r)break;
+    const pt=found.pt;
+    pt.bits+=r.bits;pt.errs+=r.errs;pt.blocks++;if(r.errs)pt.blkErrs++;
+    simBits+=r.bits;did++;
+    if(did>100000)break;
+  }
+  const dt=(performance.now()-simT0)/1000;
+  if(dt>0.5){kbps=simBits/dt/1000;}
+}
+
+// ---------- BER 图 ----------
+const cBer=$('#cBer');
+let showFer=false,showLimit=true,showTheory=true,hover=null;
+const PX={x0:-0.6,x1:9.3,ylo:-7,yhi:0};
+let berGeom=null;
+function drawBer(){
+  const {ctx,w,h}=fit(cBer);
+  ctx.clearRect(0,0,w,h);
+  const L=62,Rm=18,T=18,B=40;
+  const X=db=>L+(db-PX.x0)/(PX.x1-PX.x0)*(w-L-Rm);
+  const Y=v=>{const g=Math.max(PX.ylo,Math.log10(Math.max(v,1e-12)));
+    return T+(PX.yhi-g)/(PX.yhi-PX.ylo)*(h-T-B);};
+  berGeom={X,Y,L,Rm,T,B,w,h};
+  // 禁区
+  if(showLimit){
+    ctx.fillStyle='rgba(208,59,59,.055)';
+    ctx.fillRect(L,T,Math.max(0,X(THREE_LIMITS.bi)-L),h-T-B);
+  }
+  // 网格
+  ctx.strokeStyle='#eceae3';ctx.lineWidth=1;
+  for(let e=0;e>=PX.ylo;e--)for(let m=2;m<=9;m++){
+    const y=Y(m*Math.pow(10,e-1));if(y<T||y>h-B)continue;
+    ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-Rm,y);ctx.stroke();
+  }
+  ctx.strokeStyle='#dedcd4';
+  ctx.fillStyle='#898781';ctx.font='11px system-ui';ctx.textAlign='right';ctx.textBaseline='middle';
+  for(let e=0;e>=PX.ylo;e--){
+    const y=Y(Math.pow(10,e));
+    ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-Rm,y);ctx.stroke();
+    ctx.fillText(e===0?'1':'10'+String(e).replace('-','⁻').replace(/[0-9]/g,d=>'⁰¹²³⁴⁵⁶⁷⁸⁹'[+d]),L-7,y);
+  }
+  ctx.textAlign='center';ctx.textBaseline='top';
+  for(let d=0;d<=9;d++){
+    const x=X(d);
+    ctx.strokeStyle='#eceae3';ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,h-B);ctx.stroke();
+    ctx.fillStyle='#898781';ctx.fillText(d+'',x,h-B+6);
+  }
+  ctx.strokeStyle='#c3c2b7';ctx.beginPath();
+  ctx.moveTo(L,T);ctx.lineTo(L,h-B);ctx.lineTo(w-Rm,h-B);ctx.stroke();
+  ctx.fillStyle='#52514e';ctx.font='12px system-ui';
+  ctx.fillText('Eb/N0（每信息比特信噪比，dB）',(L+w-Rm)/2,h-B+21);
+  ctx.save();ctx.translate(15,(T+h-B)/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText(showFer?'误块率 FER（每 504 bit 一块）':'误比特率 BER',0,0);ctx.restore();
+  // 香农极限竖线
+  if(showLimit){
+    const lines=[[THREE_LIMITS.awgn,'香农极限 0 dB','#d03b3b'],
+                 [THREE_LIMITS.bi,'BPSK 输入 '+THREE_LIMITS.bi.toFixed(2)+' dB','#d03b3b'],
+                 [THREE_LIMITS.hard,'硬判决 '+THREE_LIMITS.hard.toFixed(2)+' dB','#b07a1f']];
+    ctx.setLineDash([5,4]);ctx.lineWidth=1.5;
+    lines.forEach(([d,lab,col],li)=>{
+      const x=X(d);
+      ctx.strokeStyle=col;ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,h-B);ctx.stroke();
+      ctx.save();ctx.translate(x+(li===1?13:-4),T+6);ctx.rotate(Math.PI/2);
+      ctx.fillStyle=col;ctx.font='11px system-ui';ctx.textAlign='left';ctx.textBaseline='bottom';
+      ctx.fillText(lab,0,0);ctx.restore();
+    });
+    ctx.setLineDash([]);
+  }
+  // 未编码理论曲线
+  if(showTheory&&!showFer){
+    ctx.strokeStyle='#b9b7ae';ctx.lineWidth=1.4;ctx.setLineDash([3,3]);ctx.beginPath();
+    let first=true;
+    for(let d=0;d<=9.2;d+=0.05){
+      const v=Q(Math.sqrt(2*Math.pow(10,d/10)));
+      if(v<Math.pow(10,PX.ylo))break;
+      const x=X(d),y=Y(v);
+      if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);
+    }
+    ctx.stroke();ctx.setLineDash([]);
+  }
+  // 各码曲线
+  const pick=pt=>showFer?(pt.blocks?pt.blkErrs/pt.blocks:0):(pt.bits?pt.errs/pt.bits:0);
+  const nblk=pt=>showFer?pt.blocks:pt.bits;
+  for(const c of CODES){
+    if(!c.on)continue;
+    const pts=[...c.pts.values()].filter(p=>nblk(p)>0);
+    ctx.strokeStyle=c.color;ctx.fillStyle=c.color;ctx.lineWidth=1.8;
+    ctx.beginPath();let first=true;
+    for(const p of pts){
+      const v=pick(p);if(v<=0)continue;
+      const y=Y(v),x=X(p.db);
+      if(y>h-B+1)continue;
+      if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    for(const p of pts){
+      const v=pick(p),x=X(p.db);
+      if(v>0){
+        const y=Y(v);if(y>h-B+1)continue;
+        ctx.beginPath();ctx.arc(x,y,2.8,0,7);ctx.fill();
+      }else{
+        const bound=1/nblk(p),y=Y(bound);      // 一个错都没有 → 真值在箭头下面
+        if(y>h-B-6)continue;
+        ctx.globalAlpha=.55;
+        ctx.beginPath();ctx.arc(x,y,2.6,0,7);ctx.stroke();
+        ctx.beginPath();ctx.moveTo(x,y+4);ctx.lineTo(x,y+12);
+        ctx.moveTo(x-3,y+8);ctx.lineTo(x,y+12);ctx.lineTo(x+3,y+8);ctx.stroke();
+        ctx.globalAlpha=1;
+      }
+    }
+  }
+  // 悬停读数
+  if(hover){
+    const {x,y,txt}=hover;
+    ctx.font='12px system-ui';ctx.textAlign='left';ctx.textBaseline='top';
+    const lines=txt.split('\n');
+    let tw=0;for(const s of lines)tw=Math.max(tw,ctx.measureText(s).width);
+    let bx=x+10,by=y-8;
+    if(bx+tw+12>w)bx=x-tw-22;
+    if(by+lines.length*15+8>h)by=h-lines.length*15-10;
+    ctx.fillStyle='rgba(252,252,251,.95)';ctx.strokeStyle='#c3c2b7';
+    ctx.beginPath();ctx.rect(bx,by,tw+12,lines.length*15+8);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#0b0b0b';
+    lines.forEach((s,i)=>ctx.fillText(s,bx+6,by+5+i*15));
+  }
+}
+cBer.addEventListener('mousemove',ev=>{
+  if(!berGeom)return;
+  const r=cBer.getBoundingClientRect(),mx=ev.clientX-r.left,my=ev.clientY-r.top;
+  const {X,Y}=berGeom;
+  let best=null,bd=14;
+  const pick=pt=>showFer?(pt.blocks?pt.blkErrs/pt.blocks:0):(pt.bits?pt.errs/pt.bits:0);
+  for(const c of CODES){
+    if(!c.on)continue;
+    for(const p of c.pts.values()){
+      const v=pick(p),n=showFer?p.blocks:p.bits;if(!n)continue;
+      const x=X(p.db),y=Y(v>0?v:1/n),d=Math.hypot(x-mx,y-my);
+      if(d<bd){bd=d;best={c,p,v,x,y,n};}
+    }
+  }
+  if(best){
+    const {c,p,v,n}=best;
+    hover={x:best.x,y:best.y,txt:`${c.name}\n${p.db.toFixed(1)} dB  ${showFer?'FER':'BER'} = `+
+      (v>0?fmtE(v):'< '+fmtE(1/n))+`\n已跑 ${fmtBits(p.bits)} bit / ${p.blocks} 块，错 ${showFer?p.blkErrs+' 块':p.errs+' bit'}`};
+  }else hover=null;
+});
+cBer.addEventListener('mouseleave',()=>{hover=null;});
+
+// ---------- 侧栏表格 ----------
+function firstBelow(c,target){       // 达到目标误码率所需的 Eb/N0（对数插值）
+  const pts=[...c.pts.values()].filter(p=>p.bits>0).sort((a,b)=>a.db-b.db);
+  for(let i=1;i<pts.length;i++){
+    const a=pts[i-1],b=pts[i];
+    const va=a.errs/a.bits,vb=b.errs/b.bits;
+    if(va>target&&vb>0&&vb<=target){
+      const la=Math.log10(va),lb=Math.log10(vb),lt=Math.log10(target);
+      return a.db+(b.db-a.db)*(la-lt)/(la-lb);
+    }
+    if(va>target&&vb===0&&b.bits>1/target){return b.db;}
+  }
+  return null;
+}
+function updateSide(){
+  let rows='<tr><th class="l">码</th><th>码率</th><th>已仿真</th><th>1e-4 所需</th><th>离极限</th></tr>';
+  let all=0;
+  for(const c of CODES){
+    let bits=0;for(const p of c.pts.values())bits+=p.bits;
+    all+=bits;
+    const th=firstBelow(c,1e-4);
+    const gp=(th===null||c.rate>0.99)?null:th-c.limit;
+    const gap=gp===null?'—':(gp>=0?'+':'')+gp.toFixed(1)+' dB';
+    rows+=`<tr><td class="l"><span class="sw" style="background:${c.color}"></span>${c.id}</td>`+
+      `<td>${c.rate.toFixed(3)}</td><td>${fmtBits(bits)}</td>`+
+      `<td>${th===null?'—':th.toFixed(2)+' dB'}</td><td>${gap}</td></tr>`;
+  }
+  $('#tabStats').innerHTML=rows;
+  $('#stats').textContent=curView()!=='ber'?''
+    :(all===0&&!running?'点「▶ 开始仿真」开跑'
+      :(running?'仿真中':'已暂停')+` · ${kbps.toFixed(0)} kbit/s · 累计 ${fmtBits(all)} bit`)
+    +(LD2||curView()!=='ber'?'':' · 长码构建中…');
+}
+$('#limitBox').innerHTML=
+  `<table class="t"><tr><th class="l">极限</th><th>Eb/N0</th></tr>`+
+  `<tr><td class="l">香农（不限输入分布）</td><td>${THREE_LIMITS.awgn.toFixed(2)} dB</td></tr>`+
+  `<tr><td class="l">BPSK 输入（软判决）</td><td>${THREE_LIMITS.bi.toFixed(2)} dB</td></tr>`+
+  `<tr><td class="l">BPSK + 先硬判决</td><td>${THREE_LIMITS.hard.toFixed(2)} dB</td></tr></table>`+
+  `<p>这三个数都是<b>页面里现算的</b>：二分搜索使 C(σ)=1/2 的噪声方差。"离极限"列 = 该码把误码率压到 1e-4 所需的 Eb/N0 减去<b>它自己码率</b>对应的 BPSK 极限。</p>`+
+  `<p style="color:var(--muted)">仿真发送全零码字——线性码在对称信道下误码率与发哪个码字无关，这是教科书标准做法（第 ② 屏则是真编真解一张图）。</p>`;
+
+// 选手勾选框
+$('#codeList').innerHTML=CODES.map(c=>
+  `<label><input type="checkbox" data-id="${c.id}" ${c.on?'checked':''}>`+
+  `<span class="sw" style="background:${c.color}"></span>${c.name}`+
+  `<span style="color:var(--muted);margin-left:auto">R=${c.rate.toFixed(2)}</span></label>`).join('');
+$('#codeList').addEventListener('change',e=>{
+  const id=e.target.getAttribute('data-id');
+  const c=CODES.find(x=>x.id===id);if(c)c.on=e.target.checked;
+});
+$('#bRun').onclick=()=>{running=!running;$('#bRun').textContent=running?'⏸ 暂停仿真':'⏵ 继续仿真';
+  $('#bRun').classList.toggle('on',running);simT0=performance.now();simBits=0;};
+$('#bReset').onclick=resetSim;
+$('#kFer').onchange=e=>{showFer=e.target.checked;};
+$('#kLimit').onchange=e=>{showLimit=e.target.checked;};
+$('#kTheory').onchange=e=>{showTheory=e.target.checked;};
+</script>
+
+<script>
+'use strict';
+/* ==================================================================
+   第三部分：② 发一张图（真编真解）
+   ================================================================== */
+const IMW=64,IMH=64,NPIX=IMW*IMH;
+const srcBits=new Uint8Array(NPIX);
+function genPattern(kind){
+  const cv=document.createElement('canvas');cv.width=IMW;cv.height=IMH;
+  const x=cv.getContext('2d');
+  x.fillStyle='#fff';x.fillRect(0,0,IMW,IMH);
+  x.fillStyle='#000';x.strokeStyle='#000';
+  x.textAlign='center';x.textBaseline='middle';
+  if(kind==='han'){
+    x.font='bold 27px system-ui,"PingFang SC","Heiti SC",sans-serif';
+    x.fillText('香',17,22);x.fillText('农',47,22);
+    x.font='bold 14px system-ui';x.fillText('LDPC',32,45);
+    x.lineWidth=2;x.strokeRect(1,1,IMW-2,IMH-2);
+    x.font='bold 9px system-ui';x.fillText('1948',32,57);
+  }else if(kind==='face'){
+    x.lineWidth=3;
+    x.beginPath();x.arc(32,32,27,0,7);x.stroke();
+    x.beginPath();x.arc(23,25,3.5,0,7);x.fill();
+    x.beginPath();x.arc(41,25,3.5,0,7);x.fill();
+    x.beginPath();x.arc(32,33,15,0.25*Math.PI,0.75*Math.PI);x.stroke();
+  }else{
+    x.lineWidth=1;
+    for(let i=8;i<64;i+=8){x.beginPath();x.moveTo(i,0);x.lineTo(i,64);x.stroke();
+      x.beginPath();x.moveTo(0,i);x.lineTo(64,i);x.stroke();}
+    x.font='bold 22px system-ui';x.fillText('比特',32,20);
+    x.fillText('不错',32,45);
+  }
+  const d=x.getImageData(0,0,IMW,IMH).data;
+  for(let i=0;i<NPIX;i++)srcBits[i]=((d[i*4]+d[i*4+1]+d[i*4+2])/3)<128?1:0;
+}
+const KI=LD1.enc.k, NB=Math.ceil(NPIX/KI), NI=LD1.n;
+const IM={db:2,pat:'han',playing:false,iter:0,done:false,last:0,doneAt:0,
+  cw:[],llr:[],decs:[],uncY:new Float32Array(NPIX),uncHard:new Uint8Array(NPIX),
+  uncErr:0,dec:new Uint8Array(NPIX),decErr:0,hist:[]};
+for(let b=0;b<NB;b++){IM.cw.push(new Uint8Array(NI));IM.llr.push(new Float32Array(NI));
+  IM.decs.push(new BPDecoder(LD1.cg));}
+const imInfo=new Uint8Array(KI);
+function imgEncode(){
+  for(let b=0;b<NB;b++){
+    imInfo.fill(0);
+    for(let i=0;i<KI;i++){const p=b*KI+i;if(p<NPIX)imInfo[i]=srcBits[p];}
+    LD1.enc.encode(imInfo,IM.cw[b]);
+  }
+}
+function imgChannel(){
+  const s=sigmaFor(IM.db,LD1.enc.rate),f=2/(s*s);
+  for(let b=0;b<NB;b++){
+    const cw=IM.cw[b],llr=IM.llr[b];
+    for(let j=0;j<NI;j++)llr[j]=f*((cw[j]?-1:1)+s*randn());
+  }
+  const su=sigmaFor(IM.db,1);
+  IM.uncErr=0;
+  for(let i=0;i<NPIX;i++){
+    IM.uncY[i]=(srcBits[i]?-1:1)+su*randn();
+    IM.uncHard[i]=IM.uncY[i]<0?1:0;
+    if(IM.uncHard[i]!==srcBits[i])IM.uncErr++;
+  }
+}
+function imgCollect(){
+  let bad=0,err=0;
+  for(let b=0;b<NB;b++)bad+=IM.decs[b].unsatisfied();
+  for(let i=0;i<NPIX;i++){
+    const b=(i/KI)|0,idx=i-b*KI;
+    const v=IM.decs[b].bits[LD1.enc.infoCol[idx]];
+    IM.dec[i]=v;if(v!==srcBits[i])err++;
+  }
+  IM.decErr=err;
+  IM.hist.push({bad,err});
+  const was=IM.done;
+  IM.done=(bad===0)||IM.iter>=50;
+  if(IM.done&&!was)IM.doneAt=performance.now();
+}
+function imgReset(newPattern,newNoise){
+  if(newPattern){genPattern(IM.pat);imgEncode();}
+  if(newNoise||newPattern)imgChannel();
+  for(let b=0;b<NB;b++)IM.decs[b].start(IM.llr[b]);
+  IM.iter=0;IM.done=false;IM.doneAt=0;IM.hist=[];
+  imgCollect();renderImg();
+}
+function imgStep(){
+  if(IM.done)return;
+  for(let b=0;b<NB;b++)if(IM.decs[b].unsatisfied()>0)IM.decs[b].step();
+  IM.iter++;imgCollect();renderImg();
+}
+const WHITE=[252,252,251],BLACK=[26,26,26],RED=[208,59,59];
+function paint(cv,fn){
+  const ctx=cv.getContext('2d'),im=ctx.createImageData(IMW,IMH);
+  for(let i=0;i<NPIX;i++){const c=fn(i);
+    im.data[i*4]=c[0];im.data[i*4+1]=c[1];im.data[i*4+2]=c[2];im.data[i*4+3]=255;}
+  ctx.putImageData(im,0,0);
+}
+function renderImg(){
+  paint($('#imSrc'),i=>srcBits[i]?BLACK:WHITE);
+  paint($('#imSoft'),i=>{const v=Math.max(0,Math.min(255,Math.round((IM.uncY[i]+2.2)/4.4*255)));
+    return [v,v,v];});
+  paint($('#imHard'),i=>IM.uncHard[i]!==srcBits[i]?RED:(IM.uncHard[i]?BLACK:WHITE));
+  paint($('#imLdpc'),i=>IM.dec[i]!==srcBits[i]?RED:(IM.dec[i]?BLACK:WHITE));
+  $('#capHard').textContent=`错 ${IM.uncErr} / ${NPIX} 像素`;
+  $('#capLdpc').textContent=`第 ${IM.iter} 次迭代 · 错 ${IM.decErr} 像素`;
+  $('#imgInfo').textContent=`LDPC(1008,504) × ${NB} 块 · 未满足校验 `+
+    (IM.hist.length?IM.hist[IM.hist.length-1].bad:0)+` / ${NB*LD1.g.m}`+
+    (IM.done?(IM.decErr===0?' · ✓ 全对':' · ✗ 译码失败'):' · 迭代中');
+  $('#ldpcSpec').textContent=`(n=1008, k=${KI}, 码率 ${LD1.enc.rate.toFixed(3)}, 列重 3)`;
+  $('#nblk').textContent=NB;
+}
+function drawIterChart(){
+  const {ctx,w,h}=fit($('#cIter'));
+  ctx.clearRect(0,0,w,h);
+  const L=48,Rm=12,T=12,B=22;
+  const n=Math.max(12,IM.hist.length),mx=Math.max(1,...IM.hist.map(d=>Math.max(d.bad,d.err)));
+  const X=i=>L+i/(n-1)*(w-L-Rm),Y=v=>T+(1-v/mx)*(h-T-B);
+  ctx.strokeStyle='#e1e0d9';ctx.beginPath();
+  ctx.moveTo(L,T);ctx.lineTo(L,h-B);ctx.lineTo(w-Rm,h-B);ctx.stroke();
+  ctx.fillStyle='#898781';ctx.font='11px system-ui';ctx.textAlign='right';ctx.textBaseline='middle';
+  ctx.fillText(''+mx,L-5,T);ctx.fillText('0',L-5,h-B);
+  ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillText('迭代次数 →',(L+w)/2,h-B+4);
+  const series=[['bad','#eb6834','未满足的校验方程'],['err','#2a78d6','还错着的像素']];
+  series.forEach(([k,col,lab],si)=>{
+    ctx.strokeStyle=col;ctx.lineWidth=1.8;ctx.beginPath();
+    IM.hist.forEach((d,i)=>{const x=X(i),y=Y(d[k]);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+    ctx.stroke();
+    ctx.fillStyle=col;ctx.textAlign='left';
+    ctx.fillText('■ '+lab,L+8+si*140,T+2);
+  });
+}
+$('#rSnr').oninput=e=>{IM.db=+e.target.value;$('#tSnr').textContent=IM.db.toFixed(2)+' dB';
+  imgReset(false,true);};
+$('#selPat').onchange=e=>{IM.pat=e.target.value;imgReset(true,true);};
+$('#bNoise').onclick=()=>{IM.playing=false;imgReset(false,true);imgSyncBtn();};
+function imgSyncBtn(){
+  $('#bPlay').classList.toggle('on',IM.playing);
+  $('#bPlay').textContent=IM.playing?'⏸ 暂停':(IM.done?'↻ 换一组噪声再跑一次':'▶ 一直跑到译完');
+}
+$('#bStep1').onclick=()=>{IM.playing=false;if(IM.done)imgReset(false,true);
+  imgStep();imgSyncBtn();};
+$('#bPlay').onclick=()=>{
+  if(IM.done&&!IM.playing)imgReset(false,true);     // 上一次已经跑完 → 换组噪声重来
+  IM.playing=!IM.playing;IM.last=performance.now();imgSyncBtn();};
+
+/* ==================================================================
+   第四部分：③ 消息传递显微镜
+   ================================================================== */
+const TG=(()=>{const g=pegConstruct(12,3,6,5);const cg=compileGraph(g);
+  return {g,cg,dec:new BPDecoder(cg)};})();
+const TAN_MAX=8;                            // 小码上 BP 可能永远收敛不了，给个上限
+const TAN={db:0,phase:'v2c',t:0,playing:false,halt:false,sel:-1,iter:0,convAt:0,
+  y:new Float32Array(TG.g.n),flip:new Uint8Array(TG.g.n),llr0:new Float32Array(TG.g.n),
+  conv:false,last:0};
+function tanSample(){
+  const s=sigmaFor(TAN.db,0.5);
+  for(let tries=0;tries<300;tries++){          // 至少制造 2 个错，不然没得看
+    let bad=0;
+    for(let j=0;j<TG.g.n;j++){TAN.y[j]=1+s*randn();if(TAN.y[j]<0)bad++;}
+    if(bad>=2)break;
+  }
+  TAN.flip.fill(0);tanRestart();
+}
+function tanRestart(){
+  const s=sigmaFor(TAN.db,0.5),f=2/(s*s);
+  for(let j=0;j<TG.g.n;j++)TAN.llr0[j]=f*TAN.y[j]*(TAN.flip[j]?-1:1);
+  TG.dec.start(TAN.llr0);
+  TAN.phase='v2c';TAN.t=0;TAN.iter=0;TAN.conv=false;TAN.halt=false;TAN.convAt=0;
+}
+function tanLayout(w,h){
+  const n=TG.g.n,m=TG.g.m;
+  const padx=Math.min(80,w*0.07);
+  const gap=Math.min(380,Math.max(170,h-300));
+  const cy=Math.max(80,(h-gap)/2),vy=cy+gap;
+  const vp=[],cp=[];
+  for(let j=0;j<n;j++)vp.push({x:padx+(j+0.5)*(w-2*padx)/n,y:vy});
+  for(let i=0;i<m;i++)cp.push({x:padx+(i+0.5)*(w-2*padx)/m,y:cy});
+  return {vp,cp};
+}
+function colFor(v){
+  const t=Math.min(1,Math.abs(v)/6),al=(0.25+0.75*t).toFixed(2);
+  return v>=0?`rgba(27,150,110,${al})`:`rgba(208,59,59,${al})`;
+}
+function drawTan(){
+  const cv=$('#cTan'),{ctx,w,h}=fit(cv);
+  ctx.clearRect(0,0,w,h);
+  const g=TG.g,cg=TG.cg,dec=TG.dec;
+  const {vp,cp}=tanLayout(w,h);
+  TAN.geom={vp,cp};
+  const bad=dec.unsatisfied();
+  let err=0;for(let j=0;j<g.n;j++)err+=dec.bits[j];
+  // 边
+  for(let e=0;e<cg.E;e++){
+    const v=vp[cg.eVar[e]],c=cp[cg.eCheck[e]];
+    const on=TAN.sel>=0&&cg.eCheck[e]===TAN.sel;
+    ctx.strokeStyle=on?'rgba(43,120,214,.55)':'rgba(11,11,11,.13)';
+    ctx.lineWidth=on?2:1;
+    ctx.beginPath();ctx.moveTo(v.x,v.y-16);ctx.lineTo(c.x,c.y+15);ctx.stroke();
+  }
+  // 飞行中的消息
+  const arr=TAN.phase==='v2c'?dec.v2c:dec.c2v;
+  for(let e=0;e<cg.E;e++){
+    const v=vp[cg.eVar[e]],c=cp[cg.eCheck[e]],val=arr[e];
+    const a={x:v.x,y:v.y-16},b={x:c.x,y:c.y+15};
+    const from=TAN.phase==='v2c'?a:b,to=TAN.phase==='v2c'?b:a;
+    const t=TAN.t;
+    const x=from.x+(to.x-from.x)*t,y=from.y+(to.y-from.y)*t;
+    const r=2.5+Math.min(4.5,Math.abs(val)*0.8);
+    ctx.fillStyle=colFor(val);
+    ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
+    if(TAN.sel>=0&&cg.eCheck[e]===TAN.sel){
+      ctx.fillStyle='#0b0b0b';ctx.font='10px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+      ctx.fillText(val.toFixed(2),x+r+2,y);
+    }
+  }
+  // 校验节点
+  for(let i=0;i<g.m;i++){
+    let par=0;for(let e=cg.cStart[i];e<cg.cStart[i+1];e++)par^=dec.bits[cg.eVar[e]];
+    const c=cp[i],S=15;
+    ctx.fillStyle=par?'rgba(208,59,59,.88)':'rgba(27,175,122,.28)';
+    ctx.strokeStyle=TAN.sel===i?'#2a78d6':'#52514e';ctx.lineWidth=TAN.sel===i?2.5:1.2;
+    ctx.beginPath();ctx.rect(c.x-S,c.y-S,2*S,2*S);ctx.fill();ctx.stroke();
+    ctx.fillStyle=par?'#fff':'#0b0b0b';ctx.font='bold 11px system-ui';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('+',c.x,c.y-1);
+    ctx.fillStyle='#898781';ctx.font='10px system-ui';
+    ctx.fillText('c'+i,c.x,c.y-S-8);
+  }
+  // 变量节点
+  for(let j=0;j<g.n;j++){
+    const v=vp[j],tot=dec.tot[j],R=15;
+    ctx.fillStyle=colFor(tot);
+    ctx.strokeStyle=TAN.flip[j]?'#d03b3b':'#52514e';ctx.lineWidth=TAN.flip[j]?2.5:1.2;
+    ctx.beginPath();ctx.arc(v.x,v.y,R,0,7);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='bold 12px system-ui';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(dec.bits[j]?'1':'0',v.x,v.y);
+    ctx.fillStyle='#898781';ctx.font='10px system-ui';
+    ctx.fillText('v'+j,v.x,v.y+R+9);
+    ctx.fillStyle=colFor(TAN.llr0[j]);ctx.font='10px system-ui';
+    ctx.fillText(TAN.llr0[j].toFixed(1),v.x,v.y+R+21);
+  }
+  // 抬头信息
+  ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillStyle='#0b0b0b';ctx.font='13px system-ui';
+  const ph=TAN.phase==='v2c'?'变量 → 校验（我把除你之外听到的都汇总给你）'
+                            :'校验 → 变量（我看别人都说啥，推出你该是啥）';
+  ctx.fillText(`第 ${TAN.iter} 轮 · ${ph}`,14,10);
+  ctx.fillStyle=bad?'#d03b3b':'#0ca30c';ctx.font='12px system-ui';
+  ctx.fillText(bad?`${bad} / ${g.m} 条校验方程还不满足，错 ${err} 个比特`
+                    +(TAN.halt?`　—— 跑满 ${TAN_MAX} 轮仍不收敛，停下（这个玩具码只有 12 位，本来就很弱）`:'')
+                  :`✓ 所有校验方程满足${err?'（但收敛到了错误码字！）':'，且完全正确'}`,14,30);
+  ctx.fillStyle='#898781';ctx.font='11.5px system-ui';
+  ctx.fillText('圆=比特（发的是全零码字，绿色=对）方块=异或校验 · 点变量→人为制造一个错 · 点校验→看它的算式',14,h-18);
+  // 选中校验节点的算式
+  if(TAN.sel>=0){
+    const i=TAN.sel,s0=cg.cStart[i],d=cg.cStart[i+1]-s0;
+    const bx=w-300,by=140;
+    ctx.fillStyle='rgba(252,252,251,.96)';ctx.strokeStyle='#c3c2b7';ctx.lineWidth=1;
+    ctx.beginPath();ctx.rect(bx,by,288,44+d*16);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#0b0b0b';ctx.font='bold 12px system-ui';ctx.textAlign='left';ctx.textBaseline='top';
+    ctx.fillText(`校验 c${i}：这 ${d} 个比特异或必须 = 0`,bx+8,by+7);
+    ctx.font='11.5px system-ui';
+    let ymin=1e9,sgn=1;
+    for(let q=0;q<d;q++){const val=dec.v2c[s0+q];if(Math.abs(val)<ymin)ymin=Math.abs(val);if(val<0)sgn=-sgn;}
+    for(let q=0;q<d;q++){
+      const e=s0+q,vj=cg.eVar[e];
+      ctx.fillStyle='#52514e';
+      ctx.fillText(`v${vj}`,bx+10,by+26+q*16);
+      ctx.fillStyle=colFor(dec.v2c[e]);
+      ctx.fillText(`收到 ${dec.v2c[e].toFixed(2)}`,bx+46,by+26+q*16);
+      ctx.fillStyle=colFor(dec.c2v[e]);
+      ctx.fillText(`→ 回 ${dec.c2v[e].toFixed(2)}`,bx+150,by+26+q*16);
+      if(Math.abs(dec.v2c[e])===ymin){ctx.fillStyle='#898781';ctx.fillText('最弱',bx+240,by+26+q*16);}
+    }
+    ctx.fillStyle='#898781';
+    ctx.fillText(`回给谁就排除谁：符号相乘、幅度≈其余里最小的那个`,bx+10,by+30+d*16);
+  }
+}
+$('#cTan').addEventListener('click',ev=>{
+  if(!TAN.geom)return;
+  const r=$('#cTan').getBoundingClientRect(),mx=ev.clientX-r.left,my=ev.clientY-r.top;
+  const {vp,cp}=TAN.geom;
+  for(let i=0;i<cp.length;i++)if(Math.abs(mx-cp[i].x)<18&&Math.abs(my-cp[i].y)<18){
+    TAN.sel=TAN.sel===i?-1:i;return;}
+  for(let j=0;j<vp.length;j++)if(Math.hypot(mx-vp[j].x,my-vp[j].y)<20){
+    TAN.flip[j]^=1;tanRestart();return;}
+  TAN.sel=-1;
+});
+$('#rSnr2').oninput=e=>{TAN.db=+e.target.value;$('#tSnr2').textContent=TAN.db.toFixed(2)+' dB';
+  tanSample();};
+$('#bNoise2').onclick=()=>{TAN.playing=false;tanSample();tanSyncBtn();};
+function tanSyncBtn(){
+  $('#bPlay2').classList.toggle('on',TAN.playing);
+  $('#bPlay2').textContent=TAN.playing?'⏸ 暂停':(TAN.halt?'↻ 换一组重来':'▶ 一直跑到收敛');
+}
+$('#bPlay2').onclick=()=>{
+  if(TAN.halt&&!TAN.playing)tanSample();             // 上一次已经结束 → 换一组重来
+  TAN.playing=!TAN.playing;tanSyncBtn();};
+$('#bStep2').onclick=()=>{TAN.playing=false;
+  if(TAN.halt)tanSample();
+  tanAdvance();TAN.t=1;tanSyncBtn();};
+function tanAdvance(){
+  if(TAN.phase==='v2c'){TG.dec.stepCheck();TAN.phase='c2v';}
+  else{TG.dec.stepVar();TAN.phase='v2c';TAN.iter++;}
+  TAN.t=0;
+  if(TG.dec.unsatisfied()===0&&TAN.iter>=1&&!TAN.conv){TAN.conv=true;TAN.convAt=performance.now();}
+  if(TAN.conv||TAN.iter>=TAN_MAX)TAN.halt=true;
+}
+
+/* ==================================================================
+   主循环 & 标签页
+   ================================================================== */
+let tab='a0',sub='pipe',lastSide=0;
+const SUBS={
+  def:[['pipe','① 比特流水线'],['pay','② 纠一份看得懂的数据']],
+  a6:[['pipe','① 比特流水线'],['pay','② 纠一份看得懂的数据'],
+      ['img','③ 逐轮修复一张图'],['tan','④ 方程之间怎么商量']]};
+const PANE={pipe:'pAlg',pay:'pPay',img:'pImg',tan:'pTan',cmp:'pLab',ber:'pBer'};
+const CTLOF={pipe:'alg',pay:'pay',img:'img',tan:'tan',cmp:'cmp',ber:'ber'};
+function subsFor(){return tab[0]==='a'?(SUBS[tab]||SUBS.def):null;}
+function curView(){return tab[0]==='a'?sub:tab;}
+function applyTab(){
+  const list=subsFor();
+  if(list&&!list.some(x=>x[0]===sub))sub='pipe';
+  const v=curView(),key=CTLOF[v];
+  $$('.tab').forEach(x=>x.classList.toggle('on',x.getAttribute('data-tab')===tab));
+  $$('.pane').forEach(x=>x.classList.toggle('show',x.id===PANE[v]));
+  $$('.ctl').forEach(x=>x.classList.toggle('show',
+    x.getAttribute('data-for').split(' ').includes(key)));
+  $$('.sideblk').forEach(x=>x.classList.toggle('show',
+    x.getAttribute('data-for').split(' ').includes(key)));
+  $('#subBar').innerHTML=list?list.map(([k,lab])=>
+    `<button class="subv ${k===sub?'on':''}" data-v="${k}">${lab}</button>`).join(''):'';
+  $('#subLab').style.display=list?'':'none';
+  $('#subSep').style.display=list?'':'none';
+  $$('#subBar .subv').forEach(b=>b.onclick=()=>{sub=b.getAttribute('data-v');applyTab();});
+  if(v==='img')renderImg();
+  if(v==='pipe'&&typeof algEnter==='function')algEnter();
+  if(v==='pay'&&typeof payEnter==='function')payEnter();
+}
+$$('.tab').forEach(b=>b.onclick=()=>{tab=b.getAttribute('data-tab');applyTab();});
+function gotoTab(t){tab=t;applyTab();}
+function frame(){
+  const now=performance.now();
+  const v=curView();
+  if(running&&v==='ber')simTick(13);
+  if(v==='pipe'){ if(typeof drawAlg==='function'){drawAlg();
+    if(algPeerDirty&&now-algPeerAt>260)algPeer();} }
+  else if(v==='pay'){ if(typeof drawPay==='function')drawPay(); }
+  else if(v==='ber')drawBer();
+  else if(v==='img'){
+    if(IM.playing){
+      if(IM.done){IM.playing=false;imgSyncBtn();}      // 这一次跑完，停
+      else if(now-IM.last>150){IM.last=now;imgStep();if(IM.done)imgSyncBtn();}
+    }
+    drawIterChart();
+  }else if(v==='cmp'){
+    if(CMP.dirty&&now-CMP.changeAt>180)cmpRun();
+    drawCmp();
+    if(!CMP.sweep){                       // 进这一屏就自动测，先画出"测量中"再算
+      if(CMP.swArmed){CMP.swArmed=false;
+        const t0=performance.now();cmpSweep();
+        $('#cSwInfo').textContent=`（极限扫描用了 ${((performance.now()-t0)/1000).toFixed(1)} 秒）`;}
+      else CMP.swArmed=true;
+    }
+  }else{
+    if(TAN.playing&&!TAN.halt){
+      TAN.t+=0.022;
+      if(TAN.t>=1){TAN.t=0;tanAdvance();}
+    }else if(TAN.halt){
+      TAN.t=Math.min(1,TAN.t+0.02);
+      if(TAN.playing){TAN.playing=false;tanSyncBtn();}   // 收敛（或跑满上限）就停
+    }
+    drawTan();
+  }
+  if(now-lastSide>400){updateSide();lastSide=now;}
+  requestAnimationFrame(frame);
+}
+// 启动
+genPattern('han');imgEncode();imgChannel();imgReset(false,false);
+tanSample();
+$('#tSnr').textContent=IM.db.toFixed(2)+' dB';
+$('#tSnr2').textContent=TAN.db.toFixed(2)+' dB';
+setTimeout(()=>{                                   // 长码后台构建，别卡住首屏
+  const g=pegConstruct(4032,3,6,13),cg=compileGraph(g);
+  LD2={g,cg,dec:new BPDecoder(cg),n:4032};
+},500);
+// 等后面几个 <script> 块都执行完再开跑（它们定义了 ①② 屏要用的东西）
+if(document.readyState==='loading')
+  document.addEventListener('DOMContentLoaded',()=>requestAnimationFrame(frame));
+else requestAnimationFrame(frame);
+</script>
+
+
+
+
+<script>
+'use strict';
+/* ==================================================================
+   每个算法一屏：原始数据 → 编码后 → 被破坏 → 纠回来
+   ================================================================== */
+
+// ---------- GF(16) 与 RS(15,11)：4 位一个符号，能纠 2 个符号错 ----------
+const GX=new Uint8Array(32),GL=new Uint8Array(16);
+(function(){let x=1;for(let i=0;i<15;i++){GX[i]=x;GL[x]=i;x<<=1;if(x&16)x^=0x13;}
+  for(let i=15;i<30;i++)GX[i]=GX[i-15];})();
+const gm=(a,b)=>(a&&b)?GX[GL[a]+GL[b]]:0;
+const gdiv=(a,b)=>a?GX[(GL[a]+15-GL[b])%15]:0;
+const RS_N=15,RS_K=11,RS_NS=4;
+const RS_G=(function(){let g=[1];
+  for(let i=1;i<=RS_NS;i++){const ng=new Array(g.length+1).fill(0),r=GX[i];
+    for(let j=0;j<g.length;j++){ng[j]^=g[j];ng[j+1]^=gm(g[j],r);}g=ng;}
+  return g;})();
+function rsEncode(msg){
+  const out=msg.concat(new Array(RS_NS).fill(0));
+  for(let i=0;i<RS_K;i++){const c=out[i];if(!c)continue;
+    for(let j=1;j<RS_G.length;j++)out[i+j]^=gm(RS_G[j],c);}
+  return msg.concat(out.slice(RS_K));
+}
+function rsSynd(r){const S=[];
+  for(let i=1;i<=RS_NS;i++){let v=0;for(let j=0;j<RS_N;j++)v=gm(v,GX[i])^r[j];S.push(v);}
+  return S;}
+function rsDecode(r){
+  const out=r.slice(),S=rsSynd(r);
+  if(S.every(v=>v===0))return {cw:out,pos:[],mag:[],fail:false};
+  const [S1,S2,S3,S4]=S,D=gm(S2,S2)^gm(S1,S3);
+  let pos=[],mag=[];
+  if(D){
+    const L1=gdiv(gm(S3,S2)^gm(S1,S4),D),L2=gdiv(gm(S2,S4)^gm(S3,S3),D);
+    for(let i=0;i<RS_N&&pos.length<3;i++){
+      const xi=GX[(15-i)%15];
+      if((1^gm(L1,xi)^gm(L2,gm(xi,xi)))===0)pos.push(i);
+    }
+    if(pos.length!==2)return {cw:out,pos:[],mag:[],fail:true};
+    const X1=GX[pos[0]],X2=GX[pos[1]],DD=gm(X1,gm(X2,X2))^gm(X2,gm(X1,X1));
+    if(!DD)return {cw:out,pos:[],mag:[],fail:true};
+    mag=[gdiv(gm(S1,gm(X2,X2))^gm(X2,S2),DD),gdiv(gm(X1,S2)^gm(S1,gm(X1,X1)),DD)];
+  }else{
+    if(!S1)return {cw:out,pos:[],mag:[],fail:true};
+    const X1=gdiv(S2,S1);
+    if(gm(S2,X1)!==S3||gm(S3,X1)!==S4)return {cw:out,pos:[],mag:[],fail:true};
+    pos=[GL[X1]];mag=[gdiv(gm(S1,S1),S2)];
+  }
+  const kpos=[];
+  for(let q=0;q<pos.length;q++){
+    const k=RS_N-1-pos[q];
+    if(k<0||k>=RS_N)return {cw:out,pos:[],mag:[],fail:true};
+    out[k]^=mag[q];kpos.push(k);
+  }
+  if(!rsSynd(out).every(v=>v===0))return {cw:out,pos:[],mag:[],fail:true};
+  return {cw:out,pos:kpos,mag,fail:false};
+}
+const b2s=(b,ns)=>{const s=[];for(let i=0;i<ns;i++)
+  s.push((b[4*i]<<3)|(b[4*i+1]<<2)|(b[4*i+2]<<1)|b[4*i+3]);return s;};
+const s2b=(s,b)=>s.forEach((v,i)=>{b[4*i]=(v>>3)&1;b[4*i+1]=(v>>2)&1;b[4*i+2]=(v>>1)&1;b[4*i+3]=v&1;});
+const HEX='0123456789ABCDEF';
+// ---------- CRC-8 ----------
+const crcTab=(function(){const t=new Uint8Array(256);
+  for(let i=0;i<256;i++){let c=i;for(let j=0;j<8;j++)c=(c&0x80)?((c<<1)^0x07)&0xff:(c<<1)&0xff;t[i]=c;}
+  return t;})();
+function crc8(bits,nbytes,off){let c=0;off=off||0;
+  for(let B=0;B<nbytes;B++){let v=0;for(let i=0;i<8;i++)v=(v<<1)|bits[off+B*8+i];c=crcTab[c^v];}
+  return c;}
+
+// ---------- 画格子 ----------
+const C_I0='#fbfaf7',C_I1='#3a3a38',C_P0='#e7edf6',C_P1='#4a6180',C_ERR='#d03b3b';
+function drawBits(ctx,x0,y0,n,o){
+  const cell=o.cell,per=o.per||n,gp=o.group||0;
+  const rows=Math.ceil(n/per);
+  for(let i=0;i<n;i++){
+    const r=(i/per)|0,c=i-r*per;
+    const gx=gp?Math.floor(c/gp)*5:0;
+    const x=x0+c*(cell+2)+gx,y=y0+r*(cell+2+3);
+    ctx.fillStyle=o.fill(i);ctx.fillRect(x,y,cell,cell);
+    const rg=o.ring&&o.ring(i);
+    if(rg){ctx.strokeStyle=rg;ctx.lineWidth=2;ctx.strokeRect(x-1,y-1,cell+2,cell+2);}
+    else{ctx.strokeStyle='rgba(11,11,11,.12)';ctx.lineWidth=1;ctx.strokeRect(x+.5,y+.5,cell-1,cell-1);}
+    if(o.text&&cell>=22){
+      ctx.fillStyle=o.textCol?o.textCol(i):'#fff';
+      ctx.font='bold '+Math.round(cell*0.45)+'px system-ui';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(o.text(i),x+cell/2,y+cell/2+.5);
+    }
+  }
+  if(o.hit)o.hit.push({x0,y0,n,cell,per,gp});
+  return rows*(cell+5);
+}
+function fitCell(n,o,avail){
+  const cols=Math.min(n,o.per||n),gp=o.group||0;
+  const gaps=gp?Math.floor(cols/gp)*5:0;
+  const need=cols*(o.cell+2)+gaps;
+  if(need<=avail)return o.cell;
+  return Math.max(3,Math.floor((avail-gaps)/cols)-2);
+}
+function secLabel(ctx,x,y,lab,sub,col){
+  ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillStyle=col||'#0b0b0b';ctx.font='bold 12.5px system-ui';
+  ctx.fillText(lab,x,y);
+  if(sub){ctx.fillStyle='#898781';ctx.font='12px system-ui';
+    ctx.fillText(sub,x+ctx.measureText(lab).width+12,y+1);}
+  return 19;
+}
+
+// ---------- 七个算法 ----------
+const ALGS=[
+{id:'rep3',name:'重复码 (3,1)',k:8,n:24,ch:440,
+ row:{cell:24,per:24,group:3},rowIn:{cell:24,per:8,group:1},amt:2,amax:8,
+ intro:`<h2>重复码：重要的事说三遍</h2>
+  <p>最朴素的念头：<b>每个比特连发三遍</b>。收到后三个一组，少数服从多数。</p>
+  <p>三个里翻掉一个，投票结果还是对的——这就把错纠回来了。代价是发 24 位才送出 8 位，<b>带宽变 3 倍</b>。</p>`,
+ encNote:'每 1 位 → 复制成 3 位（一簇就是一组）',
+ isInfo:i=>i%3===0,
+ encode(d,c){for(let i=0;i<8;i++)c[3*i]=c[3*i+1]=c[3*i+2]=d[i];},
+ decode(r,o){const v=[];
+   for(let i=0;i<8;i++){const s=r[3*i]+r[3*i+1]+r[3*i+2];o[i]=s>=2?1:0;v.push(s);}
+   return {votes:v};},
+ detail(ctx,x,y,w,st){
+   secLabel(ctx,x,y,'它是怎么判的：每组数一数，多的那个赢');
+   const gw=Math.min(96,(w-40)/8);
+   for(let i=0;i<8;i++){
+     const gx=x+i*gw,ones=st.res.votes[i],bad=st.out[i]!==st.data[i];
+     ctx.font='12.5px system-ui';ctx.textAlign='left';ctx.textBaseline='top';
+     ctx.fillStyle='#52514e';
+     ctx.fillText(`第${i+1}组`,gx,y+24);
+     ctx.fillStyle=bad?C_ERR:'#0b0b0b';ctx.font='bold 12.5px system-ui';
+     ctx.fillText(`${st.rx[3*i]},${st.rx[3*i+1]},${st.rx[3*i+2]} → ${st.out[i]}`,gx,y+42);
+     ctx.font='11.5px system-ui';
+     if(bad){ctx.fillStyle=C_ERR;ctx.fillText('投反了！',gx,y+60);}
+     else if(ones===1||ones===2){ctx.fillStyle='#0ca30c';ctx.fillText('2:1 险胜',gx,y+60);}
+   }
+   ctx.font='12.5px system-ui';ctx.fillStyle='#898781';ctx.textAlign='left';
+   ctx.fillText('同一组里翻掉 2 个，投票就会把错的那边投成多数 —— 所以它只扛得住"每 3 位最多错 1 位"。',x,y+82);
+   return 108;},
+ card:{able:'每 3 位里纠 1 个错',dmin:3,
+  good:'幼儿园都能懂，译码就是投票；信道再烂也能靠"多喊几遍"硬扛。',
+  bad:'码率只有 1/3，<b>代价大得离谱</b>。而且一段连错会打烂同一组的 2~3 份拷贝，直接投反。',
+  use:'教学；遥控器/RFID 这类懒得做编码的场合；深空探测的极低速信标。'}},
+
+{id:'parity',name:'单奇偶校验 (8,7)',k:7,n:8,ch:400,
+ row:{cell:32,per:8},rowIn:{cell:32,per:7},amt:1,amax:4,
+ intro:`<h2>奇偶校验：只花 1 位，就能"发现"出错</h2>
+  <p>不重复了。7 位数据后面只加 <b>1 位</b>，让整串里 1 的个数保持<b>偶数</b>。</p>
+  <p>对方收到后数一数：还是偶数 → 大概没事；变成奇数 → 一定出错了。1 位的代价就能查错，比重复三遍便宜太多。</p>`,
+ encNote:'最后 1 位 = 前 7 位的异或（凑成偶数个 1）',
+ isInfo:i=>i<7,detectOnly:true,
+ encode(d,c){let p=0;for(let i=0;i<7;i++){c[i]=d[i];p^=d[i];}c[7]=p;},
+ decode(r,o){let p=0;for(let i=0;i<8;i++)p^=r[i];
+   for(let i=0;i<7;i++)o[i]=r[i];
+   return {detected:p===1,fail:p===1,ones:r.reduce((a,b)=>a+b,0)};},
+ detail(ctx,x,y,w,st){
+   const ones=st.res.ones,odd=ones%2===1;
+   secLabel(ctx,x,y,'它是怎么判的：数 1 的个数');
+   ctx.font='13px system-ui';ctx.textAlign='left';ctx.textBaseline='top';
+   ctx.fillStyle='#0b0b0b';
+   ctx.fillText(`收到的 8 位里有 ${ones} 个 1 → ${odd?'奇数':'偶数'}`,x,y+26);
+   ctx.fillStyle=odd?'#b07a1f':(st.nout?C_ERR:'#0ca30c');ctx.font='bold 13px system-ui';
+   ctx.fillText(odd?'⚠ 发过来的时候一定是偶数，现在成了奇数 → 路上出错了！'
+                   :'✔ 还是偶数 → 报平安',x,y+48);
+   ctx.font='12.5px system-ui';ctx.fillStyle='#52514e';
+   if(odd)ctx.fillText('可是错在 8 个位置里的哪一个？它说不出来 —— 一个是非问题的信息量不够定位，只能请对方重发。',x,y+72);
+   else if(st.nout)ctx.fillText('但它其实错了偶数位！两个错互相抵消，1 的个数又变回偶数 —— 这就是漏检。',x,y+72);
+   else ctx.fillText('没有错误发生。',x,y+72);
+   ctx.fillStyle='#898781';
+   ctx.fillText('把"翻几位"调到 2，看它怎么被骗过去。',x,y+94);
+   return 120;},
+ card:{able:'检出 1 个错，纠 0 个',dmin:2,
+  good:'开销小到可以忽略（1/8），一个异或门就够，零延迟。',
+  bad:'只知道"有错"，不知道在哪，<b>纠不了</b>；错偶数位直接漏检。',
+  use:'串口 UART、老式内存、无数协议里的"最后一位校验"。'}},
+
+{id:'ham',name:'汉明码 (7,4)',k:4,n:7,ch:650,
+ row:{cell:32,per:7},rowIn:{cell:32,per:4},amt:1,amax:3,
+ intro:`<h2>汉明码：三个问题就能问出"错在哪一位"</h2>
+  <p>只加 1 位校验，只能回答"有没有错"这一个是非问题，说不出错在哪。汉明 1950 年的主意：安排 <b>3 个</b>校验位，
+  每个管住一部分数据位，让三个是非问题的答案<b>拼起来正好是出错位的编号</b>。</p>
+  <p>下面那三个圈就是三个问题：每个圈都要求"圈内 1 的个数是偶数"。哪个圈变成奇数，说明错误在那个圈里；
+  三个圈的组合一共 8 种，正好对应"没错"和"第 1~7 位出错"。</p>`,
+ encNote:'第 1、2、4 位是校验位，各管一个圈',
+ isInfo:i=>[2,4,5,6].includes(i),
+ encode(d,c){hammingEncode(d,c);},
+ decode(r,o){const rr=new Uint8Array(7);rr.set(r);
+   const syn=(rr[0]^rr[2]^rr[4]^rr[6])|((rr[1]^rr[2]^rr[5]^rr[6])<<1)|((rr[3]^rr[4]^rr[5]^rr[6])<<2);
+   if(syn)rr[syn-1]^=1;
+   o[0]=rr[2];o[1]=rr[4];o[2]=rr[5];o[3]=rr[6];
+   return {syn,fixedCw:rr};},
+ detail(ctx,x,y,w,st){
+   const r=st.rx,par=[0,0,0];
+   for(let p=1;p<=7;p++){if(p&1)par[0]^=r[p-1];if(p&2)par[1]^=r[p-1];if(p&4)par[2]^=r[p-1];}
+   const R=98,cx=x+172,cy=y+140,off=R*0.55;
+   const C=[{x:cx,y:cy-off},{x:cx-off*0.92,y:cy+off*0.62},{x:cx+off*0.92,y:cy+off*0.62}];
+   const mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
+   const ou=(q,k)=>({x:cx+(q.x-cx)*k,y:cy+(q.y-cy)*k});
+   const P={1:ou(C[0],1.56),2:ou(C[1],1.52),4:ou(C[2],1.52),
+     3:ou(mid(C[0],C[1]),1.85),5:ou(mid(C[0],C[2]),1.85),6:ou(mid(C[1],C[2]),1.9),7:{x:cx,y:cy}};
+   const cols=['#2a78d6','#eb6834','#1baf7a'];
+   secLabel(ctx,x,y,'它是怎么判的：三个圈各自数一数');
+   C.forEach((c,i)=>{ctx.beginPath();ctx.arc(c.x,c.y,R,0,7);
+     ctx.fillStyle=par[i]?'rgba(208,59,59,.12)':'rgba(27,175,122,.06)';ctx.fill();
+     ctx.strokeStyle=par[i]?C_ERR:cols[i];ctx.lineWidth=par[i]?2.4:1.5;ctx.stroke();});
+   for(let p=1;p<=7;p++){
+     const q=P[p],rr=15,isP=(p===1||p===2||p===4),bad=st.err[p-1];
+     ctx.beginPath();ctx.arc(q.x,q.y,rr,0,7);
+     ctx.fillStyle=bad?C_ERR:(r[p-1]?C_I1:C_I0);ctx.fill();
+     ctx.strokeStyle=isP?'#8a8880':'#52514e';ctx.lineWidth=isP?1:1.8;
+     ctx.setLineDash(isP?[3,3]:[]);ctx.stroke();ctx.setLineDash([]);
+     ctx.fillStyle=(r[p-1]||bad)?'#fff':'#52514e';ctx.font='bold 13px system-ui';
+     ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(r[p-1]?'1':'0',q.x,q.y);
+     ctx.fillStyle='#898781';ctx.font='10.5px system-ui';
+     if(p===3||p===5||p===7){ctx.textBaseline='bottom';
+       ctx.fillText('第'+p+'位',q.x,q.y-rr-3);ctx.textBaseline='middle';}
+     else ctx.fillText('第'+p+'位',q.x,q.y+rr+9);
+   }
+   const bx=x+375;
+   ctx.textAlign='left';ctx.textBaseline='top';
+   ['圈 A（第1位管）','圈 B（第2位管）','圈 C（第4位管）'].forEach((nm,i)=>{
+     const yy=y+30+i*23;
+     ctx.fillStyle=cols[i];ctx.font='12.5px system-ui';ctx.fillText(nm,bx,yy);
+     ctx.fillStyle=par[i]?C_ERR:'#0ca30c';
+     ctx.fillText(par[i]?'1 的个数是奇数 → 有错 ⇒ 1':'偶数 → 没问题 ⇒ 0',bx+118,yy);});
+   const syn=st.res.syn;
+   ctx.fillStyle='#0b0b0b';ctx.font='bold 13.5px system-ui';
+   ctx.fillText(`三个答案拼起来 = ${par[2]}${par[1]}${par[0]}（二进制）= ${syn}`,bx,y+108);
+   ctx.font='13px system-ui';ctx.fillStyle=syn?'#b07a1f':'#0ca30c';
+   ctx.fillText(syn?`⇒ 它断定第 ${syn} 位错了，翻回来`:'⇒ 它认为没有错',bx,y+132);
+   let ne=0;for(let i=0;i<7;i++)ne+=st.err[i];
+   ctx.font='12.5px system-ui';
+   if(ne<=1){ctx.fillStyle='#0ca30c';ctx.fillText('实际确实错了 '+ne+' 位 —— 判对了。',bx,y+158);}
+   else{ctx.fillStyle=C_ERR;
+     ctx.fillText(`实际错了 ${ne} 位。它只会算出一个位置，`,bx,y+158);
+     ctx.fillText(syn?`于是把第 ${syn} 位也翻掉 —— 越纠越错，还毫不知情。`:'这次干脆什么都没发现。',bx,y+178);}
+   ctx.fillStyle='#898781';
+   ctx.fillText('这三个答案有个名字叫"症状 syndrome"。',bx,y+206);
+   return 300;},
+ card:{able:'纠 1 个错（7 位里）',dmin:3,
+  good:'1950 年的老祖宗。译码就是查表，硬件便宜到可以塞进每一片内存条，零延迟。',
+  bad:'错 2 位时它会<b>自信地纠到另一个码字</b>——数据被改坏而且不报警；对突发错毫无办法。',
+  use:'ECC 内存（扩展成 SECDED：纠 1 检 2）、CPU 缓存、寄存器文件。'}},
+
+{id:'crc',name:'CRC-8（只检不纠）',k:24,n:32,ch:440,
+ row:{cell:18,per:32,group:8},rowIn:{cell:18,per:24,group:8},amt:2,amax:10,
+ intro:`<h2>CRC：不纠错，但几乎骗不过它</h2>
+  <p>互联网的选择和前面几个都不一样：<b>干脆不纠错</b>，只求"绝不把坏数据当好数据"。发现坏了就让对方重发。</p>
+  <p>做法是把数据当成一个大多项式，除以一个固定的多项式，把<b>余数</b>（这里 8 位）附在后面。
+  收到后重新算一遍余数，对不上就说明坏了。</p>`,
+ encNote:'后 8 位 = 前 24 位算出来的余数',
+ isInfo:i=>i<24,detectOnly:true,
+ encode(d,c){for(let i=0;i<24;i++)c[i]=d[i];
+   const v=crc8(d,3,0);for(let i=0;i<8;i++)c[24+i]=(v>>(7-i))&1;},
+ decode(r,o){for(let i=0;i<24;i++)o[i]=r[i];
+   const v=crc8(r,3,0);let g=0;for(let i=0;i<8;i++)g=(g<<1)|r[24+i];
+   return {detected:v!==g,fail:v!==g,calc:v,got:g};},
+ detail(ctx,x,y,w,st){
+   secLabel(ctx,x,y,'它是怎么判的：拿收到的数据重算一遍余数，跟包尾带来的那 8 位对一对');
+   const {calc,got}=st.res,cell=22;
+   const bit=(v,i)=>(v>>(7-i))&1;
+   ctx.font='12.5px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+   ctx.fillStyle='#52514e';ctx.fillText('自己重算的：',x,y+34+cell/2);
+   ctx.fillText('包里带来的：',x,y+34+cell+6+cell/2);
+   for(let i=0;i<8;i++){
+     const bx=x+92+i*(cell+3),diff=bit(calc,i)!==bit(got,i);
+     [[calc,y+34],[got,y+34+cell+6]].forEach(([v,yy])=>{
+       ctx.fillStyle=diff?C_ERR:(bit(v,i)?C_I1:C_I0);ctx.fillRect(bx,yy,cell,cell);
+       ctx.strokeStyle='rgba(11,11,11,.15)';ctx.lineWidth=1;ctx.strokeRect(bx+.5,yy+.5,cell-1,cell-1);
+       ctx.fillStyle=(bit(v,i)||diff)?'#fff':'#52514e';ctx.font='bold 11px system-ui';
+       ctx.textAlign='center';ctx.fillText(bit(v,i),bx+cell/2,yy+cell/2+.5);
+       ctx.textAlign='left';});
+   }
+   const bad=calc!==got;
+   ctx.font='bold 13px system-ui';ctx.textBaseline='top';
+   ctx.fillStyle=bad?'#b07a1f':(st.nout?C_ERR:'#0ca30c');
+   ctx.fillText(bad?'⚠ 对不上 → 这包数据坏了，丢掉，请对方重发'
+     :(st.nout?'✘ 居然对上了 —— 漏检！坏数据被当成好数据收下了':'✔ 对上了 → 收下'),x,y+34+2*cell+16);
+   ctx.font='12.5px system-ui';ctx.fillStyle='#52514e';
+   ctx.fillText('CRC 的本事全在"发现"上：任何 ≤8 位的突发错 100% 抓住，随机错漏检概率约 1/256（CRC-32 是 1/40 亿）。',x,y+34+2*cell+40);
+   ctx.fillStyle='#898781';
+   ctx.fillText('它从头到尾没打算修任何东西 —— 网络里重发一次比纠错便宜多了。',x,y+34+2*cell+60);
+   return 2*cell+110;},
+ card:{able:'检错极强，纠错为零',dmin:0,
+  good:'<b>几乎不可能漏检</b>，而且算得飞快（查表移位异或）。',
+  bad:'一个错也纠不了，发现了只能要求重传——在卫星、硬盘这种"没法重传"的场合就不够用。',
+  use:'以太网帧、TCP/UDP、ZIP/PNG/gzip、硬盘扇区。'}},
+
+{id:'rs',name:'RS(15,11) 里德-所罗门',k:44,n:60,ch:520,
+ row:{cell:12,per:60,group:4},rowIn:{cell:12,per:44,group:4},amt:4,amax:14,
+ intro:`<h2>RS 码：不按位，按"字符"纠错</h2>
+  <p>前面几个码都是一位一位地算。RS 把 <b>4 位捆成一个符号</b>（正好 0~F 一个十六进制字符），
+  15 个符号里 11 个装数据、4 个装校验，然后<b>整个符号整个符号地纠</b>：任意 2 个符号错都能修好。</p>
+  <p>妙处在这儿：一个符号里错 1 位还是错 4 位，都只算<b>一个</b>错。所以划痕、雷击这种"连成一片"的错误它最拿手。
+  反过来，零散的孤立错最亏 —— 每个孤立错都要占掉一个宝贵的符号名额。</p>`,
+ encNote:'后 4 个符号（16 位）是校验；竖线是符号的分界',
+ isInfo:i=>i<44,
+ encode(d,c){s2b(rsEncode(b2s(d,RS_K)),c);},
+ decode(r,o){const rv=b2s(r,RS_N),res=rsDecode(rv);
+   const bits=new Uint8Array(60);s2b(res.cw,bits);
+   for(let i=0;i<44;i++)o[i]=bits[i];
+   return {detected:res.fail,fail:res.fail,pos:res.pos,mag:res.mag,rv,cw:res.cw};},
+ detail(ctx,x,y,w,st){
+   secLabel(ctx,x,y,'它是怎么判的：先看 15 个符号里哪几个"不对劲"');
+   const tx=b2s(st.cw,RS_N),rv=st.res.rv,cell=Math.max(14,Math.min(26,Math.floor((w-80)/15)-4));
+   ctx.font='12.5px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+   let dirty=0;
+   for(let i=0;i<RS_N;i++)if(tx[i]!==rv[i])dirty++;
+   ['发出去的：','收到的：'].forEach((lab,row)=>{
+     ctx.fillStyle='#52514e';ctx.fillText(lab,x,y+30+row*(cell+6)+cell/2);
+     for(let i=0;i<RS_N;i++){
+       const bx=x+70+i*(cell+4),yy=y+30+row*(cell+6),v=row?rv[i]:tx[i],bad=tx[i]!==rv[i];
+       ctx.fillStyle=bad?(row?'rgba(208,59,59,.9)':'rgba(208,59,59,.18)'):(i<RS_K?C_I0:C_P0);
+       ctx.fillRect(bx,yy,cell,cell);
+       ctx.strokeStyle=bad?C_ERR:'rgba(11,11,11,.18)';ctx.lineWidth=bad?1.6:1;
+       ctx.strokeRect(bx+.5,yy+.5,cell-1,cell-1);
+       ctx.fillStyle=(bad&&row)?'#fff':'#0b0b0b';ctx.font='bold 12px system-ui';
+       ctx.textAlign='center';ctx.fillText(HEX[v],bx+cell/2,yy+cell/2+.5);ctx.textAlign='left';
+     }});
+   const yy=y+30+2*(cell+6)+8;
+   ctx.textBaseline='top';ctx.font='13px system-ui';
+   ctx.fillStyle=dirty<=2?'#0ca30c':C_ERR;
+   ctx.fillText(`脏掉了 ${dirty} 个符号，它的能力上限是 2 个 → ${dirty<=2?'搞得定':'超纲了'}`,x,yy);
+   ctx.font='12.5px system-ui';ctx.fillStyle='#52514e';
+   const P=st.res.pos;
+   if(!st.res.fail&&P.length){
+     ctx.fillText(`解方程算出：第 ${P.map(v=>v+1).join('、')} 个符号错了，`+
+       `错的值是 ${st.res.mag.map(v=>HEX[v]).join('、')} → 按这个改回去`,x,yy+22);
+     if(st.nout){ctx.fillStyle=C_ERR;
+       ctx.fillText('——可这是个假答案：脏符号超出了它的能力，它"纠"到了另一个合法码字上，还以为自己成功了。',x,yy+42);}
+   }
+   else if(!st.res.fail&&!P.length)ctx.fillText('四个校验方程全部满足，判定没有错误。',x,yy+22);
+   else ctx.fillText('方程组无解 / 解出来对不上 → 它知道自己搞不定，举手投降（这比乱纠安全）。',x,yy+22);
+   ctx.fillStyle='#898781';
+   ctx.fillStyle='#898781';
+   ctx.fillText('把破坏方式切成"集中突发"，同样翻这么多位，看脏符号数怎么掉下来。',x,yy+64);
+   return 2*cell+140;},
+ card:{able:'纠 2 个符号错（每符号 4 位）',dmin:5,
+  good:'<b>天生克突发</b>：连错 5 位以内最多脏 2 个符号，照修不误。CD 用的 RS(255,223) 能扛一百多位连错。',
+  bad:'孤立随机错最亏：4 个散错就占掉 4 个名额，直接投降；译码要解方程，比查表贵。',
+  use:'CD/DVD/蓝光（划痕）、二维码（挡住一角还能扫）、旅行者号、RAID-6。'}},
+
+{id:'conv',name:'卷积码 K=7 + 维特比',k:16,n:44,ch:500,
+ row:{cell:16,per:44,group:2},rowIn:{cell:16,per:16,group:1},amt:3,amax:12,
+ intro:`<h2>卷积码：没有"块"，数据像水一样流过去</h2>
+  <p>前面的码都是切成一块一块编。卷积码不切块：数据<b>流过一个 6 位的移位寄存器</b>，每进 1 位就吐出 2 位——
+  每个输出位都同时受最近 7 个输入位影响，信息被<b>抹开</b>在整条流里。</p>
+  <p>译码（维特比算法）反过来干：在所有"合法的发送序列"里，挑一条<b>与收到的最像</b>的。
+  因为信息被抹开了，某一位的真相可以从它前后一大片里推出来。</p>`,
+ encNote:'每进 1 位吐出 2 位（成对显示）——注意原始数据在码字里根本找不到，被彻底搅匀了',
+ isInfo:i=>false,
+ encode(d,c){const inf=new Uint8Array(16);inf.set(d);const o=new Uint8Array(44);
+   convEncode(inf,o);c.set(o);},
+ decode(r,o){const y=new Float32Array(44);
+   for(let i=0;i<44;i++)y[i]=r[i]?-1:1;
+   const out=new Uint8Array(16);viterbiDecode(y,16,out);o.set(out);
+   const re=new Uint8Array(44);convEncode(out,re);
+   let d=0;for(let i=0;i<44;i++)if(re[i]!==r[i])d++;
+   return {re,dist:d};},
+ detail(ctx,x,y,w,st){
+   secLabel(ctx,x,y,'它是怎么判的：挑一条"最像收到的"的合法序列');
+   const cell=Math.max(5,Math.min(16,Math.floor((w-190)/44)-2)),re=st.res.re;
+   ctx.font='12.5px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+   const rows=[['收到的（红=真被翻了）：',st.rx,i=>st.err[i]],
+               ['它挑中的（红=它认为被翻）：',re,i=>re[i]!==st.rx[i]]];
+   rows.forEach(([lab,arr,mark],ri)=>{
+     ctx.fillStyle='#52514e';ctx.fillText(lab,x,y+30+ri*(cell+8)+cell/2);
+     for(let i=0;i<44;i++){
+       const gx=Math.floor(i/2)*5,bx=x+175+i*(cell+2)+gx,yy=y+30+ri*(cell+8);
+       const bad=mark(i);
+       ctx.fillStyle=bad?C_ERR:(arr[i]?C_I1:C_I0);ctx.fillRect(bx,yy,cell,cell);
+       ctx.strokeStyle='rgba(11,11,11,.12)';ctx.lineWidth=1;ctx.strokeRect(bx+.5,yy+.5,cell-1,cell-1);
+     }});
+   const yy=y+30+2*(cell+8)+6;
+   ctx.textBaseline='top';ctx.font='13px system-ui';ctx.fillStyle='#0b0b0b';
+   ctx.fillText(`它选中的这条序列，与收到的差 ${st.res.dist} 位 —— 在 65536 条合法序列里，这是最接近的一条。`,x,yy);
+   ctx.font='12.5px system-ui';
+   ctx.fillStyle=st.nout?C_ERR:'#0ca30c';
+   ctx.fillText(st.nout?`可惜猜错了：真正发出去的那条被挤到了第二名，于是 ${st.nout} 位数据错了。`
+                       :'这条正是当初发出去的那条 → 全部还原。',x,yy+22);
+   ctx.fillStyle='#898781';
+   ctx.fillText('错误散开时，没有哪条假序列能同时解释这么多分散的错，真相很容易胜出；',x,yy+44);
+   ctx.fillText('错误连成一片时，另一条完全不同的序列反而可能更"像"——它就被骗了。切"集中突发"试试。',x,yy+62);
+   return 2*cell+140;},
+ card:{able:'看错误分布：散错纠得动，连错纠不动',dmin:10,
+  good:'边收边译、延迟小；软判决用起来特别顺手，比不编码好约 5 dB。',
+  bad:'<b>最怕突发</b>：一片连错会把正确路径整个冲掉，现实中必须配交织器。',
+  use:'GSM/3G、卫星通信、深空探测（外面再套一层 RS 成为经典级联码）。'}},
+
+{id:'ldpc',name:'LDPC (1008,504)',k:504,n:1008,ch:710,
+ row:{cell:6,per:112},rowIn:{cell:6,per:112},amt:60,amax:160,
+ intro:`<h2>LDPC：几百条稀疏方程，反复商量出答案</h2>
+  <p>汉明码用 3 条校验方程管 7 位。LDPC 把规模放大、把连线打散：<b>1008 位配 504 条方程</b>，
+  每条方程只管 6 位，每位只被 3 条方程管着——所以叫"低密度"。</p>
+  <p>这么稀疏没法像汉明码那样一步查表定位，于是改成<b>反复商量</b>：每个比特把"我觉得我是几、有多确信"告诉管它的方程，
+  每条方程再根据其它比特的说法反推回去。来回几十轮，绝大多数错误会自己塌陷成正确答案。</p>`,
+ encNote:'白=信息位，蓝灰=校验位（位置由矩阵决定，散落在整条码字里）',
+ isInfo:i=>LD1.enc.infoMask[i]===1,
+ encode(d,c){const inf=new Uint8Array(LD1.enc.k);inf.set(d);c.set(LD1.enc.encode(inf));},
+ decode(r,o){
+   const llr=new Float32Array(1008);
+   for(let j=0;j<1008;j++)llr[j]=r[j]?-4:4;
+   const dec=LD1.dec,hist=[];
+   hist.push(dec.start(llr));
+   for(let it=0;it<50;it++){const bad=dec.step();hist.push(bad);if(!bad)break;}
+   for(let i=0;i<LD1.enc.k;i++)o[i]=dec.bits[LD1.enc.infoCol[i]];
+   const bad=hist[hist.length-1];
+   return {hist,detected:bad>0,fail:bad>0};},
+ detail(ctx,x,y,w,st){
+   const H=st.res.hist;
+   secLabel(ctx,x,y,'它是怎么判的：一轮一轮地猜，看"还没被满足的方程"怎么掉下去');
+   const bw=Math.min(16,(w-60)/Math.max(12,H.length)),h0=74,y0=y+28;
+   const mx=Math.max(1,...H);
+   for(let i=0;i<H.length;i++){
+     const bx=x+i*(bw+2),bh=Math.max(1,H[i]/mx*h0);
+     ctx.fillStyle=H[i]?'rgba(235,104,52,.75)':'#1baf7a';
+     ctx.fillRect(bx,y0+h0-bh,bw,bh);
+   }
+   ctx.strokeStyle='#e1e0d9';ctx.beginPath();ctx.moveTo(x,y0+h0+.5);
+   ctx.lineTo(x+H.length*(bw+2),y0+h0+.5);ctx.stroke();
+   ctx.font='11.5px system-ui';ctx.fillStyle='#898781';ctx.textAlign='left';ctx.textBaseline='top';
+   ctx.fillText('第 0 轮（刚收到）',x,y0+h0+5);
+   ctx.fillText('第 '+(H.length-1)+' 轮',x+Math.max(60,(H.length-1)*(bw+2)-20),y0+h0+5);
+   ctx.textBaseline='bottom';ctx.fillText(mx+' 条不满足',x+2,y0-2);
+   ctx.textBaseline='top';ctx.font='13px system-ui';
+   const yy=y0+h0+26;
+   ctx.fillStyle=st.res.fail?C_ERR:'#0ca30c';
+   ctx.fillText(st.res.fail
+     ?`跑满 ${H.length-1} 轮还有 ${H[H.length-1]} 条方程不满足 —— 它知道自己没搞定（可以要求重发）`
+     :`第 ${H.length-1} 轮，所有 504 条方程同时满足 → 收敛，译码成功`,x,yy);
+   ctx.font='12.5px system-ui';ctx.fillStyle='#52514e';
+   ctx.fillText('注意它纠的错误数量：几十位错在别的码那里是天塌了，在这里只是几轮迭代的事。',x,yy+22);
+   ctx.fillStyle='#898781';
+   ctx.fillText('代价是块很长（1008 位）、要迭代几十次。上面切"② 纠一张真图""③ 方程之间怎么商量"看更细的。',x,yy+42);
+   return h0+130;},
+ card:{able:'约 8% 以内的错误几乎都能救',dmin:0,
+  good:'同样的错误<b>比例</b>下几乎无敌，逼近香农极限；可大规模并行，吞吐极高。',
+  bad:'块要够长才厉害（几百位以下没优势）；迭代几十次，<b>延迟和功耗都不低</b>。',
+  use:'5G 数据信道、Wi-Fi 6、DVB-S2 卫星电视、SSD 闪存控制器、10GBASE-T。'}},
+];
+// LDPC 的信息位掩码
+LD1.enc.infoMask=new Uint8Array(1008);
+for(const c of LD1.enc.infoCol)LD1.enc.infoMask[c]=1;
+ALGS.forEach(a=>{a.rate=a.k/a.n;a.st={mode:'rand',amt:a.amt,data:null};});
+
+// ---------- 跑一遍流水线 ----------
+function algRun(A,fresh){
+  const st=A.st;
+  if(fresh||!st.data){st.data=new Uint8Array(A.k);
+    for(let i=0;i<A.k;i++)st.data[i]=RND()<0.5?1:0;}
+  st.cw=new Uint8Array(A.n);A.encode(st.data,st.cw);
+  st.err=new Uint8Array(A.n);
+  const cnt=Math.min(st.amt,A.n);
+  if(st.mode==='burst'){const s0=(RND()*A.n)|0;
+    for(let i=0;i<cnt;i++)st.err[(s0+i)%A.n]=1;}
+  else{let left=cnt,g=0;
+    while(left>0&&g++<9999){const q=(RND()*A.n)|0;if(!st.err[q]){st.err[q]=1;left--;}}}
+  algDecode(A);
+}
+function algDecode(A){                       // 手动点格子后只重跑译码
+  const st=A.st;
+  st.rx=st.cw.slice();
+  for(let i=0;i<A.n;i++)if(st.err[i])st.rx[i]^=1;
+  st.out=new Uint8Array(A.k);
+  st.res=A.decode(st.rx,st.out)||{};
+  let nin=0;for(let i=0;i<A.n;i++)nin+=st.err[i];
+  let nout=0;for(let i=0;i<A.k;i++)if(st.out[i]!==st.data[i])nout++;
+  st.nin=nin;st.nout=nout;
+}
+function algVerdict(A){
+  const st=A.st;
+  if(st.nin===0)return ['还没有破坏——把"翻几位"拉大，或者直接点第 ③ 行的格子','#52514e'];
+  if(A.detectOnly){
+    if(st.res.detected)return ['⚠ 它发现坏了，但这类码只能检、不能纠 → 请对方重发','#b07a1f'];
+    if(st.nout)return [`✘ 漏检！错了 ${st.nout} 位却判为"正常"，坏数据进系统了`,C_ERR];
+    return ['✔ 错误只落在校验位上，数据本身没坏','#0ca30c'];
+  }
+  if(st.nout===0)return [`✔ 完美恢复：路上翻了 ${st.nin} 位，全部纠回来了`,'#0ca30c'];
+  if(st.res.fail)return [`⚠ 它知道自己搞不定（还剩 ${st.nout} 位错）→ 可以要求重发`,'#b07a1f'];
+  return [`✘ 纠错失败，而且它自己不知道：输出了 ${st.nout} 位错数据，一声不吭`,C_ERR];
+}
+// ---------- 画一屏 ----------
+let algHit=[];
+function drawAlg(){
+  const A=ALGS[+tab.slice(1)];if(!A)return;
+  const cv=$('#cAlg');
+  if(cv.style.height!==A.ch+'px')cv.style.height=A.ch+'px';
+  const {ctx,w,h}=fit(cv);
+  ctx.clearRect(0,0,w,h);
+  const st=A.st,x=22;let y=16;
+  algHit=[];
+  const avail=w-44;
+  const RI={...A.rowIn,cell:fitCell(A.k,A.rowIn,avail)},
+        RC={...A.row, cell:fitCell(A.n,A.row, avail)};
+  const inf=i=>A.isInfo(i);
+  y+=secLabel(ctx,x,y,'① 你要发的数据',`${A.k} 位`);
+  y+=drawBits(ctx,x,y,A.k,{...RI,fill:i=>st.data[i]?C_I1:C_I0,
+    text:i=>st.data[i],textCol:i=>st.data[i]?'#fff':'#52514e'})+14;
+  y+=secLabel(ctx,x,y,'② 编码后（实际发出去的）',`${A.n} 位　${A.encNote}`);
+  y+=drawBits(ctx,x,y,A.n,{...RC,
+    fill:i=>st.cw[i]?(inf(i)?C_I1:C_P1):(inf(i)?C_I0:C_P0),
+    text:i=>st.cw[i],textCol:i=>st.cw[i]?'#fff':'#52514e'})+14;
+  y+=secLabel(ctx,x,y,'③ 路上被噪声破坏',`翻了 ${st.nin} 位（红色）　← 点这一行的格子可以自己翻`,
+    st.nin?C_ERR:'#0b0b0b');
+  y+=drawBits(ctx,x,y,A.n,{...RC,hit:algHit,
+    fill:i=>st.err[i]?C_ERR:(st.rx[i]?(inf(i)?C_I1:C_P1):(inf(i)?C_I0:C_P0)),
+    text:i=>st.rx[i],textCol:i=>(st.rx[i]||st.err[i])?'#fff':'#52514e'})+14;
+  y+=secLabel(ctx,x,y,'④ 译码后拿回来的数据',`${A.k} 位　红色 = 还是错的`);
+  y+=drawBits(ctx,x,y,A.k,{...RI,
+    fill:i=>st.out[i]!==st.data[i]?C_ERR:(st.out[i]?C_I1:C_I0),
+    text:i=>st.out[i],textCol:i=>(st.out[i]||st.out[i]!==st.data[i])?'#fff':'#52514e'})+8;
+  const [v,col]=algVerdict(A);
+  ctx.font='bold 14px system-ui';ctx.fillStyle=col;ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillText(v,x,y);y+=26;
+  ctx.strokeStyle='#e1e0d9';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(w-22,y);ctx.stroke();y+=12;
+  A.detail(ctx,x,y,w-44,st);
+}
+// 点格子手动翻转
+$('#cAlg').addEventListener('click',ev=>{
+  const A=ALGS[+tab.slice(1)];if(!A||!algHit.length)return;
+  const r=$('#cAlg').getBoundingClientRect();
+  const mx=ev.clientX-r.left,my=ev.clientY-r.top;
+  for(const g of algHit){
+    for(let i=0;i<g.n;i++){
+      const rr=(i/g.per)|0,c=i-rr*g.per;
+      const gx=g.gp?Math.floor(c/g.gp)*5:0;
+      const bx=g.x0+c*(g.cell+2)+gx,by=g.y0+rr*(g.cell+5);
+      if(mx>=bx-1&&mx<=bx+g.cell+1&&my>=by-1&&my<=by+g.cell+1){
+        A.st.err[i]^=1;algDecode(A);return;   // 只翻这一位，别动别的
+      }
+    }
+  }
+});
+// ---------- 侧栏 ----------
+function algSide(){
+  const A=ALGS[+tab.slice(1)];if(!A)return;
+  $('#algHead').innerHTML=A.intro;
+  $('#algFoot').innerHTML=`码长 n = ${A.n} 位，其中信息 ${A.k} 位 → <b>码率 ${A.rate.toFixed(3)}</b>`+
+    `（发 ${(1/A.rate).toFixed(2)} 位才送出 1 位有用的）`+
+    (A.card.dmin?` · 最小距离 d = ${A.card.dmin}` : '')+` · ${A.card.able}`;
+  $('#algCard').innerHTML=
+    `<p style="font-size:13.5px;margin:2px 0 6px"><b>${A.name}</b></p>`+
+    `<table class="t"><tr><td class="l">码长 / 信息位</td><td>${A.n} / ${A.k}</td></tr>`+
+    `<tr><td class="l">码率</td><td>${A.rate.toFixed(3)}</td></tr>`+
+    (A.card.dmin?`<tr><td class="l">最小距离 d</td><td>${A.card.dmin}</td></tr>`:'')+
+    `<tr><td class="l">能力</td><td>${A.card.able}</td></tr></table>`+
+    `<h4>长处</h4><p>${A.card.good}</p><h4>短处</h4><p>${A.card.bad}</p>`+
+    `<h4>用在哪</h4><p>${A.card.use}</p>`;
+  algPeerDirty=true;algPeerAt=performance.now();
+}
+function algEnter(){
+  const A=ALGS[+tab.slice(1)];if(!A)return;
+  $('#peerBox').style.display='';
+  if(!A.st.data)algRun(A,true);
+  $('#aMode').value=A.st.mode;
+  $('#aAmt').max=A.amax;$('#aAmt').value=A.st.amt;
+  $('#aAmtT').textContent=A.st.amt+' 位 ('+(A.st.amt/A.n*100).toFixed(1)+'%)';
+  algSide();
+}
+// 侧栏"别的码怎么样"
+let algPeerDirty=true,algPeerAt=0;
+function algPeer(){
+  const A=ALGS[+tab.slice(1)];if(!A)return;
+  const pct=A.st.amt/A.n,mode=A.st.mode;
+  let rows='<table class="t"><tr><th class="l">码</th><th>完好</th><th>报错</th><th>悄悄错</th></tr>';
+  for(const B of ALGS){                       // 全程用临时缓冲，不碰 B.st
+    const cnt=Math.max(1,Math.round(B.n*pct)),T=B.n>500?8:30;
+    let ok=0,det=0,sil=0;
+    const data=new Uint8Array(B.k),cw=new Uint8Array(B.n),o=new Uint8Array(B.k);
+    for(let t=0;t<T;t++){
+      for(let i=0;i<B.k;i++)data[i]=RND()<0.5?1:0;
+      B.encode(data,cw);
+      const hit=new Uint8Array(B.n);
+      if(mode==='burst'){const s0=(RND()*B.n)|0;
+        for(let i=0;i<cnt;i++)hit[(s0+i)%B.n]=1;}
+      else{let left=cnt,g=0;
+        while(left>0&&g++<9999){const q=(RND()*B.n)|0;if(!hit[q]){hit[q]=1;left--;}}}
+      const rx=cw.slice();
+      for(let i=0;i<B.n;i++)if(hit[i])rx[i]^=1;
+      const res=B.decode(rx,o)||{};
+      let ne=0;for(let i=0;i<B.k;i++)if(o[i]!==data[i])ne++;
+      if(ne===0)ok++;else if(res.detected||res.fail)det++;else sil++;
+    }
+    rows+=`<tr${B===A?' style="background:#eef4fd"':''}><td class="l">${B.name.replace(/\s*[（(].*/,'')}</td>`+
+      `<td>${Math.round(ok/T*100)}%</td><td>${Math.round(det/T*100)}%</td>`+
+      `<td${sil?' style="color:#d03b3b"':''}>${Math.round(sil/T*100)}%</td></tr>`;
+  }
+  $('#algPeer').innerHTML=rows+'</table>'+
+    `<p style="color:var(--muted);font-size:12px">按同样的<b>比例</b>（${(pct*100).toFixed(1)}%）破坏，各跑几十次。</p>`;
+  algPeerDirty=false;
+}
+// ---------- 控件 ----------
+$('#aMode').onchange=e=>{const A=ALGS[+tab.slice(1)];A.st.mode=e.target.value;algRun(A,false);algSide();};
+$('#aAmt').oninput=e=>{const A=ALGS[+tab.slice(1)];A.st.amt=+e.target.value;
+  $('#aAmtT').textContent=A.st.amt+' 位 ('+(A.st.amt/A.n*100).toFixed(1)+'%)';
+  algRun(A,false);algSide();};
+$('#aNewData').onclick=()=>{const A=ALGS[+tab.slice(1)];algRun(A,true);algSide();};
+$('#aNewErr').onclick=()=>{const A=ALGS[+tab.slice(1)];algRun(A,false);algSide();};
+$('#gloss').innerHTML=[
+ ['比特 bit','一个 0 或 1。'],
+ ['信息位 / 码字','你真正想发的那些位 / 加上校验位之后实际发出去的整串。'],
+ ['码率 R','信息位 ÷ 码字长度。0.5 = 发 2 位才送出 1 位有用的，越高越省。'],
+ ['检错 / 纠错','只知道"坏了"（要求重发）/ 能自己修回来。'],
+ ['最小距离 d','任意两个合法码字之间最少差几位。能纠 (d−1)/2 个错。'],
+ ['症状 syndrome','把收到的串代进所有校验方程得到的那组答案，它指认错误的位置。'],
+ ['突发错 / 随机错','错误连成一片（划痕、雷击）/ 零散分布（热噪声）。'],
+ ['交织器','发之前打乱顺序、收到后还原，把一片连错变成零散错。'],
+ ['软判决','不把信号硬切成 0/1，保留"我有七成把握是 0"这种确信程度。'],
+ ['Eb/N0','每个信息比特花的能量 ÷ 噪声强度（dB）。比较不同码率的码时唯一公平的横轴。'],
+ ['香农极限','码率给定时，可靠传输所需的最低 Eb/N0。码率 1/2、BPSK 时是 0.19 dB。'],
+].map(([k,v])=>`<p style="margin:4px 0"><b>${k}</b> —— ${v}</p>`).join('');
+
+/* ================= 七码对比 ================= */
+const CMP={mode:'burst',pct:4,inter:false,dirty:true,changeAt:0,data:null};
+function cmpPerm(n,on){const p=new Int32Array(n);for(let i=0;i<n;i++)p[i]=i;
+  if(on)for(let i=n-1;i>0;i--){const j=(RND()*(i+1))|0;const t=p[i];p[i]=p[j];p[j]=t;}
+  return p;}
+function cmpRun(){
+  const out=[],src0=tblBits(),pp=CMP.pct/100;
+  for(const A of ALGS){
+    const T=A.n>500?8:6;
+    let ok=0,det=0,sil=0,nb=0;
+    for(let t=0;t<T;t++){
+      const r=thruChannel(A,CMP.inter?src0:src0,pp,CMP.mode,CMP.inter);
+      ok+=r.nOK;det+=r.nDet;sil+=r.nSil;nb+=r.nb;
+    }
+    out.push({ok:ok/nb,det:det/nb,sil:sil/nb,cnt:Math.max(1,Math.round(A.n*CMP.pct/100)),nb:nb/T});
+  }
+  CMP.data=out;
+  // 同一份口诀表，七个码各发一遍的账目
+  const src=tblBits(),p=CMP.pct/100,rows=[];
+  const raw=src.slice();let rf=0;
+  if(CMP.mode==='burst'){
+    const nB=Math.max(1,Math.round(p*src.length/BURST_LEN));
+    for(let t=0;t<nB;t++){const s0=(RND()*src.length)|0;
+      for(let i=0;i<BURST_LEN;i++){const q=(s0+i)%src.length;
+        if(raw[q]===src[q]){raw[q]^=1;rf++;}}}}
+  else for(let i=0;i<src.length;i++)if(RND()<p){raw[i]^=1;rf++;}
+  const w0=wrongCells(raw,null,1);
+  rows.push({name:'不编码，直接发',k:src.length,par:0,sent:src.length,flip:rf,resid:rf,
+    last:`错 ${w0.wrong} / 81 格`,lastCol:'#d03b3b'});
+  for(const A of ALGS){
+    const r=thruChannel(A,src,p,CMP.mode,CMP.inter),wc=wrongCells(r.out,r.dropped,A.k);
+    rows.push({name:A.name.replace(/\s*[（(].*/,''),k:src.length,par:r.sent-r.nb*A.k,sent:r.sent,
+      flip:r.flips,resid:r.nResid,
+      last:`错 ${wc.wrong} 格`+(wc.drop?`，${wc.drop} 格丢弃`:''),
+      lastCol:(wc.wrong||wc.drop)?'#d03b3b':'#0ca30c'});
+  }
+  CMP.table=rows;CMP.dirty=false;
+}
+// 码率 R 的码，在 BSC 上理论最多能扛多少错误率：1-H(p)=R
+function pMaxForRate(R){
+  let lo=0,hi=0.5;
+  for(let i=0;i<60;i++){const m=(lo+hi)/2;if(1-H2(m)>R)lo=m;else hi=m;}
+  return (lo+hi)/2;
+}
+// 把错误率一档档往上加，看每个码在哪一档开始救不回来
+const SW_GRID=(function(){const g=[];
+  for(let v=0.25;v<2;v+=0.25)g.push(v);
+  for(let v=2;v<=16.01;v+=0.5)g.push(v);
+  return g;})();
+function cmpSweep(){
+  const src=tblBits(),rows=[],L=src.length;
+  for(const A of ALGS){
+    let best=0;
+    for(const pc of SW_GRID){
+      const T=A.n>500?3:4;
+      let bad=0;
+      for(let t=0;t<T;t++){
+        const r=thruChannel(A,src,pc/100,'rand',false);
+        bad+=r.nResid+r.nDropBits;      // 没纠回来的，加上被丢弃（要重发）的
+      }
+      if(bad/(T*L)>0.002)break;         // 判据：567 位里平均错不到 1 位
+      best=pc;
+    }
+    const lim=pMaxForRate(A.rate)*100;
+    rows.push({name:A.name.replace(/\s*[（(].*/,''),rate:A.rate,
+      par:A.n-A.k,red:Math.round((A.n/A.k-1)*100),
+      hold:best,lim,gap:lim>0?best/lim:0,detectOnly:!!A.detectOnly});
+  }
+  CMP.sweep=rows;
+}
+function drawSweep(ctx,x,y,w){
+  const rows=CMP.sweep;
+  ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillStyle='#0b0b0b';ctx.font='bold 14px system-ui';
+  ctx.fillText('花同样的冗余，谁能扛更高的错误率？——把随机错误率一档档往上加，直到它救不回来',x,y);
+  y+=22;
+  ctx.font='12.5px system-ui';ctx.fillStyle='#898781';
+  ctx.fillText('"谁的校验位少"不能说明问题：码率不同，本来就不在一个量级上比。公平的问法是——给定码率，它离理论上限还有多远。',x,y);
+  ctx.fillText('判据：译码后 567 位里平均错不到 1 位（被丢弃、要求重发的也算没送到）。',x,y+17);
+  y+=42;
+  const cols=[{t:'',w:150,l:1},{t:'码率',w:62},{t:'多发',w:62},{t:'实测能扛到',w:96},
+    {t:'这个码率的理论上限',w:140},{t:'达成度',w:70},{t:'',w:230,l:1}];
+  let tw=0;cols.forEach(c=>tw+=c.w);
+  const sc=Math.min(1,(w-4)/tw),H=24;
+  let cx=x;
+  ctx.font='11.5px system-ui';ctx.fillStyle='#898781';ctx.textBaseline='middle';
+  cols.forEach(c=>{const cw=c.w*sc;ctx.textAlign=c.l?'left':'right';
+    ctx.fillText(c.t,c.l?cx:cx+cw-8,y+H/2);cx+=cw;});
+  ctx.strokeStyle='#dedcd4';ctx.beginPath();ctx.moveTo(x,y+H-.5);ctx.lineTo(x+tw*sc,y+H-.5);ctx.stroke();
+  const barW=200*sc;
+  rows.forEach((r,i)=>{
+    const yy=y+H+i*H,best=r.gap>=0.5;
+    if(best){ctx.fillStyle='rgba(27,175,122,.08)';ctx.fillRect(x-4,yy,tw*sc+8,H);}
+    const vals=[r.name,r.rate.toFixed(2),'+'+r.red+'%',
+      r.detectOnly?'—':r.hold.toFixed(2)+'%',
+      r.lim.toFixed(1)+'%',r.detectOnly?'—':Math.round(r.gap*100)+'%'];
+    let cx2=x;
+    cols.forEach((c,ci)=>{
+      const cw=c.w*sc;ctx.textAlign=c.l?'left':'right';
+      if(ci===6){                                   // 进度条：实测 / 上限
+        const bx=cx2+8,bh=11,by=yy+(H-bh)/2;
+        ctx.fillStyle='#eceae3';ctx.fillRect(bx,by,barW,bh);
+        ctx.fillStyle=r.gap>=0.5?'#1baf7a':(r.gap>=0.3?'#e0a92b':'#d03b3b');
+        ctx.fillRect(bx,by,Math.min(1,r.gap)*barW,bh);
+        ctx.strokeStyle='rgba(11,11,11,.15)';ctx.lineWidth=1;ctx.strokeRect(bx+.5,by+.5,barW,bh);
+        ctx.fillStyle='#898781';ctx.font='11px system-ui';ctx.textAlign='left';
+        ctx.fillText(r.detectOnly?'不纠错，只能要求重发':'',bx+barW+8,yy+H/2);
+      }else{
+        ctx.font=(ci===0?(best?'bold ':''):'')+'12px system-ui';
+        ctx.fillStyle=ci===3?(best?'#0ca30c':'#0b0b0b'):(ci===5?'#52514e':'#52514e');
+        if(ci===0)ctx.fillStyle='#0b0b0b';
+        ctx.fillText(vals[ci],c.l?cx2:cx2+cw-8,yy+H/2);
+      }
+      cx2+=cw;
+    });
+    ctx.strokeStyle='#f0efe9';ctx.beginPath();
+    ctx.moveTo(x,yy+H-.5);ctx.lineTo(x+tw*sc,yy+H-.5);ctx.stroke();
+  });
+  ctx.textBaseline='top';ctx.textAlign='left';
+  y+=H*(rows.length+1)+8;
+  ctx.font='12.5px system-ui';ctx.fillStyle='#52514e';
+  ctx.fillText('"理论上限"是香农给的：码率 R 的码，在每位错 p 的信道上想可靠传输，必须 1−H(p) ≥ R。'+
+    '绿色 = 达成度过半。',x,y);
+  ctx.fillStyle='#52514e';
+  ctx.fillText('看最后一列：LDPC 把冗余用到了理论上限的六成，卷积码四成，汉明码和重复码只有一成多。',x,y+20);
+  ctx.fillText('这就是"逼近香农极限"的意思 —— 不是错得少，是同样的冗余没被浪费。',x,y+38);
+  ctx.fillStyle='#898781';
+  ctx.fillText('（奇偶校验和 CRC 根本不纠错，任何错都只能要求重发，所以没有"扛到多少"这一说。）',x,y+60);
+  ctx.fillText('（卷积码在这个玩具里块太短：16 位数据要拖 6 位归零尾，码率被拖到 0.36；真实系统块长几千位、码率接近 0.5。）',x,y+78);
+  return H*(rows.length+1)+118;
+}
+function drawCmp(){
+  const {ctx,w,h}=fit($('#cLab'));
+  ctx.clearRect(0,0,w,h);
+  const x=26;let y=22;
+  ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillStyle='#0b0b0b';ctx.font='bold 15px system-ui';
+  const modeTxt=CMP.mode==='burst'?'连成一片的突发错':'到处乱撒的随机错';
+  ctx.fillText(`同样是「${modeTxt} ${CMP.pct}%」${CMP.inter?'（加了交织器）':''}，同一份数据各发几遍，按"块"统计结局`,x,y);
+  y+=30;
+  if(!CMP.data){ctx.fillStyle='#898781';ctx.font='13px system-ui';ctx.fillText('统计中…',x,y);return;}
+  const nameW=210,barW=Math.min(560,w-x-nameW-210),rowH=34;
+  ALGS.forEach((A,i)=>{
+    const yy=y+i*rowH,sv=CMP.data[i];
+    ctx.fillStyle='#0b0b0b';ctx.font='13px system-ui';
+    ctx.fillText(A.name,x,yy+1);
+    ctx.fillStyle='#898781';ctx.font='11.5px system-ui';
+    ctx.fillText(`n=${A.n} R=${A.rate.toFixed(2)} 每份切 ${Math.round(sv.nb)} 块`,x,yy+16);
+    let bx=x+nameW;
+    [[sv.ok,'#1baf7a'],[sv.det,'#e0a92b'],[sv.sil,'#d03b3b']].forEach(([v,col])=>{
+      if(v<=0)return;ctx.fillStyle=col;ctx.fillRect(bx,yy,v*barW,18);bx+=v*barW;});
+    ctx.strokeStyle='rgba(11,11,11,.12)';ctx.lineWidth=1;ctx.strokeRect(x+nameW+.5,yy+.5,barW,18);
+    ctx.fillStyle='#52514e';ctx.font='12px system-ui';
+    ctx.fillText(`完好 ${Math.round(sv.ok*100)}%`+
+      (sv.det>0?` · 报错 ${Math.round(sv.det*100)}%`:'')+
+      (sv.sil>0?` · 悄悄错 ${Math.round(sv.sil*100)}%`:''),x+nameW+barW+12,yy+2);
+  });
+  y+=ALGS.length*rowH+10;
+  ctx.font='12.5px system-ui';ctx.fillStyle='#52514e';
+  ctx.fillText('绿 = 完好无损　黄 = 知道自己错了，可以要求重发　红 = 输出了错数据还一声不吭（最危险）',x,y);
+  ctx.fillStyle='#898781';
+  ctx.fillText('七个码的码长和码率各不相同，这里比的是"同样比例的错误"。',x,y+18);
+  y+=44;
+  ctx.fillStyle='#0b0b0b';ctx.font='bold 14px system-ui';
+  ctx.fillText(`同一份 9×9 乘法口诀表（567 位数据），${modeTxt} ${CMP.pct}%`+
+    (CMP.mode==='burst'?`（每段连错 ${BURST_LEN} 位，撒在整条流上，不认块边界）`:'')+`，各发一遍的账目：`,x,y);
+  y+=24;
+  if(CMP.table)y+=statTable(ctx,x,y,w-2*x-10,CMP.table,'口诀表');
+  ctx.font='11.5px system-ui';ctx.fillStyle='#898781';
+  ctx.fillText('数据位都是 567；"校验位"是各码为纠错多付的冗余；"纠正后还错"是译码后仍与原文不同的位数。',x,y+4);
+  ctx.fillText('4% 这个档位其实"谁都能过"。要看出差别，要么把错误量往上拉，要么看下面这张表。',x,y+22);
+  y+=54;
+  if(CMP.sweep)drawSweep(ctx,x,y,w-2*x-10);
+  else{
+    ctx.fillStyle='#0b0b0b';ctx.font='bold 14px system-ui';
+    ctx.fillText('花同样的冗余，谁能扛更高的错误率？',x,y);
+    ctx.fillStyle='#898781';ctx.font='12.5px system-ui';
+    ctx.fillText('正在把随机错误率一档档往上加，量每个码的断崖在哪里……（约 1 秒）',x,y+24);}
+}
+function cmpDirty(){CMP.dirty=true;CMP.changeAt=performance.now();}
+$('#cMode').onchange=e=>{CMP.mode=e.target.value;cmpDirty();};
+$('#cAmt').oninput=e=>{CMP.pct=+e.target.value;$('#cAmtT').textContent=CMP.pct+'%';cmpDirty();};
+$('#cInter').onchange=e=>{CMP.inter=e.target.checked;cmpDirty();};
+$('#cRedo').onclick=()=>cmpDirty();
+$('#cSweep').onclick=()=>{CMP.sweep=null;CMP.swArmed=false;$('#cSwInfo').textContent='';};
+$('#cAmtT').textContent=CMP.pct+'%';
+$('#labTable').innerHTML='<table class="t"><tr><th class="l">码</th><th>n,k</th><th>R</th><th class="l">能纠</th></tr>'+
+  ALGS.map(A=>`<tr><td class="l">${A.name.replace(/\s*[（(].*/,'')}</td><td>${A.n},${A.k}</td>`+
+  `<td>${A.rate.toFixed(2)}</td><td class="l">${A.card.able}</td></tr>`).join('')+'</table>';
+ALGS.forEach(A=>algRun(A,true));
+algEnter();
+</script>
+
+
+<script>
+'use strict';
+/* ==================================================================
+   ② 纠一份看得懂的数据：乘法口诀表 / 一张图 —— 七个码都能跑
+   ================================================================== */
+const PAY={kind:'tbl',perr:3,dirty:true,res:null,lastW:0,lastH:0};
+function tblBits(){                          // 81 个乘积，每个 7 位
+  const b=new Uint8Array(81*7);
+  for(let i=0;i<81;i++){const v=((i/9|0)+1)*((i%9)+1);
+    for(let q=0;q<7;q++)b[i*7+q]=(v>>(6-q))&1;}
+  return b;
+}
+function payload(){
+  if(PAY.kind==='tbl')return tblBits();
+  const b=new Uint8Array(NPIX);b.set(srcBits);return b;
+}
+const BURST_LEN=6;                           // 一段连错的长度（划痕、雷击那种）
+function thruChannel(A,src,p,mode,inter){           // 全部编码 → 整条流过信道 → 逐块译码
+  const k=A.k,n=A.n,nb=Math.ceil(src.length/k),tot=nb*n;
+  const info=new Uint8Array(k),o=new Uint8Array(k);
+  const tx=new Uint8Array(tot),cwbuf=new Uint8Array(n);
+  const out=new Uint8Array(nb*k),dropped=new Uint8Array(nb);
+  let flips=0,nDrop=0,nBadBlk=0,nMiss=0,iters=0,nResid=0,nDropBits=0,nOK=0,nDet=0,nSil=0;
+  for(let b=0;b<nb;b++){
+    info.fill(0);
+    for(let i=0;i<k;i++){const q=b*k+i;if(q<src.length)info[i]=src[q];}
+    A.encode(info,cwbuf);
+    tx.set(cwbuf,b*n);
+  }
+  // 交织器：发之前把整条流的顺序打乱，收到后还原（把连错撒成散错）
+  let perm=null;
+  if(inter){
+    perm=new Int32Array(tot);for(let i=0;i<tot;i++)perm[i]=i;
+    for(let i=tot-1;i>0;i--){const j=(RND()*(i+1))|0;const t=perm[i];perm[i]=perm[j];perm[j]=t;}
+  }
+  const rxAll=tx.slice();
+  if(mode==='burst'){                          // 突发不认块边界：整条流上撒几段连错
+    const nB=Math.max(1,Math.round(p*tot/BURST_LEN));
+    for(let t=0;t<nB;t++){
+      const s0=(RND()*tot)|0;
+      for(let i=0;i<BURST_LEN;i++){const q0=(s0+i)%tot,q=perm?perm[q0]:q0;
+        if(rxAll[q]===tx[q]){rxAll[q]^=1;flips++;}}
+    }
+  }else for(let i=0;i<tot;i++)if(RND()<p){rxAll[i]^=1;flips++;}
+  for(let b=0;b<nb;b++){
+    const rx=rxAll.subarray(b*n,(b+1)*n);
+    const res=A.decode(rx,o)||{};
+    if(A.detectOnly&&res.detected){dropped[b]=1;nDrop++;}
+    if(res.hist)iters+=res.hist.length-1;
+    let bad=false;
+    for(let i=0;i<k;i++){
+      const q=b*k+i;out[q]=o[i];
+      if(q<src.length){
+        if(o[i]!==src[q]){bad=true;nResid++;}
+        if(dropped[b])nDropBits++;
+      }
+    }
+    if(bad){nBadBlk++;if(!dropped[b])nMiss++;}
+    const declared=(A.detectOnly&&res.detected)||(!A.detectOnly&&res.fail);
+    if(declared)nDet++;else if(bad)nSil++;else nOK++;
+  }
+  return {out,dropped,nb,flips,sent:tot,nDrop,nBadBlk,nMiss,iters,nResid,nDropBits,nOK,nDet,nSil};
+}
+function payRun(){
+  const A=ALGS[+tab.slice(1)];if(!A)return;
+  const src=payload(),p=PAY.perr/100;
+  const coded=thruChannel(A,src,p,'rand');
+  const raw=src.slice();let rawFlips=0;
+  for(let i=0;i<raw.length;i++)if(RND()<p){raw[i]^=1;rawFlips++;}
+  PAY.res={A,src,coded,raw,rawFlips,p};
+  PAY.dirty=true;
+  $('#pInfo').textContent=`${A.name.replace(/\s*[（(].*/,'')}：${src.length} 位载荷切成 `+
+    `${coded.nb} 块，实际发出 ${coded.sent} 位`;
+}
+function payEnter(){
+  $('#pKind').value=PAY.kind;$('#pErr').value=PAY.perr;$('#pErrT').textContent=PAY.perr+'%';
+  if(typeof algSide==='function')algSide();
+  $('#peerBox').style.display='none';
+  payRun();
+}
+// ---- 口诀表渲染 ----
+function prodOf(bits,i){let v=0;for(let q=0;q<7;q++)v=(v<<1)|(bits[i*7+q]||0);return v;}
+function drawTable(ctx,x0,y0,bits,dropped,k,title,w){
+  const cw=Math.min(84,(w-10)/9),chh=25;
+  ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillStyle='#0b0b0b';ctx.font='bold 12.5px system-ui';
+  let wrong=0,drop=0;
+  const cells=[];
+  for(let i=0;i<81;i++){
+    const a=(i/9|0)+1,b=(i%9)+1,real=a*b,got=prodOf(bits,i);
+    let dp=false;
+    if(dropped)for(let q=0;q<7;q++){const blk=((i*7+q)/k)|0;if(dropped[blk]){dp=true;break;}}
+    if(dp)drop++;else if(got!==real)wrong++;
+    cells.push({a,b,real,got,dp});
+  }
+  ctx.fillText(title,x0,y0);
+  ctx.font='12px system-ui';ctx.fillStyle=wrong?'#d03b3b':(drop?'#b07a1f':'#0ca30c');
+  ctx.fillText(wrong?`　错 ${wrong} 格`+(drop?`，另有 ${drop} 格所在的块被丢弃`:'')
+    :(drop?`　${drop} 格所在的块被丢弃（要求重发）`:'　81 格全对'),
+    x0+ctx.measureText(title).width+4,y0+1);
+  const ty=y0+19;
+  cells.forEach((c,i)=>{
+    const r=(i/9|0),col=i%9,x=x0+col*cw,y=ty+r*chh;
+    const bad=!c.dp&&c.got!==c.real;
+    ctx.fillStyle=c.dp?'#eceae3':(bad?'rgba(208,59,59,.13)':'#fff');
+    ctx.fillRect(x,y,cw-2,chh-2);
+    ctx.strokeStyle='rgba(11,11,11,.10)';ctx.lineWidth=1;ctx.strokeRect(x+.5,y+.5,cw-3,chh-3);
+    ctx.textBaseline='middle';ctx.textAlign='left';
+    if(c.dp){ctx.fillStyle='#898781';ctx.font='11.5px system-ui';
+      ctx.fillText(`${c.a}×${c.b}=?`,x+6,y+chh/2-1);}
+    else{
+      ctx.fillStyle=bad?'#d03b3b':'#0b0b0b';
+      ctx.font=(bad?'bold ':'')+'12px system-ui';
+      ctx.fillText(`${c.a}×${c.b}=${c.got}`,x+6,y+chh/2-1);
+      if(bad){const tw=ctx.measureText(`${c.a}×${c.b}=${c.got}`).width;
+        ctx.fillStyle='#898781';ctx.font='10.5px system-ui';
+        ctx.fillText('('+c.real+')',x+8+tw,y+chh/2);}
+    }
+  });
+  return 19+9*chh+10;
+}
+function drawImgPanel(ctx,x0,y0,bits,dropped,k,title,src){
+  ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillStyle='#0b0b0b';ctx.font='bold 12.5px system-ui';
+  let wrong=0;
+  for(let i=0;i<NPIX;i++)if(bits[i]!==src[i])wrong++;
+  ctx.fillText(title,x0,y0);
+  ctx.font='12px system-ui';ctx.fillStyle=wrong?'#d03b3b':'#0ca30c';
+  ctx.fillText(wrong?`　错 ${wrong} 个像素`:'　一个像素都没错',
+    x0+ctx.measureText(title).width+4,y0+1);
+  const px=3.4,y1=y0+20;
+  for(let i=0;i<NPIX;i++){
+    const r=(i/IMW|0),c=i%IMW;
+    const bad=bits[i]!==src[i];
+    ctx.fillStyle=bad?'#d03b3b':(bits[i]?'#1a1a1a':'#fcfcfb');
+    ctx.fillRect(x0+c*px,y1+r*px,px,px);
+  }
+  ctx.strokeStyle='#c3c2b7';ctx.lineWidth=1;ctx.strokeRect(x0-.5,y1-.5,IMW*px+1,IMH*px+1);
+  return 20+IMH*px+12;
+}
+// 把"表格 → 比特流 → 分块编码"这条链子画出来
+function smallBits(ctx,x,y,vals,cell,fill){
+  vals.forEach((b,i)=>{
+    const bx=x+i*(cell+1);
+    ctx.fillStyle=fill?fill(i,b):(b?C_I1:C_I0);
+    ctx.fillRect(bx,y,cell,cell+2);
+    ctx.strokeStyle='rgba(11,11,11,.14)';ctx.lineWidth=1;ctx.strokeRect(bx+.5,y+.5,cell-1,cell+1);
+    if(cell>=11){ctx.fillStyle=b?'#fff':'#52514e';ctx.font='10px system-ui';
+      ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(b,bx+cell/2,y+cell/2+1);
+      ctx.textAlign='left';ctx.textBaseline='top';}
+  });
+  return x+vals.length*(cell+1);
+}
+function drawEnc(ctx,x,y,w,A,R){
+  let yy=y;
+  ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillStyle='#0b0b0b';ctx.font='bold 12.5px system-ui';
+  ctx.fillText('这份数据是怎么变成比特、又怎么切块编码的',x,yy);yy+=21;
+  ctx.font='12.5px system-ui';ctx.fillStyle='#52514e';
+  if(PAY.kind==='tbl'){
+    ctx.fillText('① 只发答案：哪一格对应 a×b 收发双方都知道，所以只需要传 81 个乘积。'+
+      '最大的 81 < 128 = 2⁷，于是每个数固定用 7 位二进制装。',x,yy);yy+=21;
+    let sx=x+14;
+    for(const [a,b] of [[1,1],[7,8],[9,9]]){
+      const v=a*b,lab=`${a}×${b}=${v}`;
+      ctx.fillStyle='#0b0b0b';ctx.font='12.5px system-ui';
+      ctx.fillText(lab,sx,yy+2);
+      let bx=sx+ctx.measureText(lab).width+6;
+      ctx.fillStyle='#898781';ctx.fillText('→',bx,yy+2);bx+=15;
+      const bits=[];for(let q=0;q<7;q++)bits.push((v>>(6-q))&1);
+      sx=smallBits(ctx,bx,yy,bits,13)+30;
+    }
+    yy+=26;
+    ctx.fillStyle='#52514e';ctx.font='12.5px system-ui';
+    ctx.fillText('② 81 个数首尾接起来，就是一条 81×7 = 567 位的比特流：',x,yy);yy+=20;
+  }else{
+    ctx.fillText('① 每个像素 1 位（黑=1，白=0），从左上角一行行读下来：64×64 = 4096 位。',x,yy);yy+=21;
+    ctx.fillText('② 接成一条比特流：',x,yy);yy+=20;
+  }
+  // 比特流前若干位 + 分界线
+  const cell=11,room=Math.floor((w-270)/(cell+1)),N=Math.max(14,Math.min(PAY.kind==='tbl'?84:96,room));
+  const bits=[];for(let i=0;i<N;i++)bits.push(R.src[i]);
+  const bx0=x+14;
+  smallBits(ctx,bx0,yy,bits,cell);
+  const unit=PAY.kind==='tbl'?7:64;
+  ctx.strokeStyle='rgba(43,120,214,.55)';ctx.lineWidth=1;
+  for(let i=unit;i<N;i+=unit){const lx=bx0+i*(cell+1)-1.5;
+    ctx.beginPath();ctx.moveTo(lx,yy-3);ctx.lineTo(lx,yy+cell+5);ctx.stroke();}
+  ctx.fillStyle='#2a78d6';ctx.font='11.5px system-ui';
+  ctx.fillText(PAY.kind==='tbl'?'蓝线：每 7 位一个乘积（1×1=1 ／ 1×2=2 ／ 1×3=3 …）'
+                               :'蓝线：每 64 位一行像素',bx0+N*(cell+1)+10,yy+1);
+  yy+=cell+12;
+  // 分块
+  ctx.fillStyle='#52514e';ctx.font='12.5px system-ui';
+  ctx.fillText(`③ 这条比特流按${A.name.replace(/\s*[（(].*/,'')}的块长切开：每 ${A.k} 位数据一块，`+
+    `编成 ${A.n} 位码字，一共 ${R.coded.nb} 块，最后一块不够就补 0。`,x,yy);yy+=20;
+  smallBits(ctx,bx0,yy,bits,cell,(i,b)=>{
+    const blk=(i/A.k)|0;
+    return b?(blk%2?'#4a6180':C_I1):(blk%2?'#e7edf6':C_I0);
+  });
+  ctx.strokeStyle='#d03b3b';ctx.lineWidth=2;
+  let any=false;
+  for(let i=A.k;i<N;i+=A.k){const lx=bx0+i*(cell+1)-1.5;any=true;
+    ctx.beginPath();ctx.moveTo(lx,yy-4);ctx.lineTo(lx,yy+cell+6);ctx.stroke();}
+  ctx.fillStyle='#d03b3b';ctx.font='11.5px system-ui';
+  ctx.fillText(any?`红线：每 ${A.k} 位切一块（深浅交替就是相邻的两块）`
+                 :`这个码一块就有 ${A.k} 位，上面这 ${N} 位还全都在第 1 块里`,
+    bx0+N*(cell+1)+10,yy+1);
+  yy+=cell+14;
+  ctx.fillStyle='#898781';ctx.font='12px system-ui';
+  ctx.fillText(PAY.kind==='tbl'
+    ?'④ 收到后逐块译码，再把比特流每 7 位切回一个数，摆回 9×9 —— 所以只要有一位没纠回来，那一格的答案就会变成别的数字。'
+    :'④ 收到后逐块译码，再把比特流每 64 位摆成一行像素。',x,yy);
+  return yy+20-y;
+}
+// 一张"多少数据位 / 多少冗余位 / 错了多少 / 还剩多少"的账目表
+function statTable(ctx,x,y,w,rows,lastCol){
+  const cols=[{t:'',w:180,l:1},{t:'数据位',w:70},{t:'校验位',w:78},{t:'共发出',w:78},
+    {t:'路上翻错',w:82},{t:'纠正后还错',w:92},{t:lastCol,w:120}];
+  let tw=0;cols.forEach(c=>tw+=c.w);
+  const sc=Math.min(1,(w-4)/tw);
+  const H=23;
+  ctx.textBaseline='middle';
+  let cx=x;
+  ctx.font='11.5px system-ui';ctx.fillStyle='#898781';
+  cols.forEach(c=>{const cw2=c.w*sc;
+    ctx.textAlign=c.l?'left':'right';
+    ctx.fillText(c.t,c.l?cx:cx+cw2-8,y+H/2);cx+=cw2;});
+  ctx.strokeStyle='#dedcd4';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(x,y+H-.5);ctx.lineTo(x+tw*sc,y+H-.5);ctx.stroke();
+  rows.forEach((r,i)=>{
+    const yy=y+H+i*H;
+    if(r.hi){ctx.fillStyle='rgba(43,120,214,.07)';ctx.fillRect(x-4,yy,tw*sc+8,H);}
+    const vals=[r.name,r.k,r.par?'+'+r.par:'0',r.sent,r.flip,r.resid,r.last];
+    let cx2=x;
+    cols.forEach((c,ci)=>{
+      const cw2=c.w*sc;
+      ctx.textAlign=c.l?'left':'right';
+      if(ci===0){ctx.font=(r.hi?'bold ':'')+'12px system-ui';ctx.fillStyle='#0b0b0b';}
+      else if(ci===5){ctx.font='bold 12px system-ui';
+        ctx.fillStyle=r.resid?'#d03b3b':'#0ca30c';}
+      else if(ci===6){ctx.font='12px system-ui';ctx.fillStyle=r.lastCol||'#52514e';}
+      else{ctx.font='12px system-ui';ctx.fillStyle='#52514e';}
+      ctx.fillText(vals[ci],c.l?cx2:cx2+cw2-8,yy+H/2);cx2+=cw2;
+    });
+    ctx.strokeStyle='#f0efe9';ctx.beginPath();
+    ctx.moveTo(x,yy+H-.5);ctx.lineTo(x+tw*sc,yy+H-.5);ctx.stroke();
+  });
+  ctx.textBaseline='top';ctx.textAlign='left';
+  return H*(rows.length+1)+6;
+}
+function wrongCells(bits,dropped,k){
+  let wrong=0,drop=0;
+  for(let i=0;i<81;i++){
+    let dp=false;
+    if(dropped)for(let q=0;q<7;q++){if(dropped[((i*7+q)/k)|0]){dp=true;break;}}
+    if(dp){drop++;continue;}
+    let v=0;for(let q=0;q<7;q++)v=(v<<1)|(bits[i*7+q]||0);
+    if(v!==((i/9|0)+1)*((i%9)+1))wrong++;
+  }
+  return {wrong,drop};
+}
+function wrongPix(bits,src){let n=0;for(let i=0;i<NPIX;i++)if(bits[i]!==src[i])n++;return n;}
+function drawPay(){
+  const cv=$('#cPay'),R=PAY.res;
+  if(!R)return;
+  const wantH=PAY.kind==='tbl'?830:540;
+  if(cv.style.height!==wantH+'px'){cv.style.height=wantH+'px';PAY.dirty=true;}
+  const r=cv.getBoundingClientRect();
+  if(r.width!==PAY.lastW||r.height!==PAY.lastH){PAY.lastW=r.width;PAY.lastH=r.height;PAY.dirty=true;}
+  if(!PAY.dirty)return;
+  PAY.dirty=false;
+  const {ctx,w,h}=fit(cv);
+  ctx.clearRect(0,0,w,h);
+  const A=R.A,x=22;let y=16;
+  ctx.textAlign='left';ctx.textBaseline='top';
+  ctx.fillStyle='#0b0b0b';ctx.font='13px system-ui';
+  const what=PAY.kind==='tbl'?'一张 9×9 乘法口诀表（81 个乘积，每个 7 位，共 567 位）'
+                             :'一张 64×64 的黑白图（4096 位）';
+  ctx.fillText(`要传的东西：${what}　信道每位有 ${PAY.perr}% 的概率被翻`,x,y);y+=20;
+  ctx.fillStyle='#898781';ctx.font='12.5px system-ui';
+  ctx.fillText(`用 ${A.name} 编码：切成 ${R.coded.nb} 块，每块 ${A.k} 位数据 → ${A.n} 位码字`,x,y);y+=22;
+  // 账目表
+  const tbl=PAY.kind==='tbl',L=R.src.length;
+  const w0=tbl?wrongCells(R.raw,null,1):null, w1=tbl?wrongCells(R.coded.out,R.coded.dropped,A.k):null;
+  const pad=R.coded.nb*A.k-L;
+  const lastA=tbl?`错 ${w0.wrong} / 81 格`:`错 ${wrongPix(R.raw,R.src)} 像素`;
+  let lastB=tbl?`错 ${w1.wrong} / 81 格`:`错 ${wrongPix(R.coded.out,R.src)} 像素`;
+  if(w1&&w1.drop)lastB+=`，${w1.drop} 格丢弃`;
+  y+=statTable(ctx,x,y,w-2*x,[
+    {name:'不编码，直接发',k:L,par:0,sent:L,flip:R.rawFlips,resid:R.rawFlips,last:lastA,
+     lastCol:'#d03b3b'},
+    {name:A.name.replace(/\s*[（(].*/,''),k:L,par:R.coded.sent-R.coded.nb*A.k,sent:R.coded.sent,
+     flip:R.coded.flips,resid:R.coded.nResid,last:lastB,hi:true,
+     lastCol:(w1&&(w1.wrong||w1.drop))||(!tbl&&wrongPix(R.coded.out,R.src))?'#d03b3b':'#0ca30c'}
+  ],tbl?'口诀表':'图')+2;
+  ctx.font='11.5px system-ui';ctx.fillStyle='#898781';
+  ctx.fillText(`（"校验位"就是为纠错多花的冗余：多发 ${Math.round((R.coded.sent/L-1)*100)}%`+
+    (pad?`；末块还补了 ${pad} 位 0`:'')+`。"纠正后还错"是译码之后仍然与原文不同的位数。）`,x,y);y+=20;
+  y+=drawEnc(ctx,x,y,w-2*x,A,R)+4;
+  ctx.strokeStyle='#e1e0d9';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(w-x,y);ctx.stroke();y+=12;
+  if(PAY.kind==='tbl'){
+    y+=drawTable(ctx,x,y,R.raw,null,1,`① 不编码，直接发 567 位（路上翻了 ${R.rawFlips} 位）：`,w-2*x);
+    y+=6;
+    y+=drawTable(ctx,x,y,R.coded.out,R.coded.dropped,A.k,`② 用${A.name.replace(/\s*[（(].*/,'')}编码后再发：`,w-2*x);
+  }else{
+    const half=(w-2*x)/2;
+    drawImgPanel(ctx,x,y,R.raw,null,1,`① 不编码直接发（翻了 ${R.rawFlips} 位）：`,R.src);
+    drawImgPanel(ctx,x+half,y,R.coded.out,R.coded.dropped,A.k,
+      `② 用${A.name.replace(/\s*[（(].*/,'')}：`,R.src);
+    y+=20+IMH*3.4+14;
+  }
+  ctx.font='12.5px system-ui';ctx.textAlign='left';
+  if(A.detectOnly){
+    ctx.fillStyle='#b07a1f';
+    ctx.fillText(`它不会修任何东西：${R.coded.nb} 块里有 ${R.coded.nDrop} 块被判定"坏了"直接丢弃（灰格，现实中会要求重发）`+
+      (R.coded.nMiss?`；另有 ${R.coded.nMiss} 块坏了却没被发现，错数据就这么进来了。`:'；没有一块漏检。'),x,y);
+  }else{
+    ctx.fillStyle=R.coded.nBadBlk?'#d03b3b':'#0ca30c';
+    ctx.fillText(R.coded.nBadBlk
+      ?`${R.coded.nb} 块里有 ${R.coded.nBadBlk} 块没救回来 —— 这几块里的错误超出了它每块能纠的上限。`
+      :`${R.coded.nb} 块全部救回，一个错都没剩。`,x,y);
+  }
+  ctx.fillStyle='#898781';
+  ctx.fillText('慢慢把翻转概率拉大，看哪个码先崩 —— 这就是各个码"扛造程度"的直观比较。',x,y+20);
+}
+// 首屏也要按 applyTab 渲染一次（子视图按钮是它生成的）
+applyTab();
+
+$('#pKind').onchange=e=>{PAY.kind=e.target.value;payRun();};
+$('#pErr').oninput=e=>{PAY.perr=+e.target.value;$('#pErrT').textContent=PAY.perr+'%';payRun();};
+$('#pRedo').onclick=()=>payRun();
+</script>
+
+</body>
+</html>
