@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>各种 PO 到底差在哪 —— 采样 & loss 演示</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #1d2330; --muted: #6b7385; --line: #e3e6ec;
+    --blue: #2f6fed; --green: #1f9d55; --red: #d64545; --amber: #c98a06; --purple: #7a4cd9;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.6 -apple-system, "PingFang SC", "Hiragino Sans", "Segoe UI", sans-serif; }
+  header { padding: 22px 32px 8px; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  nav { display: flex; gap: 6px; padding: 12px 32px; flex-wrap: wrap; position: sticky; top: 0;
+    background: var(--bg); z-index: 10; border-bottom: 1px solid var(--line); }
+  nav button { border: 1px solid var(--line); background: var(--card); padding: 6px 14px; border-radius: 18px;
+    cursor: pointer; font-size: 14px; color: var(--ink); }
+  nav button small { color: var(--muted); margin-left: 4px; }
+  nav button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  nav button.on small { color: #c9cfdb; }
+  main { padding: 18px 32px 60px; max-width: 1280px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 10px; font-size: 17px; }
+  .card h3 { margin: 14px 0 6px; font-size: 15px; }
+  .lead { font-size: 15px; margin: 0 0 6px; }
+  .muted { color: var(--muted); }
+  .controls { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .controls label { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .controls input[type=range] { width: 120px; }
+  .controls b { color: var(--ink); font-family: var(--mono); min-width: 34px; display: inline-block; }
+  .btn { border: 1px solid var(--blue); color: var(--blue); background: #fff; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+  .btn:hover { background: #eef3fe; }
+  .btn.warn { border-color: var(--amber); color: var(--amber); }
+
+  /* 采样舞台 */
+  .stage { display: grid; grid-template-columns: 190px 170px 1fr; gap: 16px; align-items: start; }
+  .prompt { border: 2px dashed var(--blue); border-radius: 10px; padding: 12px; text-align: center; }
+  .prompt .q { font-size: 20px; font-weight: 600; }
+  .models { display: flex; flex-direction: column; gap: 6px; }
+  .model { border-radius: 8px; padding: 6px 10px; font-size: 13px; border: 1px solid var(--line); background: #fafbfc; color: #aab0bd; }
+  .model.live { background: #eef3fe; border-color: var(--blue); color: var(--ink); }
+  .model.live::before { content: "● "; color: var(--blue); }
+  .model.off::before { content: "○ "; }
+  .model.off { text-decoration: line-through; }
+  .resps { display: flex; flex-direction: column; gap: 8px; }
+  .resp { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line);
+    cursor: pointer; position: relative; min-height: 40px; }
+  .resp:hover { border-color: #b8c3d9; }
+  .resp.sel { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+  .resp.dropped { opacity: .35; }
+  .resp.dropped::after { content: "零方差组 → 丢弃重采"; position: absolute; right: 10px; color: var(--red); font-weight: 600; }
+  .rid { font-family: var(--mono); color: var(--muted); width: 22px; }
+  .toks { display: flex; flex-wrap: wrap; gap: 3px; flex: 1; }
+  .tok { font-family: "Hiragino Sans", var(--mono); padding: 2px 6px; border-radius: 5px; background: #f0f2f6;
+    border: 1px solid transparent; font-size: 14px; position: relative; animation: pop .18s ease-out; }
+  .tok sub { font-size: 10px; color: var(--muted); margin-left: 2px; font-family: var(--mono); }
+  .tok.zero { background: repeating-linear-gradient(45deg, #eceef2, #eceef2 4px, #f8f9fb 4px, #f8f9fb 8px); color: #8a91a0; }
+  .tok.rare { border-color: var(--purple); }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+  .score { font-family: var(--mono); font-weight: 700; min-width: 64px; text-align: right; animation: stamp .3s ease-out; }
+  .score.good { color: var(--green); } .score.bad { color: var(--red); }
+  @keyframes stamp { from { transform: scale(2.2) rotate(-12deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  .tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #f3eefe; color: var(--purple); white-space: nowrap; }
+  .note { background: #fff8e6; border-left: 3px solid var(--amber); padding: 8px 12px; border-radius: 4px; margin: 10px 0; }
+  .key { background: #eef8f1; border-left: 3px solid var(--green); padding: 8px 12px; border-radius: 4px; margin: 10px 0; }
+
+  /* 公式 */
+  .formula { font-family: "Times New Roman", serif; font-size: 18px; background: #f8f9fb; border-radius: 8px; padding: 10px 14px;
+    overflow-x: auto; white-space: nowrap; margin: 8px 0; }
+  .formula i { font-style: italic; }
+  .hl1 { background: #ffe9a8; border-radius: 3px; padding: 0 2px; }
+  .hl2 { background: #d6e6ff; border-radius: 3px; padding: 0 2px; }
+  .hl3 { background: #ffd6d6; border-radius: 3px; padding: 0 2px; }
+  .steps { counter-reset: s; padding-left: 0; list-style: none; margin: 6px 0; }
+  .steps li { counter-increment: s; margin: 4px 0; padding-left: 28px; position: relative; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 1px; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--ink); color: #fff; font-size: 12px; text-align: center; line-height: 20px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0; }
+  th, td { border-bottom: 1px solid var(--line); padding: 5px 8px; text-align: right; font-family: var(--mono); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; background: #fafbfc; font-family: inherit; }
+  td.l, th.l { text-align: left; }
+  td.pos { color: var(--green); } td.neg { color: var(--red); } td.z { color: #a0a6b2; }
+  tr.clipped td { background: #f6f6f8; }
+  .bar { display: inline-block; height: 10px; border-radius: 2px; vertical-align: middle; }
+  .bigloss { font-size: 22px; font-family: var(--mono); font-weight: 700; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; margin: 4px 0 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 4px; vertical-align: -2px; background: var(--c); }
+  canvas { width: 100%; background: #fafbfc; border-radius: 8px; }
+  .timeline { display: flex; gap: 0; overflow-x: auto; padding: 8px 0; }
+  .tl { min-width: 150px; border-top: 3px solid var(--line); padding: 8px 10px 0; position: relative; cursor: pointer; }
+  .tl::before { content: ""; position: absolute; top: -8px; left: 10px; width: 13px; height: 13px; border-radius: 50%; background: var(--c, #999); }
+  .tl b { display: block; } .tl span { font-size: 12px; color: var(--muted); }
+  .btn.solid { background: var(--blue); color: #fff; }
+  .pipe { display: flex; align-items: stretch; gap: 4px; flex-wrap: wrap; }
+  .comp { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-width: 110px; background: #fafbfc; transition: all .2s; }
+  .comp b { display: block; font-size: 14px; } .comp span { font-size: 12px; color: var(--muted); }
+  .comp.unused { opacity: .35; text-decoration: line-through; }
+  .comp.active { background: var(--blue); border-color: var(--blue); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(47,111,237,.3); }
+  .comp.active b, .comp.active span { color: #fff; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; }
+  .step { border-left: 4px solid var(--line); } .step.cur { border-left-color: var(--blue); animation: pop .25s ease-out; }
+  .sn { display: inline-block; width: 24px; height: 24px; border-radius: 50%; background: var(--ink); color: #fff; text-align: center; line-height: 24px; font-size: 13px; margin-right: 8px; }
+  .ctag { font-size: 12px; font-weight: 400; background: #eef3fe; color: var(--blue); padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+  .mats { display: flex; flex-wrap: wrap; gap: 14px; }
+  .matwrap { overflow-x: auto; }
+  .matlabel { font-size: 13px; font-weight: 600; margin-bottom: 2px; } .shape { font-family: var(--mono); color: var(--purple); font-weight: 400; font-size: 12px; }
+  table.mat { width: auto; font-size: 11px; } table.mat th, table.mat td { padding: 2px 4px; border: 1px solid #fff; text-align: center; }
+  table.mat th { background: none; color: var(--muted); font-family: var(--mono); }
+  td.mc { min-width: 38px; font-family: "Hiragino Sans", var(--mono); }
+  td.pad { background: #eceef2; color: #b8bdc7; font-size: 10px; }
+  td.dead { background: repeating-linear-gradient(45deg, #e6e8ec, #e6e8ec 3px, #f8f9fb 3px, #f8f9fb 6px); color: #9aa0ab; }
+  table.ftab th { width: 190px; vertical-align: top; white-space: normal; background: #fafbfc; }
+  table.ftab td.fx { white-space: normal; font-family: inherit; overflow-x: auto; max-width: 900px; }
+  .ctag a { color: inherit; text-decoration: none; }
+  .gp { opacity: 0; animation: gpfade .45s ease forwards; }
+  @keyframes gpfade { to { opacity: 1; } }
+  table.wrap td, table.wrap th { white-space: normal; }
+  tr.gstart td, tr.gstart th { border-top: 2px solid #1d2330 !important; }
+  th.tstep { background: #e8f0fe !important; color: #2f6fed !important; font-weight: 700; }
+  th.tidx { color: #b8bdc7 !important; }
+  td.gcell { background: #fff8e6; font-weight: 700; vertical-align: middle; text-align: center; }
+  table.rt { width: auto; min-width: 520px; }
+  .nocard h2 { color: #8a91a0; } .nocard { background: #fafbfc; }
+  .mode { border-radius: 10px; padding: 10px 14px; margin: 10px 0; background: #f4f6fb; }
+  .mode-multi { background: #eef3fe; } .mode-dpo { background: #fff8e6; }
+  .mode p { margin: 6px 0 0; }
+  .mpic { font-size: 14px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; color: #6b7385; }
+  .mtok { display: inline-block; background: #fff; border: 1px solid #d5d9e2; border-radius: 5px; padding: 2px 8px; color: #1d2330; margin: 0 2px; }
+  .mtok sub { color: #2f6fed; margin-left: 3px; }
+  .marr { color: #2f6fed; font-weight: 700; }
+  .mbox { border: 2px solid #1f9d55; border-radius: 8px; padding: 3px 6px; display: inline-flex; align-items: center; gap: 2px; }
+  .mbox.bad { border-color: #d64545; }
+  .mbox em { font-style: normal; font-size: 12px; color: #1f9d55; margin-left: 6px; font-weight: 700; }
+  .mbox.bad em { color: #d64545; }
+  .subnav { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
+  .subnav button { border: 1px solid var(--line); background: var(--card); padding: 5px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--ink); }
+  .subnav button small { color: var(--muted); margin-left: 4px; }
+  .subnav button.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .subnav button.on small { color: #dbe6ff; }
+  td.tail { font-weight: 700; background: #fff8e6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>LLM-RL 算法</h1>
+  <p>PPO / DPO / GRPO / Dr.GRPO / DAPO / GSPO / CISPO / Kimi MD：族谱、训练架构，以及在同一批数据上逐步计算。所有数字都是页面里现算的玩具数据，可以拖滑块、重新采样。</p>
+</header>
+<nav id="nav"></nav>
+<main id="main"></main>
+
+<script>
+// ============================================================
+// 玩具世界: 一道题 + 回答池. 策略按 p 采样; 每个 token 的旧概率由哈希固定
+// ============================================================
+const PROMPT = "中国的首都是哪里？";
+const REWARD_RULE = "规则奖励：用中文答出「北京」→ 1，否则 → 0";
+const POOL = [
+  { id: "A", toks: ["是", "北京", "。"], r: 1, p: 0.22, rm: 0.86 },
+  { id: "B", toks: ["中国", "的", "首都", "是", "北京", "。"], r: 1, p: 0.18, rm: 0.92 },
+  { id: "C", toks: ["The", "capital", "is", "Beijing", "."], r: 0, p: 0.15, tag: "答成英文", rm: 0.35 },
+  { id: "D", toks: ["抱歉", "，", "我", "无法", "回答", "这个", "问题", "。"], r: 0, p: 0.13, tag: "乱拒答", rm: 0.12 },
+  { id: "E", toks: ["嗯", "，", "等等", "…", "是", "北京", "吧", "。"], r: 1, p: 0.1, tag: "先犹豫后答对", rare: [2], rm: 0.71 },
+  { id: "F", toks: ["是", "上海", "。"], r: 0, p: 0.12, tag: "答错", rm: 0.08 },
+  { id: "G", toks: ["中国", "的", "首都", "嘛", "，", "历史", "上", "换过", "很多", "，", "比如", "南京", "，", "现在", "是", "…", "上海", "。"],
+    r: 0, p: 0.1, tag: "又长又错", rm: 0.15 },
+];
+
+function hash(s) { // 字符串 → [0,1)
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15;
+  return (h >>> 0) / 4294967296;
+}
+function rng(seed) { // mulberry32
+  return function () {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+const std = a => { const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) ** 2))); };
+const sigmoid = x => 1 / (1 + Math.exp(-x));
+const f = (x, d = 3) => (x === undefined || Number.isNaN(x)) ? "—" : (x >= 0 ? " " : "") + x.toFixed(d);
+const cls = x => Math.abs(x) < 1e-9 ? "z" : x > 0 ? "pos" : "neg";
+
+function makeResp(item, inst) {
+  return {
+    ...item, inst,
+    toks: item.toks.map((t, i) => {
+      const isRare = (item.rare || []).includes(i);
+      const p = isRare ? 0.03 + 0.03 * hash(item.id + i + "p") : 0.55 + 0.44 * hash(item.id + i + "p");
+      const oldLp = Math.log(p);
+      const refLp = Math.min(-0.0005, oldLp + (hash(item.id + i + "ref") - 0.5) * 0.3);
+      return { t, i, oldLp, refLp, rare: isRare };
+    }),
+  };
+}
+function sampleGroup(G, seed, opts = {}) {
+  const R = rng(seed);
+  const pool = opts.pool || POOL;
+  const tot = pool.reduce((s, x) => s + x.p, 0);
+  const out = [];
+  for (let g = 0; g < G; g++) {
+    let u = R() * tot, k = 0;
+    while (u > pool[k].p && k < pool.length - 1) { u -= pool[k].p; k++; }
+    out.push(makeResp(pool[k], g));
+  }
+  if (opts.forceE && !out.some(x => x.id === "E")) out[out.length - 1] = makeResp(POOL[4], G - 1);
+  return out;
+}
+// 模拟"已经做过几个 mini-batch 更新": 新 logp = 旧 logp + 漂移.
+// 优势为正的 token 概率被推高, 为负被压低; 低概率 token 相对变化最大 (现实里也是它们的 ratio 最容易爆).
+function drift(tok, A, amount, key) {
+  const h1 = hash(key + "d1"), h2 = hash(key + "d2");
+  let d = Math.sign(A) * (0.12 + 0.3 * h1) + (h2 - 0.5) * 0.25;
+  if (tok.rare && A > 0) d *= 5;
+  return Math.min(-0.0005, tok.oldLp + amount * d);
+}
+
+// ============================================================
+// 状态与通用控件
+// ============================================================
+const S = {
+  algo: "overview", seed: 7, G: 4, drift: 0.6, eps: 0.2, beta: 0.04, epsSeq: 0.15, dpoBeta: 0.1, palgo: "grpo", tau: 0.2, calcAlgo: "ppo",
+  sel: 0, outlier: false, forceSame: false, forceE: false, animToken: 0,
+  dpo: null,
+};
+const TABS = [
+  { k: "overview", n: "总览", s: "族谱" },
+  { k: "arch", n: "🏗 训练架构", s: "部署 + 数据流" },
+  { k: "calc", n: "🧮 计算示例", s: "一批数据逐步算" },
+];
+const ALGOS = [
+  { k: "ppo", n: "PPO", s: "2017 基础" },
+  { k: "dpo", n: "DPO", s: "离线对比" },
+  { k: "grpo", n: "GRPO", s: "组内比较" },
+  { k: "drgrpo", n: "Dr.GRPO", s: "去长度偏" },
+  { k: "dapo", n: "DAPO", s: "四个补丁" },
+  { k: "gspo", n: "GSPO", s: "整句 ratio" },
+  { k: "cispo", n: "CISPO", s: "裁权重不裁梯度" },
+  { k: "kimi", n: "Kimi MD", s: "KL 当信任域" },
+];
+function nav() {
+  document.getElementById("nav").innerHTML = TABS.map(a =>
+    `<button class="${S.algo === a.k ? "on" : ""}" onclick="go('${a.k}')">${a.n}<small>${a.s}</small></button>`).join("");
+}
+// go(tab) 切大 tab; go(算法名) 进「计算示例」并选中该算法 (总览族谱里的点击用)
+function go(k) {
+  if (ALGOS.some(a => a.k === k)) { S.calcAlgo = k; k = "calc"; }
+  S.algo = k; S.sel = 0; S.outlier = false; S.forceSame = false; render(true); window.scrollTo(0, 0);
+}
+function set(k, v) { S[k] = v; render(false); }
+function reseed() { S.seed = Math.floor(Math.random() * 1e6); S.sel = 0; render(true); }
+function slider(label, key, min, max, step, hint = "") {
+  return `<label title="${hint}">${label}<input type="range" min="${min}" max="${max}" step="${step}" value="${S[key]}"
+    oninput="set('${key}', +this.value)"><b>${S[key]}</b></label>`;
+}
+const models = list => `<div class="models">${[
+  ["policy", "策略 π<sub>θ</sub>（在训的）"], ["old", "旧策略 π<sub>old</sub>（负责采样）"], ["ref", "参考 π<sub>ref</sub>（KL 锚点）"],
+  ["rm", "奖励模型 / 规则"], ["critic", "Critic V(s)（价值网络）"], ["data", "现成偏好数据集"],
+].map(([k, n]) => `<div class="model ${list.includes(k) ? "live" : "off"}">${n}</div>`).join("")}</div>`;
+const promptCard = (extra = "") => `<div class="prompt"><div class="muted">prompt</div><div class="q">${PROMPT}</div>${extra}</div>`;
+
+// 采样动画: token 一个个蹦出来, 然后盖奖励章
+async function animate(token) {
+  const rows = [...document.querySelectorAll(".resp[data-anim]")];
+  rows.forEach(r => { r.querySelectorAll(".tok,.score,.tag").forEach(e => e.style.visibility = "hidden"); });
+  const maxLen = Math.max(0, ...rows.map(r => r.querySelectorAll(".tok").length));
+  for (let t = 0; t < maxLen; t++) {
+    await new Promise(r => setTimeout(r, 70));
+    if (token !== S.animToken) return;
+    rows.forEach(r => { const k = r.querySelectorAll(".tok")[t]; if (k) { k.style.visibility = "visible"; k.style.animation = "none"; k.offsetWidth; k.style.animation = ""; } });
+  }
+  for (const r of rows) {
+    await new Promise(res => setTimeout(res, 140));
+    if (token !== S.animToken) return;
+    r.querySelectorAll(".score,.tag").forEach(e => { e.style.visibility = "visible"; e.style.animation = "none"; e.offsetWidth; e.style.animation = ""; });
+  }
+}
+
+// token 热力图: 颜色 = 这一步对 log π(token) 的梯度系数 (绿=推高概率, 红=压低, 斜纹=被裁掉梯度为 0)
+function heat(w, maxAbs) {
+  if (w === null) return "";
+  if (Math.abs(w) < 1e-12) return "";
+  const a = clamp(Math.abs(w) / (maxAbs || 1), 0.08, 1);
+  return w > 0 ? `background: rgba(31,157,85,${a * 0.75}); color:${a > 0.55 ? "#fff" : "inherit"}`
+               : `background: rgba(214,69,69,${a * 0.75}); color:${a > 0.55 ? "#fff" : "inherit"}`;
+}
+function respRow(resp, i, opt = {}) {
+  const maxAbs = opt.maxAbs || 1;
+  const toks = resp.toks.map((t, j) => {
+    const w = opt.weights ? opt.weights[j] : null;
+    const zero = opt.weights && opt.zeroMask && opt.zeroMask[j];
+    const sub = opt.sub ? `<sub>${opt.sub(t, j)}</sub>` : "";
+    return `<span class="tok ${zero ? "zero" : ""} ${t.rare ? "rare" : ""}" style="${zero ? "" : heat(w, maxAbs)}"
+      title="旧概率 ${Math.exp(t.oldLp).toFixed(3)}">${t.t}${sub}</span>`;
+  }).join("");
+  const sc = opt.score !== undefined ? opt.score : resp.r;
+  const scoreCls = sc > 0.5 ? "good" : "bad";
+  return `<div class="resp ${S.sel === i ? "sel" : ""} ${opt.dropped ? "dropped" : ""}" ${opt.anim ? "data-anim" : ""}
+      onclick="${opt.noSel ? "" : `set('sel', ${i})`}">
+    <span class="rid">${opt.label || ("o" + (i + 1))}</span><div class="toks">${toks}</div>
+    ${resp.tag ? `<span class="tag">${resp.tag}</span>` : ""}
+    <span class="score ${scoreCls}">${opt.scoreText || ("r=" + sc)}</span></div>`;
+}
+const legend = `<div class="legend"><span style="--c:rgba(31,157,85,.7)">推高这个 token 的概率</span>
+  <span style="--c:rgba(214,69,69,.7)">压低这个 token 的概率</span>
+  <span style="--c:repeating-linear-gradient(45deg,#ddd,#ddd 3px,#fff 3px,#fff 6px)">被裁剪，梯度 = 0</span>
+  <span style="--c:#fff;border:1px solid #7a4cd9">紫框 = 采样时概率很低的 token</span>
+  <span>颜色深浅 = 梯度系数大小；点击某行看逐 token 明细</span></div>`;
+
+// 通用: 组内方法的逐 token 计算 (GRPO / Dr.GRPO / DAPO / CISPO 共用, 差别通过 cfg 传入)
+function groupCompute(group, cfg) {
+  const rewards = group.map(cfg.reward || (g => g.r));
+  const m = mean(rewards), sd = std(rewards);
+  const totalTok = group.reduce((s, g) => s + g.toks.length, 0);
+  const rows = group.map((g, i) => {
+    const R = rewards[i];
+    const A = cfg.adv(R, m, sd);
+    const L = g.toks.length;
+    const norm = cfg.norm(L, totalTok, group.length);
+    const toks = g.toks.map((t, j) => {
+      let newLp = drift(t, A, S.drift, g.id + j + S.seed);
+      if (S.outlier && i === 0 && j === Math.floor(L / 2)) newLp = Math.min(-0.0005, t.oldLp + Math.log(A >= 0 ? 4 : 0.25));
+      const ratio = Math.exp(newLp - t.oldLp);
+      const lo = 1 - cfg.epsLow, hi = 1 + cfg.epsHigh;
+      const clipped = clamp(ratio, lo, hi);
+      const active = !((A > 0 && ratio > hi) || (A < 0 && ratio < lo));
+      const surr = Math.min(ratio * A, clipped * A);
+      const x = t.refLp - newLp, kl = Math.exp(x) - x - 1; // k3 估计
+      const obj = surr - (cfg.beta || 0) * kl;
+      const w = (active ? ratio * A : 0) * norm;
+      return { ...t, newLp, ratio, clipped, active, surr, kl, obj, w };
+    });
+    return { g, R, A, L, norm, toks };
+  });
+  return { rows, rewards, m, sd, totalTok };
+}
+
+// ============================================================
+// 各页
+// ============================================================
+const PAGES = {};
+
+PAGES.overview = () => `
+<div class="card"><h2>一张图看懂族谱</h2>
+<p class="lead">所有方法都在回答同一个问题：<b>模型生成的某段话，该把它的概率推高还是压低，推多少？</b>区别只在三件事上：</p>
+<ol class="steps">
+  <li><b>数据从哪来</b>：训练时现场生成（在线）还是用现成的成对数据（离线）？一道题生成 1 个还是一组？</li>
+  <li><b>"好多少"怎么算（优势 A）</b>：用 critic 网络逐 token 估，还是组内互相比较？</li>
+  <li><b>怎么防止步子太大</b>：在 token 级还是整句级做 ratio 和裁剪，裁剪后梯度还保不保留？</li>
+</ol>
+<div class="timeline">${[
+  ["ppo", "PPO", "2017 · OpenAI", "critic 逐 token 估优势", "#2f6fed"],
+  ["dpo", "DPO", "2023 · Stanford", "离线成对数据，不做 RL", "#c98a06"],
+  ["grpo", "GRPO", "2024 · DeepSeekMath", "组内比较，去掉 critic", "#1f9d55"],
+  ["kimi", "Kimi MD", "2025.1 · Kimi k1.5", "KL 对上一轮策略，无 clip", "#c98a06"],
+  ["drgrpo", "Dr.GRPO", "2025 · Sea AI", "去掉 std 和长度归一的偏差", "#1f9d55"],
+  ["dapo", "DAPO", "2025 · 字节 Seed", "clip-higher / 动态采样 / token 级", "#1f9d55"],
+  ["gspo", "GSPO", "2025 · Qwen", "ratio 从 token 级改为整句级", "#7a4cd9"],
+  ["cispo", "CISPO", "2025 · MiniMax-M1", "裁 IS 权重，不丢梯度", "#7a4cd9"],
+].map(([k, n, y, d, c]) => `<div class="tl" style="--c:${c}" onclick="go('${k}')"><b>${n}</b><span>${y}</span><br>${d}</div>`).join("")}</div>
+</div>
+<div class="card"><h2>对照表</h2>
+<table class="wrap"><tr><th class="l">方法</th><th class="l">数据</th><th class="l">每题采几条</th><th class="l">要几个模型</th><th class="l">优势 A 怎么来</th><th class="l">ratio 粒度</th><th class="l">裁剪后</th><th class="l">长度归一</th></tr>
+${[
+  ["PPO", "在线", "1", "策略+参考+奖励+critic", "critic + GAE，逐 token 不同", "token", "超出范围梯度=0", "按 token 平均"],
+  ["DPO", "离线成对", "0（不生成）", "策略+参考", "没有 A，直接比两条的 log 概率差", "整句（log 概率求和）", "无裁剪，靠 β 和 sigmoid 饱和", "无（求和）"],
+  ["GRPO", "在线", "G（如 4–64）", "策略+参考+奖励", "(r − 组均值) / 组 std，整句共享", "token", "超出范围梯度=0", "先句内平均，再组平均"],
+  ["Kimi MD", "在线", "k", "策略+奖励（无参考模型）", "r − 组均值，整句共享", "<b>整句</b>（log π 求和）", "<b>无 clip</b>，KL(π‖上一轮策略) 当信任域", "无（求和）"],
+  ["Dr.GRPO", "在线", "G", "策略+奖励（β=0，无参考模型）", "r − 组均值（不除 std）", "token", "同 GRPO", "除以固定常数"],
+  ["DAPO", "在线 + 丢零方差组", "G（不够就重采）", "策略+奖励（去掉 KL）", "同 GRPO", "token", "上限放宽到 0.28", "整组所有 token 一起平均"],
+  ["GSPO", "在线", "G", "策略+奖励", "同 GRPO", "<b>整句</b>（几何平均）", "整句一起裁", "已包含在几何平均里"],
+  ["CISPO", "在线", "G", "策略+奖励", "同 GRPO", "token", "<b>裁权重，梯度保留</b>", "整组 token 平均"],
+].map(r => `<tr>${r.map(c => `<td class="l">${c}</td>`).join("")}</tr>`).join("")}</table>
+</div>`;
+
+// ---------------- Kimi MD 计算 ----------------
+function kimiCompute(group) {
+  const tau = S.tau, k = group.length;
+  const rbar = mean(group.map(g => g.r));
+  const rows = group.map(g => {
+    const A = g.r - rbar;
+    const toks = g.toks.map((t, j) => ({ ...t, newLp: drift(t, A, S.drift, g.id + j + S.seed) }));
+    const delta = toks.reduce((s, t) => s + t.newLp - t.oldLp, 0); // log π_θ(y) − log π_θi(y), 整句求和
+    const coef = A - tau * delta;                                      // ∇log π_θ(y) 的系数
+    return { g, R: g.r, A, L: g.toks.length, delta, coef, norm: 1 / k,
+      toks: toks.map(t => ({ ...t, ratio: Math.exp(t.newLp - t.oldLp), w: coef / k, active: true })) };
+  });
+  return { rows, rbar, loss: mean(rows.map(r => (r.A - tau * r.delta) ** 2)) };
+}
+// ---------------- 组内计算 (训练架构页的分解图用) ----------------
+const PL_ALGOS = { ppo: "PPO", grpo: "GRPO", drgrpo: "Dr.GRPO", dapo: "DAPO", gspo: "GSPO", cispo: "CISPO", kimi: "Kimi MD" };
+function plCompute(algo, seqs) {
+  const lenPen = L => L <= 12 ? 0 : L <= 16 ? (12 - L) / 4 : -1;
+  const Lmax = 20, n = seqs.length, totalTok = seqs.reduce((s, g) => s + g.toks.length, 0);
+  if (algo === "ppo") {
+    const beta = S.beta, eps = S.eps;
+    const rows = seqs.map(g => {
+      const T = g.toks.length;
+      const V = g.toks.map((t, j) => clamp(g.rm * (0.35 + 0.65 * (j + 1) / T) + (hash(g.id + j + "v") - 0.5) * 0.3, -0.2, 1.1));
+      const rt = g.toks.map((t, j) => -beta * (t.oldLp - t.refLp) + (j === T - 1 ? g.rm : 0));
+      const A = new Array(T); let acc = 0;
+      for (let j = T - 1; j >= 0; j--) { acc = rt[j] + (j + 1 < T ? V[j + 1] : 0) - V[j] + 0.95 * acc; A[j] = acc; }
+      const toks = g.toks.map((t, j) => {
+        const newLp = drift(t, A[j], S.drift, g.id + j + S.seed + "pl");
+        const ratio = Math.exp(newLp - t.oldLp), cl = clamp(ratio, 1 - eps, 1 + eps);
+        const active = !((A[j] > 0 && ratio > 1 + eps) || (A[j] < 0 && ratio < 1 - eps));
+        const lossTok = -Math.min(ratio * A[j], cl * A[j]);
+        return { ...t, V: V[j], rt: rt[j], A: A[j], newLp, ratio, active, lossTok, ret: A[j] + V[j] };
+      });
+      return { g, R: g.rm, L: T, norm: 1 / totalTok, toks };
+    });
+    const pLoss = rows.reduce((s, r) => s + r.toks.reduce((a, t) => a + t.lossTok, 0) * r.norm, 0);
+    const vLoss = rows.reduce((s, r) => s + r.toks.reduce((a, t) => a + 0.5 * (t.V - t.ret) ** 2, 0) * r.norm, 0);
+    return { rows, loss: pLoss, vLoss, totalTok };
+  }
+  if (algo === "kimi") {
+    const k = kimiCompute(seqs);
+    k.rows.forEach(r => r.toks.forEach(t => { t.A = r.A; t.coef = r.coef; t.lossTok = (r.A - S.tau * r.delta) ** 2; }));
+    return { rows: k.rows, m: k.rbar, sd: std(seqs.map(g => g.r)), totalTok, loss: k.loss };
+  }
+  const cfg = {
+    grpo: { adv: (r, m, sd) => sd < 1e-9 ? 0 : (r - m) / sd, norm: (L, tot, G) => 1 / (G * L), epsLow: 0.2, epsHigh: 0.2, beta: S.beta },
+    drgrpo: { adv: (r, m) => r - m, norm: (L, tot, G) => 1 / (G * Lmax), epsLow: 0.2, epsHigh: 0.2, beta: 0 },
+    dapo: { reward: g => g.r + lenPen(g.toks.length), adv: (r, m, sd) => sd < 1e-9 ? 0 : (r - m) / sd, norm: (L, tot) => 1 / tot, epsLow: 0.2, epsHigh: 0.28, beta: 0 },
+    gspo: { adv: (r, m, sd) => sd < 1e-9 ? 0 : (r - m) / sd, norm: (L, tot, G) => 1 / (G * L), epsLow: 0.2, epsHigh: 0.2, beta: 0 },
+    cispo: { adv: (r, m, sd) => sd < 1e-9 ? 0 : (r - m) / sd, norm: (L, tot) => 1 / tot, epsLow: 0.2, epsHigh: 0.2, beta: 0 },
+  }[algo];
+  const res = groupCompute(seqs, cfg);
+  res.rows.forEach(r => r.toks.forEach(t => { t.A = r.A; t.lossTok = -t.obj; }));
+  if (algo === "gspo") {
+    const e = S.epsSeq;
+    res.rows.forEach(r => {
+      r.meanLog = mean(r.toks.map(t => t.newLp - t.oldLp)); r.s = Math.exp(r.meanLog);
+      const active = !((r.A > 0 && r.s > 1 + e) || (r.A < 0 && r.s < 1 - e));
+      r.seqLoss = -Math.min(r.s * r.A, clamp(r.s, 1 - e, 1 + e) * r.A);
+      r.toks.forEach(t => { t.seqRatio = r.s; t.active = active; t.lossTok = r.seqLoss; });
+    });
+    return { ...res, loss: mean(res.rows.map(r => r.seqLoss)) };
+  }
+  if (algo === "cispo") {
+    res.rows.forEach(r => r.toks.forEach(t => { t.wHat = Math.min(t.ratio, 1.28); t.active = true; t.lossTok = -t.wHat * r.A * t.newLp; }));
+  }
+  const loss = res.rows.reduce((s, r) => s + r.toks.reduce((a, t) => a + t.lossTok, 0) * r.norm, 0);
+  return { ...res, loss };
+}
+// ============================================================
+// 各算法页: 同一个模板 —— n 个 prompt × m 条补全 → [n·m, T] 的 token 数据,
+// 依次看 reward / value(基线) / KL / advantage / loss 在这批数据上怎么算
+// ============================================================
+const POOL2 = [
+  { id: "QA", toks: ["等于", "2", "。"], r: 1, p: 0.24, rm: 0.88 },
+  { id: "QB", toks: ["1", "+", "1", "=", "2"], r: 1, p: 0.2, rm: 0.9 },
+  { id: "QC", toks: ["等于", "3", "。"], r: 0, p: 0.14, tag: "答错", rm: 0.06 },
+  { id: "QD", toks: ["It", "is", "2", "."], r: 0, p: 0.14, tag: "答成英文", rm: 0.4 },
+  { id: "QE", toks: ["嗯", "，", "等等", "…", "是", "2", "吧", "。"], r: 1, p: 0.1, tag: "先犹豫后答对", rare: [2], rm: 0.7 },
+  { id: "QF", toks: ["这", "个", "问题", "要", "看", "进制", "，", "二进制", "里", "是", "10", "，", "所以", "等于", "11", "。"], r: 0, p: 0.18, tag: "又长又错", rm: 0.12 },
+];
+const PROMPTS = [
+  { q: PROMPT, pool: POOL, rule: "中文答出「北京」→ 1，否则 0", pair: [1, 2] },
+  { q: "1 + 1 等于几？", pool: POOL2, rule: "中文答出「2」→ 1，否则 0", pair: [0, 5] },
+];
+const META = {
+  ppo:    { mode: "multi",  sum: "经典 actor-critic：Value Model 给每个前缀估 V，GAE 把整条回答的分摊到每个 token。KL 并进奖励。" },
+  dpo:    { mode: "dpo",    sum: "不在线采样、没有奖励模型：拿现成的一对好坏回答，直接让好回答的概率相对参考模型涨得比坏回答多。" },
+  grpo:   { mode: "hybrid", sum: "去掉 Value Model：同一个 prompt 采 m 条，用组内均值当基线。KL 对固定的 SFT 模型，放在 loss 里。" },
+  drgrpo: { mode: "hybrid", sum: "GRPO 去掉两处偏差：优势不除 std，loss 不按回答长度平均（除以常数）。没有 KL。" },
+  dapo:   { mode: "hybrid", sum: "GRPO 打四个补丁：clip 上限放宽到 1.28、全组同分就丢弃重采、整组 token 一起平均、超长惩罚。没有 KL。" },
+  gspo:   { mode: "one",    sum: "ratio 和 clip 也改成整句一个：s_i = 每个 token log 比的平均再 exp，一句要么整句更新，要么整句被裁。" },
+  cispo:  { mode: "hybrid", sum: "不清零被裁的 token：ratio 封顶后当作不求导的权重乘上去，每个 token 都保留梯度。" },
+  kimi:   { mode: "one",    sum: "镜像下降：没有 ratio/clip，用对上一轮策略 π_θi 的 KL 控制步长，整条回答当一个动作。" },
+};
+let PAGE_MODE = "multi"; // 当前页的 RL 形态, 决定矩阵列头怎么写
+
+function dpoCompute(seqs) {
+  const b = S.dpoBeta;
+  const mk = (g, sign) => {
+    const toks = g.toks.map((t, j) => ({ ...t, newLp: drift({ ...t, oldLp: t.refLp }, sign, S.drift, g.id + j + S.seed + "dpo") }));
+    toks.forEach(t => { t.lr = t.newLp - t.refLp; });
+    return { g, toks, L: toks.length, sumTh: toks.reduce((s, t) => s + t.newLp, 0), sumRef: toks.reduce((s, t) => s + t.refLp, 0) };
+  };
+  const w = mk(seqs[0], 1), l = mk(seqs[1], -1);
+  const dw = w.sumTh - w.sumRef, dl = l.sumTh - l.sumRef, margin = b * (dw - dl);
+  const coef = b * (1 - sigmoid(margin));
+  w.rhat = b * dw; l.rhat = b * dl;
+  w.toks.forEach(t => { t.g = coef; }); l.toks.forEach(t => { t.g = -coef; });
+  return { rows: [w, l], margin, coef, loss: -Math.log(sigmoid(margin)) };
+}
+function buildBatch(algo) {
+  const m = algo === "ppo" ? 1 : algo === "dpo" ? 2 : S.G;
+  return PROMPTS.map((P, pi) => {
+    let seqs;
+    if (algo === "dpo") seqs = P.pair.map((k, i) => makeResp(P.pool[k], i));
+    else {
+      seqs = sampleGroup(m, S.seed * 31 + pi * 977, { pool: P.pool });
+      if (S.forceSame && algo !== "ppo" && pi === 0) seqs = seqs.map((x, i) => makeResp(P.pool[i % 2 ? 0 : 1], i));
+    }
+    return { P, pi, out: algo === "dpo" ? dpoCompute(seqs) : plCompute(algo, seqs) };
+  });
+}
+const rowLabel = (g, i) => S.algo === "dpo" ? `p${g.pi + 1}·${i === 0 ? "y<sub>w</sub>" : "y<sub>l</sub>"}` : `p${g.pi + 1}·o${i + 1}`;
+const joinToks = ts => ts.reduce((acc, x, j) => acc + (j && /^[A-Za-z0-9]/.test(x) && /[A-Za-z0-9.]$/.test(ts[j - 1]) ? " " : "") + x, "");
+const shortTxt = r => { const t = joinToks(r.g.toks.map(x => x.t)); return (t.length > 14 ? t.slice(0, 14) + "…" : t) + (r.g.tag ? ` <span class="tag">${r.g.tag}</span>` : ""); };
+
+// [n·m, T] 矩阵. 行按 prompt 分组, 粗线隔开; 列头按 RL 形态写 "RL 时间步 t" 或 "token 下标"
+function bmat(batch, get, opt = {}) {
+  const rows = batch.flatMap(g => g.out.rows.map((r, i) => ({ r, g, i })));
+  const T = Math.max(...rows.map(x => x.r.toks.length));
+  const nums = rows.flatMap(x => x.r.toks.map(t => get(t, x.r, x.g))).filter(v => typeof v === "number");
+  const c0 = opt.center || 0, mx = Math.max(1e-6, ...nums.map(v => Math.abs(v - c0)));
+  const multi = PAGE_MODE === "multi";
+  const head = `<tr><th class="l">${multi ? "t →" : "token #"}</th>${Array.from({ length: T }, (_, j) => `<th class="${multi ? "tstep" : "tidx"}">${j + 1}</th>`).join("")}${opt.tail ? `<th>${opt.tail.h}</th>` : ""}</tr>`;
+  const cell = (t, r, g) => {
+    if (!t) return `<td class="pad">pad</td>`;
+    const v = get(t, r, g);
+    if (v === null || v === undefined) return `<td class="mc z">·</td>`;
+    if (typeof v !== "number") return `<td class="mc">${v}</td>`;
+    if (opt.dead && opt.dead(t, r)) return `<td class="mc dead">${v.toFixed(opt.d ?? 2)}</td>`;
+    const d = (v - c0) / mx, a = 0.08 + 0.55 * Math.abs(d);
+    if (opt.band) {
+      const [lo, hi] = opt.band;
+      const bb = v > hi ? "rgba(201,138,6,.5)" : v < lo ? "rgba(122,76,217,.4)" : `rgba(47,111,237,${0.06 + 0.25 * Math.min(1, Math.abs(v - 1) / Math.max(1e-6, hi - 1))})`;
+      return `<td class="mc" style="background:${bb}" title="${t.t}">${v.toFixed(opt.d ?? 2)}</td>`;
+    }
+    const bg = opt.neutral ? `rgba(47,111,237,${a})` : Math.abs(d) < 1e-9 ? "#f0f2f6" : d > 0 ? `rgba(31,157,85,${a})` : `rgba(214,69,69,${a})`;
+    return `<td class="mc" style="background:${bg}" title="${t.t}">${v.toFixed(opt.d ?? 2)}</td>`;
+  };
+  return `<div class="matwrap"><div class="matlabel">${opt.label} <span class="shape">${opt.shape || "[n·m, T]"}</span></div>
+<table class="mat">${head}${rows.map(({ r, g, i }) => `<tr class="${i === 0 && g.pi > 0 ? "gstart" : ""}"><th class="l">${rowLabel(g, i)}</th>${Array.from({ length: T }, (_, j) => cell(r.toks[j], r, g)).join("")}${opt.tail ? `<td class="mc tail">${opt.tail.v(r, g, i)}</td>` : ""}</tr>`).join("")}</table></div>`;
+}
+// 每行一个数的表 (整句级的量). gcols 是跨同组所有行的格子 (组内统计)
+function rtable(batch, cols, gcols = []) {
+  return `<table class="rt"><tr><th class="l">样本</th><th class="l">回答</th>${cols.map(c => `<th>${c.h}</th>`).join("")}${gcols.map(c => `<th>${c.h}</th>`).join("")}</tr>
+${batch.map(g => g.out.rows.map((r, i) => `<tr class="${i === 0 && g.pi > 0 ? "gstart" : ""}"><td class="l">${rowLabel(g, i)}</td><td class="l">${shortTxt(r)}</td>
+${cols.map(c => { const v = c.v(r, g, i); return `<td class="${typeof v === "number" ? cls(v) : ""}">${typeof v === "number" ? f(v, c.d ?? 2) : v}</td>`; }).join("")}
+${i === 0 ? gcols.map(c => `<td rowspan="${g.out.rows.length}" class="gcell">${c.v(g)}</td>`).join("") : ""}</tr>`).join("")).join("")}</table>`;
+}
+const sec = (n, title, shape, body) => `<div class="card"><h2><span class="sn">${n}</span>${title}${shape ? ` <span class="shape">${shape}</span>` : ""}</h2>${body}</div>`;
+const none = (n, title, why) => `<div class="card nocard"><h2><span class="sn">${n}</span>${title} <span class="ctag">本方法没有</span></h2><p class="muted">${why}</p></div>`;
+
+// 页首: 这个方法里 RL 的"一步"是什么
+function modeBanner(mode) {
+  const toks = ["是", "北京", "。"];
+  const tk = (t, sub) => `<span class="mtok">${t}<sub>${sub}</sub></span>`;
+  const pic = {
+    multi: `<div class="mpic">prompt ${toks.map((t, j) => `<span class="marr">→</span>${tk(t, "a<sub>" + (j + 1) + "</sub>")}`).join("")}</div>`,
+    hybrid: `<div class="mpic">prompt <span class="marr">→</span><span class="mbox">${toks.map((t, j) => tk(t, "ρ<sub>" + (j + 1) + "</sub>")).join("")}<em>一个动作 a</em></span></div>`,
+    one: `<div class="mpic">prompt <span class="marr">→</span><span class="mbox">${toks.map(t => tk(t, "")).join("")}<em>一个动作 a</em></span></div>`,
+    dpo: `<div class="mpic">prompt <span class="marr">→</span><span class="mbox">${tk("是北京。", "")}<em>y<sub>w</sub></em></span> vs <span class="mbox bad">${tk("是上海。", "")}<em>y<sub>l</sub></em></span></div>`,
+  }[mode];
+  const txt = {
+    multi: "<b>多步 RL（multi-step）：每个 token 是一步。</b>状态 s<sub>t</sub> = prompt + 前 t−1 个 token，动作 a<sub>t</sub> = 第 t 个 token，一条回答是长 T 的轨迹。所以奖励、V、优势都是<b>逐 t 不同</b>的 [n·m, T] 矩阵；下面所有矩阵的列就是 RL 时间步 t。",
+    hybrid: "<b>奖励和优势按单步（one-step）：整条回答是一个动作</b>，一条回答只有一个奖励、一个优势，复制给它的每个 token。但 <b>ratio 和 clip 仍逐 token 算</b>（图中每个 token 的 ρ<sub>t</sub>），所以是混合形态。下面矩阵的列只是 token 下标，不是 RL 时间步。",
+    one: "<b>彻底单步（one-step）：整条回答是一个动作。</b>奖励、优势、重要性比值（或 KL）都是整句一个。token 下标只用来把 log 概率加起来或求平均，不是 RL 时间步。",
+    dpo: "<b>不是在线 RL：</b>不采样、没有奖励模型。整条回答当一个动作（contextual bandit），只比较一对现成回答的整句 log 概率。",
+  }[mode];
+  return `<div class="mode mode-${mode}">${pic}<p>${txt}</p></div>`;
+}
+function pageControls(algo) {
+  const extra = { ppo: slider("ε", "eps", 0.05, 0.4, 0.05) + slider("β（KL）", "beta", 0, 0.2, 0.01), grpo: slider("ε", "eps", 0.05, 0.4, 0.05) + slider("β（KL）", "beta", 0, 0.2, 0.01),
+    gspo: slider("整句 ε", "epsSeq", 0.01, 0.3, 0.01), kimi: slider("τ（KL 强度）", "tau", 0, 1, 0.05), dpo: slider("β", "dpoBeta", 0.05, 1, 0.05) }[algo] || "";
+  const m = ["ppo", "dpo"].includes(algo) ? "" : slider("m（每个 prompt 采几条）", "G", 2, 6, 1);
+  const same = ["ppo", "dpo"].includes(algo) ? "" : `<button class="btn warn" onclick="set('forceSame', !S.forceSame)">${S.forceSame ? "取消" : "让 p1"}全组同分</button>`;
+  return `<div class="controls"><button class="btn" onclick="reseed()">🎲 重新采样</button>${m}${slider("策略已漂移", "drift", 0, 2, 0.1, "模拟已经更新过几个 mini-batch")}${extra}${same}</div>`;
+}
+
+function algoPage(algo) {
+  const meta = META[algo]; PAGE_MODE = meta.mode;
+  const B = buildBatch(algo);
+  const m = B[0].out.rows.length, n = B.length;
+  const name = ALGOS.find(a => a.k === algo).n;
+  const promptList = B.map(g => `p${g.pi + 1} = 「${g.P.q}」`).join("，");
+  const top = `<div class="card"><h2>${name}</h2><p class="lead">${meta.sum}</p>${modeBanner(meta.mode)}${pageControls(algo)}</div>`;
+  const tokM = bmat(B, t => t.t, { label: "回答的 token", shape: algo === "dpo" ? "[n·2, T]" : `[n·m, T] = [${n * m}, T]` });
+  const cards = [];
+
+  // ① 数据
+  if (algo === "dpo") {
+    cards.push(sec(1, "数据：n 个 prompt × 1 对现成回答（不采样）", `n=${n}，每个 prompt 2 行`, `<p>${promptList}。每个 prompt 配一对提前准备好的回答：y<sub>w</sub>（好）、y<sub>l</sub>（坏）。训练时模型一个字都不生成。</p>${tokM}`));
+  } else {
+    cards.push(sec(1, `采样：n 个 prompt × m 条补全`, `n=${n}，m=${m}`, `<p>${promptList}。Rollout Model（π<sub>old</sub>）对每个 prompt 采 <b>m=${m}</b> 条${algo === "ppo" ? "（PPO 不做组内比较，每个 prompt 只采 1 条）" : "，粗线分开不同的 prompt"}。拼成 [n·m, T] 的矩阵，短的右边补 pad；同时记下每个 token 的 log π<sub>old</sub>。</p>
+${tokM}${bmat(B, t => t.oldLp, { label: "log π<sub>old</sub>(y<sub>t</sub>)", neutral: true })}`));
+  }
+
+  // ② reward
+  if (algo === "ppo") {
+    cards.push(sec(2, "Reward：逐 token 的奖励 r<sub>t</sub>", "[n·m, T]", `<p>Reward Model 给每条回答打<b>一个分</b>，只放在最后一个 token 上；每个 token 还要扣 β·KL<sub>t</sub>（见 ④）。所以 r<sub>t</sub> = −β·KL<sub>t</sub> + [t = T]·RM 分，是一个逐 t 的矩阵。</p>
+${bmat(B, t => t.rt, { label: "r<sub>t</sub>", d: 3, tail: { h: "RM 分", v: r => r.R.toFixed(2) } })}`));
+  } else if (algo === "dpo") {
+    cards.push(sec(2, "Reward：没有显式奖励，用隐式奖励 r̂", "[n·2]", `<p>r̂(y) = β·[log π<sub>θ</sub>(y) − log π<sub>ref</sub>(y)]，log π 是整句 token log 概率的<b>求和</b>（β = ${S.dpoBeta}）。</p>
+${rtable(B, [{ h: "Σ log π<sub>θ</sub>", v: r => r.sumTh }, { h: "Σ log π<sub>ref</sub>", v: r => r.sumRef }, { h: "r̂ = β·差", v: r => r.rhat, d: 3 }])}`));
+  } else {
+    const dapo = algo === "dapo";
+    cards.push(sec(2, "Reward：每条回答一个分", "[n·m]", `<p>规则判分（p1：${PROMPTS[0].rule}；p2：${PROMPTS[1].rule}）${dapo ? "，DAPO 再加超长惩罚（本页玩具设定：长度 &gt; 12 起扣，&gt; 16 扣满 1）" : ""}。<b>一条回答只有一个数</b>，没有逐 token 的奖励。</p>
+${rtable(B, [{ h: "长度", v: r => String(r.L) }, { h: dapo ? "R = 规则分 + 超长惩罚" : "r", v: r => r.R }])}`));
+  }
+
+  // ③ value / 基线
+  if (algo === "ppo") {
+    cards.push(sec(3, "Value：Value Model 给每个前缀估 V(s<sub>t</sub>)", "[n·m, T]", `<p>Value Model（Critic）对每个前缀 s<sub>t</sub> 预测"从这里往后平均还能拿多少回报"。它逐 t 变化：越往后越接近这条回答的最终得分。这就是 PPO 能逐 token 分配功劳的原因。</p>
+${bmat(B, t => t.V, { label: "V(s<sub>t</sub>)", neutral: true })}`));
+  } else if (algo === "dpo") {
+    cards.push(none(3, "Value / 基线", "没有 Value Model，也没有组内基线：一对回答互为基线，只看 y<sub>w</sub> 和 y<sub>l</sub> 的差。"));
+  } else {
+    const useStd = !["drgrpo", "kimi"].includes(algo);
+    cards.push(sec(3, "基线：每个 prompt 各自的组内均值", "每个 prompt 一个数", `<p>没有 Value Model。<b>每个 prompt 只在自己那 m 条里</b>算均值${useStd ? "和标准差" : ""}，不跨 prompt。这个均值相当于只以 prompt 为条件的 V(s<sub>0</sub>)，所以它对整条回答只有一个值。</p>
+${rtable(B, [{ h: "r", v: r => r.R }], [{ h: "组内 mean", v: g => g.out.m.toFixed(2) }].concat(useStd ? [{ h: "组内 std", v: g => g.out.sd.toFixed(2) }] : []))}
+${B.some(g => g.out.sd < 1e-9) ? `<div class="note">有一组全组同分 → std = 0 → 这组的优势全是 0，没有梯度${algo === "dapo" ? "；DAPO 会把这组丢掉重采" : ""}。</div>` : ""}`));
+  }
+
+  // ④ KL
+  if (algo === "ppo") {
+    cards.push(sec(4, "KL：逐 token，<b>并进奖励</b>", "[n·m, T]", `<p>KL<sub>t</sub> = log π<sub>old</sub>(y<sub>t</sub>) − log π<sub>ref</sub>(y<sub>t</sub>)，参考模型是固定的初始 SFT 模型。它乘以 −β 后已经加进了 ② 的 r<sub>t</sub>，会经过 GAE 影响前面 token 的优势。</p>
+${bmat(B, t => t.oldLp - t.refLp, { label: "KL<sub>t</sub>", d: 3 })}`));
+  } else if (algo === "grpo") {
+    cards.push(sec(4, "KL：逐 token，<b>放进 loss</b>", "[n·m, T]", `<p>对固定的 SFT 模型 π<sub>ref</sub>，用 k3 估计 π<sub>ref</sub>/π<sub>θ</sub> − log(π<sub>ref</sub>/π<sub>θ</sub>) − 1，在 ⑥ 里以 −β·KL 的形式逐 token 加进目标。它<b>不进奖励</b>，所以不影响 ③⑤ 的优势。</p>
+${bmat(B, t => t.kl, { label: "KL<sub>t</sub>（k3）", d: 4, neutral: true })}`));
+  } else if (algo === "kimi") {
+    cards.push(sec(4, "KL：整句，对<b>上一轮策略</b> π<sub>θi</sub>", "[n·m]", `<p>锚点是本轮负责采样的模型 π<sub>θi</sub>（= π<sub>old</sub>），不是 SFT 模型，所以不需要 Reference Model。Δ = 整句 Σ<sub>t</sub>(log π<sub>θ</sub> − log π<sub>θi</sub>)，正则项是 (τ/2)·Δ²（τ = ${S.tau}），作用是限制每一步走多远。</p>
+${bmat(B, t => t.newLp - t.oldLp, { label: "逐 token 的 log π<sub>θ</sub> − log π<sub>θi</sub>（加起来就是 Δ）", d: 3, tail: { h: "Δ", v: r => r.delta.toFixed(3) } })}`));
+  } else if (algo === "dpo") {
+    cards.push(sec(4, "KL：隐含在 β 和 π<sub>ref</sub> 里", "[n·2, T]", `<p>DPO 由"最大化奖励 − β·KL(π‖π<sub>ref</sub>)"推导而来，没有单独的 KL 项；π<sub>ref</sub> 出现在每个 token 的 log 比里。</p>
+${bmat(B, t => t.lr, { label: "log π<sub>θ</sub>(y<sub>t</sub>) − log π<sub>ref</sub>(y<sub>t</sub>)", d: 3 })}`));
+  } else {
+    cards.push(none(4, "KL", { drgrpo: "论文全程 β = 0。", dapo: "论文去掉了 KL：长推理训练里模型本来就要大幅偏离初始模型。", gspo: "论文为简洁省略了 KL 项，没有表态要去掉。", cispo: "论文明确不用 KL。" }[algo] + "所以也不需要部署 Reference Model。"));
+  }
+
+  // ⑤ advantage
+  if (algo === "ppo") {
+    cards.push(sec(5, "Advantage：GAE，逐 t 不同", "[n·m, T]", `<p>δ<sub>t</sub> = r<sub>t</sub> + V(s<sub>t+1</sub>) − V(s<sub>t</sub>)，A<sub>t</sub> = δ<sub>t</sub> + γλ·A<sub>t+1</sub>（γ=1，λ=0.95，从右往左算）。同一行里每个 token 的优势都不一样。回报 R<sub>t</sub> = A<sub>t</sub> + V(s<sub>t</sub>) 是 Value Model 的训练目标。</p>
+${bmat(B, t => t.A, { label: "A<sub>t</sub>", d: 3 })}${bmat(B, t => t.ret, { label: "R<sub>t</sub>（Value Model 的目标）", neutral: true })}`));
+  } else if (algo === "dpo") {
+    cards.push(sec(5, "Advantage：没有；每对一个权重", "[n]", `<p>margin = r̂(y<sub>w</sub>) − r̂(y<sub>l</sub>)，这一对的梯度权重是 β·(1 − σ(margin))：排得越对（margin 越大），权重越小。</p>
+<table class="rt"><tr><th class="l">prompt</th><th>margin</th><th>σ(margin)</th><th>权重 β(1−σ)</th></tr>${B.map(g => `<tr><td class="l">p${g.pi + 1}</td><td>${f(g.out.margin)}</td><td>${f(sigmoid(g.out.margin))}</td><td>${f(g.out.coef)}</td></tr>`).join("")}</table>`));
+  } else {
+    const fm = { grpo: "(r − mean)/std", drgrpo: "r − mean", dapo: "(R − mean)/std", gspo: "(r − mean)/std", cispo: "(r − mean)/std", kimi: "r − r̄" }[algo];
+    cards.push(sec(5, "Advantage：每条回答一个，再复制给每个 token", "[n·m] → [n·m, T]", `<p>A = ${fm}，每个 prompt 用自己的组内统计。一条回答只有一个 A，复制到它的所有 token 上，所以下面矩阵<b>每一行颜色完全一样</b>。${algo === "kimi" ? "Kimi 的梯度里还要减去 τΔ，见 ⑥。" : ""}</p>
+${rtable(B, [{ h: "A", v: r => r.A }])}${bmat(B, (t, r) => r.A, { label: "A（复制给每个 token）" })}`));
+  }
+
+  // ⑥ 重要性采样比
+  const bandLegend = (lo, hi) => `<div class="legend"><span style="--c:rgba(47,111,237,.25)">在 [${lo}, ${hi}] 内</span><span style="--c:rgba(201,138,6,.5)">超过上限 ${hi}</span>${lo > 0 ? `<span style="--c:rgba(122,76,217,.4)">低于下限 ${lo}</span>` : ""}</div>`;
+  const isWhy = `<p>这批回答是 <b>π<sub>old</sub></b> 采的，但训练时会在同一批数据上切 mini-batch 连续更新好几次（DAPO 论文里每次 rollout 做 16 次梯度更新）。第一次更新时 π<sub>θ</sub> = π<sub>old</sub>，ρ = 1；之后 π<sub>θ</sub> 变了，这批数据就成了"旧策略的样本"。重要性采样用比值把期望改写成在旧分布上求：</p>
+<div class="formula">E<sub>y~π<sub>θ</sub></sub>[ A ] = E<sub>y~π<sub>old</sub></sub>[ (π<sub>θ</sub>(y) / π<sub>old</sub>(y)) · A ]</div>`;
+  const isPair = bmat(B, t => t.oldLp, { label: "log π<sub>old</sub>（采样时记下的）", neutral: true }) + bmat(B, t => t.newLp, { label: "log π<sub>θ</sub>（当前参数重新前向）", neutral: true });
+  if (["ppo", "grpo", "drgrpo", "dapo", "cispo"].includes(algo)) {
+    const eps = ["ppo", "grpo"].includes(algo) ? S.eps : 0.2;
+    const [lo, hi] = algo === "dapo" ? [0.8, 1.28] : algo === "cispo" ? [0, 1.28] : [+(1 - eps).toFixed(2), +(1 + eps).toFixed(2)];
+    const how = algo === "cispo" ? "CISPO 只封顶不设下限：超过 1.28 的按 1.28 算，但<b>梯度保留</b>，不会被清零。" : `超出 [${lo}, ${hi}] 且方向和 A 一致的 token，在 ⑦ 里梯度被清零（clip）。`;
+    cards.push(sec(6, "重要性采样比 ρ<sub>t</sub> = π<sub>θ</sub> / π<sub>old</sub>：逐 token", "[n·m, T]", isWhy + `<p>这里<b>每个 token 各算一个</b>：ρ<sub>t</sub> = exp(log π<sub>θ</sub>(y<sub>t</sub>) − log π<sub>old</sub>(y<sub>t</sub>))。${how}拖动"策略已漂移"能看到 ρ 离 1 越来越远。</p>
+${isPair}${bmat(B, t => t.ratio, { label: "ρ<sub>t</sub>", d: 3, band: [lo, hi] })}${bandLegend(lo, hi)}`));
+  } else if (algo === "gspo") {
+    const lo = +(1 - S.epsSeq).toFixed(2), hi = +(1 + S.epsSeq).toFixed(2);
+    cards.push(sec(6, "重要性采样比：整句一个 s<sub>i</sub>", "[n·m]", isWhy + `<p>GSPO 认为逐 token 的 ρ 只有一个样本、起不到分布修正的作用，所以把它们<b>先取 log 平均再 exp</b>：s<sub>i</sub> = (π<sub>θ</sub>(y<sub>i</sub>)/π<sub>old</sub>(y<sub>i</sub>))<sup>1/|y<sub>i</sub>|</sup>。整句的 s<sub>i</sub> 超出 [${lo}, ${hi}] 且方向和 A 一致，这条回答整行被裁。</p>
+${isPair}${bmat(B, t => t.ratio, { label: "逐 token 的 ρ<sub>t</sub>（只用来求几何平均）", d: 3, band: [lo, hi], tail: { h: "s<sub>i</sub>", v: r => r.s.toFixed(3) } })}${bandLegend(lo, hi)}
+${rtable(B, [{ h: "A", v: r => r.A }, { h: "s<sub>i</sub>", v: r => r.s, d: 4 }, { h: "状态", v: r => r.toks[0].active ? "整句参与" : "✂ 整句裁掉" }])}`));
+  } else if (algo === "kimi") {
+    cards.push(none(6, "重要性采样比 π<sub>θ</sub>/π<sub>old</sub>", "Kimi MD 不用比值修正，也不 clip。它直接用 ④ 的 KL(π<sub>θ</sub>‖π<sub>θi</sub>) 限制 π<sub>θ</sub> 别离采样策略太远：τΔ 越大，⑦ 里的系数就越往回拉。"));
+  } else {
+    cards.push(none(6, "重要性采样比 π<sub>θ</sub>/π<sub>old</sub>", "DPO 的数据是现成的，不是从当前策略采的，没有 π<sub>old</sub>。π<sub>ref</sub> 只出现在隐式奖励里，不是重要性权重。"));
+  }
+
+  // ⑦ loss
+  const avgLoss = mean(B.map(g => g.out.loss));
+  if (algo === "ppo") {
+    const all = B.flatMap(g => g.out.rows.flatMap(r => r.toks));
+    const pl = mean(all.map(t => t.lossTok)), vl = mean(all.map(t => 0.5 * (t.V - t.ret) ** 2));
+    cards.push(sec(7, "Loss：逐 token 的 PPO-clip + Value 回归", "[n·m, T] → 标量", `<p>ρ<sub>t</sub> 见 ⑥，loss<sub>t</sub> = −min(ρ<sub>t</sub>A<sub>t</sub>, clip(ρ<sub>t</sub>, 1±${S.eps})·A<sub>t</sub>)。斜纹格：ρ 已越界且方向和 A 一致，梯度为 0。整批 token 平均得到 policy loss；Value Model 另算 ½(V − R)²。</p>
+${bmat(B, t => t.lossTok, { label: "loss<sub>t</sub>（斜纹 = 被 clip，梯度为 0）", d: 3, neutral: true, dead: t => !t.active })}
+<p>policy loss = <span class="bigloss">${f(pl, 4)}</span> &nbsp; value loss = <span class="bigloss">${f(vl, 4)}</span></p>`));
+  } else if (algo === "dpo") {
+    cards.push(sec(7, "Loss：−log σ(margin)，每对一个", "[n] → 标量", `<p>梯度对整句均匀作用：y<sub>w</sub> 的每个 token 被推高 β(1−σ)，y<sub>l</sub> 的每个 token 被压低同样的量。</p>
+${bmat(B, t => t.g, { label: "每个 token 的梯度系数", d: 3 })}
+<table class="rt"><tr><th class="l">prompt</th><th>loss = −log σ(margin)</th></tr>${B.map(g => `<tr><td class="l">p${g.pi + 1}</td><td>${f(g.out.loss, 4)}</td></tr>`).join("")}</table>
+<p>loss（n 对平均）= <span class="bigloss">${f(avgLoss, 4)}</span></p>`));
+  } else if (algo === "gspo") {
+    cards.push(sec(7, "Loss：整句 ratio s<sub>i</sub>，整句 clip", "[n·m] → 标量", `<p>s<sub>i</sub> = exp(每个 token 的 log ρ 取平均)，loss<sub>i</sub> = −min(s<sub>i</sub>A<sub>i</sub>, clip(s<sub>i</sub>, 1±${S.epsSeq})·A<sub>i</sub>)。被裁的回答<b>整行</b>梯度为 0；没被裁的回答里，每个 token 权重相同：s<sub>i</sub>·A<sub>i</sub>/(m·|y<sub>i</sub>|)。</p>
+${bmat(B, (t, r) => t.active ? r.s * r.A / (m * r.L) : 0, { label: "每个 token 的梯度系数", d: 3, dead: t => !t.active })}
+<p>loss（n 个 prompt 平均）= <span class="bigloss">${f(avgLoss, 4)}</span></p>`));
+  } else if (algo === "kimi") {
+    cards.push(sec(7, "Loss：平方回归，τΔ 去追 A", "[n·m] → 标量", `<p>L = (1/m)Σ(A − τΔ)²（τ·log Z 用 r̄ 近似）。∇log π<sub>θ</sub>(y) 的系数是 A − τΔ：没追上就继续推，追过头就往回拉，没有 clip，也没有被清零的格子。Δ 是整句求和、不除以长度，所以每个 token 的权重都是 系数/m。</p>
+${rtable(B, [{ h: "A", v: r => r.A }, { h: "Δ", v: r => r.delta, d: 3 }, { h: "τΔ", v: r => S.tau * r.delta, d: 3 }, { h: "系数 A − τΔ", v: r => r.coef, d: 3 }, { h: "(A − τΔ)²", v: r => (r.A - S.tau * r.delta) ** 2, d: 4 }])}
+${bmat(B, (t, r) => r.coef / m, { label: "每个 token 的梯度系数", d: 3 })}
+<p>loss（n 个 prompt 平均）= <span class="bigloss">${f(avgLoss, 4)}</span></p>`));
+  } else {
+    const desc = {
+      grpo: `loss<sub>t</sub> = −[min(ρA, clip(ρ, 1±${S.eps})A) − β·KL<sub>t</sub>]。先在每条回答内按 token 平均（÷|o|），再对 m 条平均：长回答的每个 token 权重更小。`,
+      drgrpo: "loss<sub>t</sub> = −min(ρA, clip(ρ, 1±0.2)A)。所有 token 加起来除以常数 m·L<sub>max</sub>（L<sub>max</sub>=20），每个 token 权重相同。",
+      dapo: "loss<sub>t</sub> = −min(ρA, clip(ρ, 0.8, 1.28)A)，上限放宽。整组所有 token 一起平均（÷Σ|o|），每个 token 权重相同。",
+      cispo: "ŵ = min(ρ, 1.28) 当作不求导的权重，loss<sub>t</sub> = −ŵ·A·log π<sub>θ</sub>(y<sub>t</sub>)。没有 min/clip 分支，<b>没有一个格子被清零</b>；整组 token 平均。",
+    }[algo];
+    cards.push(sec(7, "Loss：ratio 逐 token 算", "[n·m, T] → 标量", `<p>ρ<sub>t</sub> 见 ⑥。${desc}${algo !== "cispo" ? " 斜纹格：ρ 已越界且方向和 A 一致，梯度为 0。" : ""}</p>
+${algo === "cispo" ? bmat(B, t => t.wHat, { label: "ŵ = min(ρ, 1.28)", center: 1, d: 3 }) : ""}
+${bmat(B, (t, r) => (algo === "cispo" ? t.wHat * r.A : t.active ? t.ratio * r.A : 0) * r.norm, { label: "每个 token 的梯度系数（含长度归一）", d: 4, dead: algo === "cispo" ? null : t => !t.active })}
+<p>loss（n 个 prompt 平均）= <span class="bigloss">${f(avgLoss, 4)}</span></p>`));
+  }
+  return top + cards.join("");
+}
+PAGES.calc = () => `<div class="subnav">${ALGOS.map(a => `<button class="${S.calcAlgo === a.k ? "on" : ""}" onclick="S.calcAlgo='${a.k}';S.forceSame=false;render(false)">${a.n}<small>${a.s}</small></button>`).join("")}</div>` + algoPage(S.calcAlgo);
+
+// ---------------- 训练架构图 ----------------
+const AR_NODES = {
+  data:   { x: 10,   y: 245, w: 130, h: 80 },
+  rollout:{ x: 200,  y: 225, w: 190, h: 120 },
+  reward: { x: 530,  y: 30,  w: 200, h: 100 },
+  ref:    { x: 530,  y: 245, w: 200, h: 100 },
+  critic: { x: 530,  y: 445, w: 200, h: 100 },
+  adv:    { x: 820,  y: 245, w: 170, h: 100 },
+  tokr:   { x: 790,  y: 30,  w: 200, h: 100 },
+  actor:  { x: 1040, y: 225, w: 160, h: 120 },
+};
+// 每个框的标题 / 说明 / 类别. 实线框 = 模型(有参数), 虚线框 = 计算步骤或数据(没有参数)
+function arNode(k, algo) {
+  const ruleReward = { drgrpo: ["Math-Verify：对 1 / 错 0"], dapo: ["对 +1 / 错 −1", "+ 超长惩罚"], kimi: ["规则判对错", "+ 长度奖励"] };
+  switch (k) {
+    case "data": return { t: "数据集", d: algo === "dpo" ? ["prompt + 好 / 坏回答"] : ["prompt（+ 标准答案）"], kind: "data" };
+    case "rollout": return { t: "Rollout Model π_old", d: ["= Policy Model 的推理副本", "vLLM / SGLang 部署", algo === "kimi" ? "也是 KL 锚点 π_θi" : "只生成，不训练"], kind: "infer" };
+    case "reward":
+      if (ruleReward[algo]) return { t: "Reward 规则验证器", d: ruleReward[algo], kind: "cpu" };
+      return { t: "Reward Model r_φ", d: ({ ppo: ["冻结的打分模型", "整条回答 → 一个分"], grpo: ["DeepSeekMath：打分模型", "（R1 改用规则）"],
+        gspo: ["整条回答 → 一个分", "（模型或规则均可）"], cispo: ["GenRM 当验证器", "可验证任务用规则"] })[algo] || ["整条回答 → 一个分"], kind: "frozen" };
+    case "ref": return { t: "Reference Model π_ref", d: ["= 初始 SFT 模型", "冻结，只前向"], kind: "frozen" };
+    case "critic": return { t: "Value Model V_ψ", d: ["即 Critic，和 Policy 一样大", "给每个前缀估 V(s_t)"], kind: "train" };
+    case "adv": return algo === "ppo" ? { t: "GAE 计算", d: ["由 r_t 和 V(s_t) 算出", "逐 token 的 A_t、回报 R_t"], kind: "cpu" }
+      : { t: "Advantage 计算", d: ["组均值代替 Value Model", "A = r − mean …"], kind: "cpu" };
+    case "tokr": return { t: "Token 奖励合成", d: ["r_t = −β·KL_t", "+ RM 分"], kind: "cpu" };
+    case "actor": return { t: "Policy Model π_θ", d: ["被训练的模型", "FSDP / Megatron 部署", "前向 + 反向 + 优化器"], kind: "train" };
+  }
+}
+const AR_USE = {
+  ppo:    ["data", "rollout", "reward", "ref", "critic", "tokr", "adv", "actor"],
+  dpo:    ["data", "ref", "actor"],
+  grpo:   ["data", "rollout", "reward", "ref", "adv", "actor"],
+  drgrpo: ["data", "rollout", "reward", "adv", "actor"],
+  dapo:   ["data", "rollout", "reward", "adv", "actor"],
+  gspo:   ["data", "rollout", "reward", "adv", "actor"],
+  cispo:  ["data", "rollout", "reward", "adv", "actor"],
+  kimi:   ["data", "rollout", "reward", "adv", "actor"],
+};
+// 手动走线: 标签, 适用方法, 步骤号, 折线点, 标签位置
+const AR_EDGES = [
+  ["prompt × G", ["grpo", "drgrpo", "dapo", "gspo", "cispo"], 1, [[140, 285], [200, 285]], [168, 356]],
+  ["prompt", ["ppo"], 1, [[140, 285], [200, 285]], [168, 356]],
+  ["打分", ["ppo", "grpo", "drgrpo", "dapo", "gspo", "cispo"], 2, [[390, 255], [430, 255], [430, 80], [530, 80]], [480, 58]],
+  ["算 log π_ref", ["ppo", "grpo"], 2, [[390, 290], [530, 290]], [460, 268]],
+  ["算 V", ["ppo"], 2, [[390, 320], [430, 320], [430, 490], [530, 490]], [480, 468]],
+  ["分数 r [n]", ["grpo", "drgrpo", "dapo", "gspo", "cispo"], 3, [[730, 80], [905, 80], [905, 245]], [815, 80]],
+  ["RM", ["ppo"], 3, [[730, 70], [790, 70]], [760, 50]],
+  ["log π_ref", ["ppo"], 3, [[730, 280], [760, 280], [760, 110], [790, 110]], [760, 200]],
+  ["token 奖励 r_t [n,T]", ["ppo"], 3, [[905, 130], [905, 245]], [905, 195]],
+  ["V [n,T]", ["ppo"], 3, [[730, 475], [870, 475], [870, 345]], [800, 475]],
+  ["回报 R_t（Value Model 的训练目标）", ["ppo"], 4, [[945, 345], [945, 510], [730, 510]], [884, 530]],
+  ["log π_ref → loss 里的 KL 项", ["grpo"], 4, [[630, 345], [630, 410], [1100, 410], [1100, 345]], [865, 410]],
+  ["回答 + 采样时的 log π → 训练数据", ["ppo", "grpo", "drgrpo", "dapo", "gspo", "cispo"], 4, [[295, 225], [295, 12], [1120, 12], [1120, 225]], [700, 12]],
+  ["old log π（与 log π_ref 相减得 KL_t）", ["ppo"], 3, [[340, 225], [340, 150], [850, 150], [850, 130]], [600, 150]],
+  ["优势 A → loss", ["ppo", "grpo", "drgrpo", "dapo", "gspo", "cispo"], 4, [[990, 290], [1040, 290]], [1015, 356]],
+  ["权重同步 θ → π_old", ["ppo", "grpo", "drgrpo", "dapo", "gspo", "cispo"], 5, [[1140, 345], [1140, 580], [295, 580], [295, 345]], [700, 580]],
+  ["(x, y_w, y_l) 成对数据", ["dpo"], 1, [[75, 325], [75, 560], [1160, 560], [1160, 345]], [600, 560]],
+  ["(x, y_w, y_l)", ["dpo"], 1, [[75, 245], [75, 190], [630, 190], [630, 245]], [350, 190]],
+  ["log π_ref(y_w), log π_ref(y_l) → DPO loss（可离线预计算）", ["dpo"], 2, [[630, 345], [630, 410], [1100, 410], [1100, 345]], [865, 410]],
+];
+AR_EDGES.forEach(e => { if (e[1].includes("cispo")) e[1].push("kimi"); });
+const KIND = {
+  train:  { c: "#d64545", tag: "模型 · 参数会更新", model: true },
+  frozen: { c: "#2f6fed", tag: "模型 · 冻结，只前向", model: true },
+  infer:  { c: "#7a4cd9", tag: "模型 · 推理部署", model: true },
+  cpu:    { c: "#6b7385", tag: "CPU 计算", model: false },
+  data:   { c: "#c98a06", tag: "数据", model: false },
+};
+function edgePoint(n, tx, ty) { // 从框中心指向 (tx,ty) 的射线与框边的交点
+  const cx = n.x + n.w / 2, cy = n.y + n.h / 2, dx = tx - cx, dy = ty - cy;
+  const s = Math.min(Math.abs((n.w / 2) / (dx || 1e-9)), Math.abs((n.h / 2) / (dy || 1e-9)));
+  return [cx + dx * s, cy + dy * s];
+}
+// 框内左下角的图标 (x, y 为左上角, 约 34×24)
+function arIcon(kind, x, y, c) {
+  if (kind === "data") {
+    return `<g fill="none" stroke="${c}" stroke-width="1.6"><ellipse cx="${x + 12}" cy="${y + 4}" rx="10" ry="3.5" fill="${c}" fill-opacity="0.15"/>
+<path d="M${x + 2},${y + 4} V${y + 20} A10,3.5 0 0 0 ${x + 22},${y + 20} V${y + 4}"/><path d="M${x + 2},${y + 12} A10,3.5 0 0 0 ${x + 22},${y + 12}"/></g>`;
+  }
+  if (kind === "cpu") {
+    const cx = x + 12, cy = y + 12;
+    const teeth = Array.from({ length: 8 }, (_, i) => `<rect x="${cx - 2}" y="${cy - 11}" width="4" height="5" rx="1" fill="${c}" transform="rotate(${i * 45} ${cx} ${cy})"/>`).join("");
+    return `<g>${teeth}<circle cx="${cx}" cy="${cy}" r="7" fill="${c}"/><circle cx="${cx}" cy="${cy}" r="2.8" fill="#fafbfc"/></g>`;
+  }
+  // 神经网络: 3 / 3 / 2 个节点, 相邻两列全连接
+  const cols = [[2, 12, 22], [2, 12, 22], [7, 17]].map((ys, ci) => ys.map(yy => [x + 3 + ci * 15, y + yy]));
+  let lines = "";
+  for (let ci = 0; ci < cols.length - 1; ci++) for (const a of cols[ci]) for (const b of cols[ci + 1])
+    lines += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${c}" stroke-width="0.8" stroke-opacity="0.55"/>`;
+  return `<g>${lines}${cols.flat().map(([px, py]) => `<circle cx="${px}" cy="${py}" r="2.6" fill="${c}"/>`).join("")}</g>`;
+}
+const AR_BADGE = { train: "🔥", frozen: "❄", infer: "↻" };
+function archSvg(algo) {
+  const use = AR_USE[algo];
+  const nodes = Object.entries(AR_NODES).map(([k, n]) => {
+    const on = use.includes(k);
+    if (!on && k === "tokr") return "";
+    const info = arNode(k, algo), K = KIND[info.kind];
+    const dash = K.model ? "" : 'stroke-dasharray="6 4"';
+    return `<g opacity="${on ? 1 : 0.13}"><rect x="${n.x}" y="${n.y}" width="${n.w}" height="${n.h}" rx="10" fill="${K.model ? "#fff" : "#fafbfc"}" stroke="${K.c}" stroke-width="${on ? (K.model ? 2.5 : 1.6) : 1}" ${dash}/>
+${K.model ? `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="24" rx="10" fill="${K.c}"/><rect x="${n.x}" y="${n.y + 12}" width="${n.w}" height="12" fill="${K.c}"/>` : ""}
+<text x="${n.x + 10}" y="${n.y + 17}" fill="${K.model ? "#fff" : K.c}" font-size="13" font-weight="700">${info.t}</text>
+${info.d.map((d, i) => `<text x="${n.x + 10}" y="${n.y + 42 + i * 17}" font-size="12" fill="#1d2330">${d}</text>`).join("")}
+${arIcon(info.kind === "data" || info.kind === "cpu" ? info.kind : "model", n.x + 10, n.y + n.h - 32, K.c)}
+${K.model ? `<circle cx="${n.x + n.w - 15}" cy="${n.y + 12}" r="9" fill="#fff"/><text x="${n.x + n.w - 15}" y="${n.y + 16.5}" font-size="12" text-anchor="middle" fill="${K.c}" font-weight="700">${AR_BADGE[info.kind]}</text>` : ""}
+${K.model ? `<text x="${n.x + n.w - 8}" y="${n.y + n.h - 8}" font-size="10" font-weight="600" fill="${K.c}" text-anchor="end">${K.tag}</text>` : ""}</g>`;
+  }).join("");
+  const textW = t => [...t].reduce((w, ch) => w + (ch.charCodeAt(0) > 255 ? 12 : 6.6), 0);
+  const edges = AR_EDGES.filter(e => e[1].includes(algo)).map(([label, , step, pts, [lx, ly]]) => {
+    const d = "M" + pts.map(p => p.join(",")).join(" L");
+    const col = step === 5 ? "#7a4cd9" : "#1d2330";
+    const tw = textW(label) + 28;
+    return `<path d="${d}" stroke="${col}" stroke-width="1.6" fill="none" marker-end="url(#arr)" ${step === 5 ? 'stroke-dasharray="6 4"' : ""}/>
+<circle r="5" fill="${col}"><animateMotion dur="1.6s" begin="${(step - 1) * 1.6}s" repeatCount="indefinite" path="${d}" keyPoints="0;1;1" keyTimes="0;0.6;1" calcMode="linear"/></circle>
+<g><rect x="${lx - tw / 2}" y="${ly - 10}" width="${tw}" height="20" rx="10" fill="#fff" stroke="#d5d9e2"/>
+<circle cx="${lx - tw / 2 + 11}" cy="${ly}" r="8" fill="${col}"/><text x="${lx - tw / 2 + 11}" y="${ly + 4}" font-size="10" fill="#fff" text-anchor="middle">${step}</text>
+<text x="${lx - tw / 2 + 23}" y="${ly + 4}" font-size="11" fill="#1d2330">${label}</text></g>`;
+  }).join("");
+  return `<svg viewBox="0 0 1210 600" style="width:100%;background:#fafbfc;border-radius:10px">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1d2330"/></marker></defs>
+${nodes}${edges}</svg>`;
+}
+const AR_STEPS = {
+  ppo: ["取一批 prompt 发给 Rollout Model", "Rollout Model 用 π_old 生成回答；Reward Model 打分、Reference Model 和 Value Model 各做一次前向", "在 CPU 上分两步：<b>Token 奖励合成</b> r_t = −β·(log π_old − log π_ref) + [最后一个 token]·RM 分；再做 <b>GAE</b>，由 r_t 和 V(s_t) 算出逐 token 的 A_t 和回报 R_t", "Policy Model 用 PPO-clip loss 更新，Value Model 用 (V − R)² 更新；同一批数据切成 mini-batch 训练好几步", "把新的 Policy Model 权重同步给推理引擎，回到第 1 步"],
+  dpo: ["读入成对数据 (x, y_w, y_l)，训练中不生成任何文本", "Reference Model 对 y_w 和 y_l 做前向，得到整句 log π_ref（可以提前离线算好存下来）", "Policy Model 对同样的数据前向，算 DPO loss 并反向。只有一个模型在训练，流程和 SFT 几乎一样"],
+  grpo: ["每个 prompt 复制 G 份发给 Rollout Model", "生成 G 条回答；Reward Model 或规则给每条打一个分；Reference Model 前向算 log π_ref", "CPU 上做组内标准化，得到每条序列的优势", "Policy Model 前向，计算 clip 项 − β·KL（k3）后反向", "同步权重，回到第 1 步"],
+  drgrpo: ["每个 prompt 复制 G 份", "生成 G 条，规则打 1 / 0", "优势 = r − 组均值（不除 std）", "Policy Model 更新，loss 除以常数（不除以 |o_i|），没有 KL，也不需要 Reference Model", "同步权重"],
+  dapo: ["每个 prompt 复制 G=16 份", "生成后用规则打 ±1，加超长惩罚；<b>如果整组全对或全错，丢掉重采</b>，直到 batch 填满", "组内标准化得到优势", "Policy Model 更新：clip 范围 [0.8, 1.28]，整组 token 平均，被截断的样本 mask 掉；没有 KL", "同步权重"],
+  gspo: ["每个 prompt 复制 G 份", "生成后打整句分", "组内标准化得到优势", "Policy Model 前向算每句的 s_i = exp(mean log ratio)，做整句 clip；没有 KL", "同步权重"],
+  kimi: ["每个 prompt 复制 k 份发给 Rollout Model", "用 π_θi（本轮采样策略）生成 k 条，规则判对错", "优势 = r − 组均值", "Policy Model 更新：梯度系数 = A − τ·Δ，Δ = 整句 log π_θ − log π_θi。KL 的锚点就是采样策略，所以<b>不需要 Reference Model，也没有 clip</b>", "同步权重；新策略成为下一轮的 π_θi，KL 的锚点跟着移动"],
+  cispo: ["每个 prompt 复制 G 份", "生成后用规则、GenRM 或成对比较打分", "组内标准化得到优势", "Policy Model 更新：sg(clip(ratio))·A·log π，整组 token 平均；没有 KL", "同步权重"],
+};
+const AR_DEPLOY = {
+  ppo: [["Policy Model（训练）", "训练", "1×（权重 + 梯度 + Adam）"], ["Rollout Model", "推理", "Policy Model 权重的副本 + KV cache"], ["Value Model（Critic）", "训练", "1×（同 Policy Model 大小）"], ["Reference Model", "只前向", "1×"], ["Reward Model", "只前向", "1×"]],
+  dpo: [["Policy Model（训练）", "训练", "1×"], ["Reference Model", "只前向，可离线预计算", "0–1×"]],
+  grpo: [["Policy Model（训练）", "训练", "1×"], ["Rollout Model", "推理", "副本"], ["Reference Model", "只前向", "1×"], ["Reward Model / 规则", "只前向 / CPU", "0–1×"]],
+  drgrpo: [["Policy Model（训练）", "训练", "1×"], ["Rollout Model", "推理", "副本"], ["规则验证器", "CPU", "0"]],
+  dapo: [["Policy Model（训练）", "训练", "1×"], ["Rollout Model", "推理", "副本"], ["规则验证器", "CPU", "0"]],
+  gspo: [["Policy Model（训练）", "训练", "1×"], ["Rollout Model", "推理", "副本"], ["奖励（规则或模型）", "CPU / 只前向", "0–1×"]],
+  cispo: [["Policy Model（训练）", "训练", "1×"], ["Rollout Model", "推理", "副本"], ["规则 / GenRM 服务", "CPU / 推理服务", "0–1×"]],
+  kimi: [["Policy Model（训练）", "训练", "1×"], ["Rollout Model", "推理", "副本（= π_θi，也是 KL 锚点）"], ["规则验证器", "CPU", "0"]],
+};
+
+// 组内采样分解图: 1 个 prompt → 复制 G 份 → 各采一条 → 打分 → 组内统计 → 优势 → 复制给每个 token
+function groupPanel(algo) {
+  if (algo === "ppo" || algo === "dpo") {
+    return `<div class="card"><h2>每个 prompt 采几条？</h2><p>${algo === "ppo"
+      ? "PPO 每个 prompt 通常只采 1 条。它不靠组内比较，而是让 critic 给每个前缀估一个 V(s<sub>t</sub>)，再用 GAE 算出逐 token 的优势。切到 GRPO 一族，可以看到「一个 prompt 采 G 条、组内求平均」的过程。"
+      : "DPO 训练时不采样，直接使用现成的 (prompt, 好回答, 坏回答)。"}</p></div>`;
+  }
+  let seqs = sampleGroup(S.G, S.seed, { forceE: true });
+  if (S.forceSame) seqs = seqs.map((x, i) => makeResp(POOL[i % 2 ? 0 : 1], i));
+  const out = plCompute(algo, seqs);
+  const rows = out.rows, G = rows.length, RH = 46, top = 58, H = top + G * RH + (out.sd < 1e-9 ? 40 : 14);
+  const mid = top + (G * RH) / 2 - 5;
+  const useStd = !["drgrpo", "kimi"].includes(algo);
+  const advLabel = useStd ? "(r − mean) / std" : "r − mean";
+  const tR = 0.35 + G * 0.18, tS = tR + G * 0.12 + 0.2, tA = tS + 0.45, tT = tA + G * 0.1 + 0.2;
+  const an = d => `class="gp" style="animation-delay:${d.toFixed(2)}s"`;
+  const col = v => Math.abs(v) < 1e-9 ? "#c9ced8" : v > 0 ? "#1f9d55" : "#d64545";
+  const fill = v => Math.abs(v) < 1e-9 ? "#f0f2f6" : v > 0 ? "#e3f5ea" : "#fbe5e5";
+  const head = (x, t) => `<text x="${x}" y="28" font-size="13" font-weight="600" fill="#1d2330" text-anchor="middle">${t}</text>`;
+  const body = rows.map((r, i) => {
+    const y = top + i * RH, txt = r.g.toks.map(t => t.t).join("");
+    const short = txt.length > 22 ? txt.slice(0, 22) + "…" : txt;
+    const sq = r.g.toks.slice(0, 14).map((t, j) => `<rect x="${1078 + j * 8.6}" y="${y + 9}" width="7" height="18" rx="2" fill="${col(r.A)}" opacity="${Math.abs(r.A) < 1e-9 ? 1 : 0.35 + 0.65 * Math.min(1, Math.abs(r.A))}"/>`).join("");
+    return `<g ${an(0.35 + i * 0.18)}><path d="M172,${mid + 5} C205,${mid + 5} 205,${y + 18} 238,${y + 18}" stroke="#7a4cd9" stroke-width="1.5" fill="none" marker-end="url(#arr2)"/>
+<rect x="240" y="${y}" width="452" height="36" rx="8" fill="#fff" stroke="#d5d9e2"/>
+<text x="252" y="${y + 23}" font-size="12" fill="#6b7385" font-family="monospace">o${i + 1}</text>
+<text x="282" y="${y + 23}" font-size="14" fill="#1d2330">${short}</text>
+<text x="682" y="${y + 23}" font-size="11" fill="#6b7385" text-anchor="end">${r.L} tok</text></g>
+<g ${an(tR + i * 0.12)}><rect x="706" y="${y + 4}" width="72" height="28" rx="6" fill="${r.R > 0.5 ? "#e3f5ea" : "#fbe5e5"}"/>
+<text x="742" y="${y + 23}" font-size="13" font-weight="700" text-anchor="middle" fill="${r.R > 0.5 ? "#1f9d55" : "#d64545"}" font-family="monospace">r=${r.R.toFixed(r.R % 1 ? 2 : 0)}</text></g>
+<g ${an(tA + i * 0.1)}><path d="M940,${y + 18} L952,${y + 18}" stroke="#1d2330" stroke-width="1.2"/>
+<rect x="954" y="${y + 4}" width="104" height="28" rx="6" fill="${fill(r.A)}"/>
+<text x="1006" y="${y + 23}" font-size="13" font-weight="700" text-anchor="middle" fill="${col(r.A)}" font-family="monospace">A=${f(r.A, 2)}</text></g>
+<g ${an(tT + i * 0.1)}><path d="M1060,${y + 18} L1074,${y + 18}" stroke="#1d2330" stroke-width="1.2" marker-end="url(#arr2)"/>${sq}${r.L > 14 ? `<text x="${1078 + 14 * 8.6}" y="${y + 23}" font-size="11" fill="#6b7385">…</text>` : ""}</g>`;
+  }).join("");
+  const y0 = top + 4, y1 = top + G * RH - 14;
+  const stats = `<g ${an(tS)}><path d="M792,${y0} h8 V${y1} h-8" stroke="#1d2330" stroke-width="1.5" fill="none"/>
+<text x="812" y="${mid - 6}" font-size="13" fill="#1d2330" font-family="monospace">mean = ${out.m.toFixed(2)}</text>
+<text x="812" y="${mid + 14}" font-size="13" fill="${useStd ? "#1d2330" : "#a0a6b2"}" font-family="monospace">std = ${out.sd.toFixed(2)}${useStd ? "" : "（不用）"}</text>
+<text x="812" y="${mid + 34}" font-size="11" fill="#6b7385">≈ V(s₀)</text></g>`;
+  const zero = out.sd < 1e-9 ? `<text x="605" y="${H - 14}" font-size="13" fill="#d64545" text-anchor="middle" font-weight="600">全组同分 → 所有 A = 0 → 这道题没有梯度${algo === "dapo" ? "（DAPO 会把这组丢掉重采）" : ""}</text>` : "";
+  return `<div class="card"><h2>GRPO 一族的核心：一个 prompt 采 G 条，组内求平均</h2>
+<div class="controls">${slider("G", "G", 2, 8, 1)}<button class="btn" onclick="reseed()">🎲 重新采样</button><button class="btn" onclick="set('forceSame', !S.forceSame)">${S.forceSame ? "取消" : "强制"}全组同分</button><button class="btn" onclick="render(false)">▶ 重放动画</button></div>
+<svg viewBox="0 0 1210 ${H}" style="width:100%;background:#fafbfc;border-radius:10px">
+<defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1d2330"/></marker></defs>
+${head(95, "① 1 个 prompt")}${head(466, "② 复制 G 份，推理引擎各采一条")}${head(742, "③ 各打一个分")}${head(866, "④ 组内统计")}${head(1006, "⑤ 优势")}<text x="1006" y="45" font-size="11" fill="#6b7385" text-anchor="middle" font-family="monospace">${advLabel}</text>${head(1140, "⑥ 复制给每个 token")}
+<g class="gp"><rect x="20" y="${mid - 30}" width="152" height="70" rx="10" fill="#fff" stroke="#2f6fed" stroke-width="2" stroke-dasharray="5 3"/>
+<text x="96" y="${mid - 8}" font-size="11" fill="#6b7385" text-anchor="middle">prompt</text>
+<text x="96" y="${mid + 16}" font-size="14" font-weight="600" fill="#1d2330" text-anchor="middle">${PROMPT}</text></g>
+${body}${stats}${zero}</svg>
+<p class="muted">同一道题采 G 条 → 每条一个整句分 → 组内均值当基线（相当于只估了起点的 V(s₀)）→ 每条一个优势 → 原样复制给它的所有 token（⑥ 里同一行颜色完全一样）。PPO 则是让 critic 给每个前缀估一个 V(s<sub>t</sub>)，所以同一行里每个 token 的优势都不同。${algo === "dapo" ? " DAPO 的分数含超长惩罚。" : ""}${algo === "forceSame" ? "" : ""}</p></div>`;
+}
+PAGES.arch = () => {
+  const a = S.palgo;
+  const dep = AR_DEPLOY[a];
+  return `
+<div class="card"><h2>训练架构：要部署哪几类模型，数据怎么流</h2>
+<div class="controls">${Object.entries(PL_ALGOS).concat([["dpo", "DPO"]]).map(([k, v]) => `<button class="btn ${a === k ? "solid" : ""}" onclick="S.palgo='${k}';render(false)">${v}</button>`).join("")}</div>
+${archSvg(a)}
+<div class="legend" style="margin-top:8px">${Object.values(KIND).map(K => `<span style="--c:${K.c}">${K.tag}</span>`).join("")}<span><b>实线框 + 网络小图 = 模型</b>（有参数，要部署）：🔥 参数会更新 · ❄ 冻结 · ↻ 推理副本（权重随 Policy 同步）；<b>虚线框 = 不是模型</b>：圆柱 = 数据，齿轮 = CPU 计算；实线箭头 = <b>数据</b>（不是模型调用）：例如 ② 是把生成好的回答送进 Reference / Value Model 做一次前向；虚线箭头 = 权重同步；圆点按步骤号依次流动；淡掉的框 = 本方法不需要</span></div>
+</div>
+${groupPanel(a)}
+<div class="two">
+<div class="card"><h2>一次迭代</h2><ol class="steps">${AR_STEPS[a].map(s => `<li>${s}</li>`).join("")}</ol></div>
+<div class="card"><h2>要部署什么（共 ${dep.length} 类）</h2>
+<table><tr><th class="l">组件</th><th class="l">状态</th><th class="l">显存（以 Policy Model 为 1 份）</th></tr>${dep.map(r => `<tr>${r.map(c => `<td class="l">${c}</td>`).join("")}</tr>`).join("")}</table>
+<p class="muted">粗略量级：训练一个模型（bf16 权重和梯度 + fp32 Adam 状态和主权重）约每参数 16 字节；只做前向约每参数 2 字节。以 7B 为例，训练约 112 GB（不含激活），推理约 14 GB 加 KV cache。所以 PPO 多出来的 Value Model 是一笔大开销，这也是 GRPO 想去掉它的原因。</p>
+<div class="note">实际部署有两种排法：<b>共置</b>（如 verl 的 hybrid engine，Policy Model 训练和 Rollout Model 共用同一组 GPU，轮流切换，权重同步在本机完成）；<b>分离</b>（推理集群和训练集群分开，按异步或流水线方式跑，权重同步要跨机广播）。Reference Model 和 Reward Model 可以和 Policy Model 放在同一组卡上分时使用，也可以单独作为服务部署。</div>
+</div></div>`;
+};
+
+// ============================================================
+function render(withAnim) {
+  nav();
+  document.getElementById("main").innerHTML = PAGES[S.algo]();
+  const tok = ++S.animToken;
+  if (withAnim) animate(tok);
+  history.replaceState(null, "", "#" + S.algo + (S.algo === "calc" ? ":" + S.calcAlgo : S.algo === "arch" ? ":" + S.palgo : ""));
+}
+const [initial, hSub] = location.hash.slice(1).split(":");
+if (initial === "arch" && AR_USE[hSub]) S.palgo = hSub;
+if (initial === "calc" && ALGOS.some(a => a.k === hSub)) S.calcAlgo = hSub;
+if (ALGOS.some(a => a.k === initial)) { S.calcAlgo = initial; S.algo = "calc"; }
+else if (PAGES[initial]) S.algo = initial;
+render(true);
+</script>
+</body>
+</html>
