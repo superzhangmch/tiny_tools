@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>认识钟表</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #fff8e7;
+    color: #333;
+    display: flex;
+    justify-content: center;
+  }
+  .app {
+    max-width: 960px;
+    width: 100%;
+    padding: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    justify-content: center;
+  }
+  h1 { width: 100%; text-align: center; margin: 8px 0 0; color: #e8742c; }
+  .left { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .right { flex: 1; min-width: 320px; display: flex; flex-direction: column; gap: 14px; }
+
+  svg { width: 360px; height: 360px; max-width: 90vw; max-height: 90vw; }
+  .face { fill: #fff; stroke: #e8742c; stroke-width: 8; }
+  .tick-min { stroke: #999; stroke-width: 2; }
+  .tick-hour { stroke: #333; stroke-width: 5; }
+  .num { font-size: 26px; font-weight: bold; fill: #333; text-anchor: middle; dominant-baseline: central; }
+  .hand-hour { stroke: #d9363e; stroke-width: 9; stroke-linecap: round; }
+  .hand-min { stroke: #3a8de0; stroke-width: 5; stroke-linecap: round; }
+  .center { fill: #333; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; }
+  button {
+    font-family: inherit;
+    font-size: 18px;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 18px;
+    cursor: pointer;
+  }
+  .btn-main { background: #e8742c; color: #fff; font-size: 22px; padding: 12px 28px; }
+  .btn-main:hover { background: #d0611c; }
+  .btn-submit { background: #2fa84f; color: #fff; font-size: 22px; padding: 12px 28px; }
+  .btn-submit:disabled { background: #bbb; cursor: not-allowed; }
+  label { font-size: 16px; }
+
+  .panel { background: #fff; border-radius: 14px; padding: 12px; box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+  .panel h3 { margin: 0 0 8px; font-size: 18px; }
+  .panel h3 .hour-color { color: #d9363e; }
+  .panel h3 .min-color { color: #3a8de0; }
+  .grid { display: grid; gap: 6px; }
+  .grid-hour { grid-template-columns: repeat(6, 1fr); }
+  .grid-min { grid-template-columns: repeat(10, 1fr); }
+  .opt { background: #f1f1f1; padding: 8px 0; font-size: 18px; }
+  .grid-min .opt { font-size: 15px; padding: 6px 0; }
+  .opt:hover { background: #e2e2e2; }
+  .opt.sel-hour { background: #d9363e; color: #fff; }
+  .opt.sel-min { background: #3a8de0; color: #fff; }
+  .opt.five { font-weight: bold; }
+
+  .answer-line { font-size: 26px; text-align: center; }
+  .answer-line span { display: inline-block; min-width: 48px; border-bottom: 3px solid #999; }
+  .feedback { width: 360px; max-width: 90vw; min-height: 64px; font-size: 22px; text-align: center; padding: 8px; border-radius: 10px; }
+  .ok { background: #e3f7e8; color: #1f7a3a; }
+  .bad { background: #fde8e8; color: #b3261e; }
+  .score { font-size: 18px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🕐 认识钟表</h1>
+
+  <div class="left">
+    <svg id="clock" viewBox="-200 -200 400 400"></svg>
+    <div class="toolbar">
+      <button class="btn-main" id="newBtn">随机出题</button>
+    </div>
+    <div class="feedback" id="feedback">现在是几时几分？</div>
+    <div class="score" id="score">答对 0 题 / 共 0 题，正确率 --</div>
+  </div>
+
+  <div class="right">
+    <div class="answer-line">
+      我的答案：<span id="ansHour">?</span> 时 <span id="ansMin">?</span> 分
+    </div>
+
+    <div class="panel">
+      <h3>选 <span class="hour-color">时</span>（看红色短针）</h3>
+      <div class="grid grid-hour" id="hourGrid"></div>
+    </div>
+
+    <div class="panel">
+      <h3>选 <span class="min-color">分</span>（看蓝色长针，一小格 = 1 分钟）</h3>
+      <div class="grid grid-min" id="minGrid"></div>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn-submit" id="submitBtn" disabled>提交答案</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SVG_NS = "http://www.w3.org/2000/svg";
+const clock = document.getElementById("clock");
+const R = 180;
+
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  (parent || clock).appendChild(e);
+  return e;
+}
+
+// 角度: 0 度指向 12 点, 顺时针
+function polar(deg, r) {
+  const rad = (deg - 90) * Math.PI / 180;
+  return [r * Math.cos(rad), r * Math.sin(rad)];
+}
+
+// ---------- 画表盘 ----------
+el("circle", { cx: 0, cy: 0, r: R, class: "face" });
+
+// 60 个刻度: 每两个数字之间 5 格
+for (let i = 0; i < 60; i++) {
+  const isHour = i % 5 === 0;
+  const [x1, y1] = polar(i * 6, R - 6);
+  const [x2, y2] = polar(i * 6, R - (isHour ? 26 : 16));
+  el("line", { x1, y1, x2, y2, class: isHour ? "tick-hour" : "tick-min" });
+}
+
+// 数字 1-12
+for (let h = 1; h <= 12; h++) {
+  const [x, y] = polar(h * 30, R - 50);
+  const t = el("text", { x, y, class: "num" });
+  t.textContent = h;
+}
+
+
+const hourHand = el("line", { x1: 0, y1: 0, x2: 0, y2: 0, class: "hand-hour" });
+const minHand = el("line", { x1: 0, y1: 0, x2: 0, y2: 0, class: "hand-min" });
+el("circle", { cx: 0, cy: 0, r: 9, class: "center" });
+
+function drawTime(h, m) {
+  const hourDeg = (h % 12) * 30 + m * 0.5;
+  const minDeg = m * 6;
+  const [hx, hy] = polar(hourDeg, R * 0.5);
+  const [mx, my] = polar(minDeg, R * 0.78);
+  hourHand.setAttribute("x2", hx); hourHand.setAttribute("y2", hy);
+  minHand.setAttribute("x2", mx); minHand.setAttribute("y2", my);
+}
+
+// ---------- 答题选项 ----------
+const hourGrid = document.getElementById("hourGrid");
+const minGrid = document.getElementById("minGrid");
+let selHour = null, selMin = null;
+
+for (let h = 1; h <= 12; h++) {
+  const b = document.createElement("button");
+  b.className = "opt";
+  b.textContent = h;
+  b.onclick = () => { selHour = h; refreshSelection(); };
+  hourGrid.appendChild(b);
+}
+for (let m = 0; m < 60; m++) {
+  const b = document.createElement("button");
+  b.className = "opt" + (m % 5 === 0 ? " five" : "");
+  b.textContent = pad(m);
+  b.onclick = () => { selMin = m; refreshSelection(); };
+  minGrid.appendChild(b);
+}
+
+function pad(n) { return String(n).padStart(2, "0"); }
+
+function refreshSelection() {
+  [...hourGrid.children].forEach((b, i) => b.classList.toggle("sel-hour", i + 1 === selHour));
+  [...minGrid.children].forEach((b, i) => b.classList.toggle("sel-min", i === selMin));
+  document.getElementById("ansHour").textContent = selHour ?? "?";
+  document.getElementById("ansMin").textContent = selMin === null ? "?" : pad(selMin);
+  document.getElementById("submitBtn").disabled = !(curHour && selHour !== null && selMin !== null) || answered;
+}
+
+// ---------- 出题 / 判题 ----------
+let curHour = null, curMin = null, answered = false;
+let right = 0, total = 0;
+const feedback = document.getElementById("feedback");
+
+function updateScore() {
+  document.getElementById("score").textContent = `答对 ${right} 题 / 共 ${total} 题，正确率 ${Math.round(right / total * 100)}%`;
+}
+
+function newQuestion() {
+  // 上一题没提交就换题, 算答错
+  if (curHour !== null && !answered) {
+    total++;
+    updateScore();
+  }
+  let h, m;
+  do {
+    h = 1 + Math.floor(Math.random() * 12);
+    m = Math.floor(Math.random() * 60);
+  } while (h === curHour && m === curMin);
+  curHour = h; curMin = m;
+  answered = false;
+  selHour = null; selMin = null;
+  drawTime(h, m);
+  feedback.className = "feedback";
+  feedback.textContent = "现在是几时几分？";
+  refreshSelection();
+}
+
+function submit() {
+  if (answered) return;
+  answered = true;
+  total++;
+  const ok = selHour === curHour && selMin === curMin;
+  if (ok) {
+    right++;
+    feedback.className = "feedback ok";
+    feedback.textContent = `🎉 答对了！就是 ${curHour} 时 ${pad(curMin)} 分`;
+  } else {
+    feedback.className = "feedback bad";
+    const tips = [];
+    if (selHour !== curHour) {
+      tips.push(curMin >= 30 && selHour === curHour % 12 + 1
+        ? "时针还没走到下一个数字，要看它刚走过的那个数字哦"
+        : "看红色短针刚走过哪个数字");
+    }
+    if (selMin !== curMin) tips.push(`蓝色长针从 12 开始，每走一个数字是 5 分钟，再数小格`);
+    feedback.innerHTML = `再想想～正确答案是 <b>${curHour} 时 ${pad(curMin)} 分</b><br><small>${tips.join("；")}</small>`;
+  }
+  updateScore();
+  refreshSelection();
+}
+
+document.getElementById("newBtn").onclick = newQuestion;
+document.getElementById("submitBtn").onclick = submit;
+
+// 打开页面就出第一题
+newQuestion();
+</script>
+</body>
+</html>
