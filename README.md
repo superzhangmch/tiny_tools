@@ -4,6 +4,7 @@
 - 汉字笔画检索 bihua.html
 - 找字：根据拼音与笔顺找字 py_bh_find.html
 - 成语检索、成语接龙 chengyu_search.html
+- 五子棋（CNN 模仿 Rapfi + MCTS，纯浏览器推理，手机可玩）: demo/games/gomoku/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/gomoku/index.html)
 - 物理模拟（只给最底层定律，让公式自己涌现）: demo/physics/windtunnel.html / demo/physics/idealgas.html / demo/physics/idealgas_kelvin.html / demo/physics/blackbody.html / demo/physics/catenary.html / demo/physics/catenary_compare.html / demo/physics/cloth3d.html / demo/physics/solarsystem.html / demo/physics/fermat_light.html
   
 
