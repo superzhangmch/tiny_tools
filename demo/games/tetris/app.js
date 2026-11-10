@@ -5,8 +5,8 @@
 (function () {
   'use strict';
   const E = window.TetrisEngine, H = E.H, W = E.W, HID = E.HIDDEN, $ = (id) => document.getElementById(id);
-  const COL = ['#00f0f0', '#f0f000', '#aa00f0', '#00f000', '#f00000', '#3050ff', '#f0a000'];            // I O T S Z J L
-  const CLS_COL = ['#4cc9f0', '#f9c74f', '#90be6d', '#f94144'];                                         // one colour per rotation curve
+  const COL = ['#00b8d4', '#f2c200', '#9c27b0', '#2eb82e', '#e53935', '#2f5bea', '#f57c00'];            // I O T S Z J L
+  const CLS_COL = ['#0b7285', '#e08e00', '#2b8a3e', '#d6336c'];                                         // one colour per rotation curve
   const state = { board: new Uint8Array(H * W), piece: 0, next: 0, queue: [], rng: null, seed: 0, game: 1, pieces: 0, lines: 0, tetris: 0, clears: [0, 0, 0, 0, 0],
     ready: false, paused: false, speed: 1, mode: 'ai', loopId: 0, over: false, busy: false, cur: null, falling: null, flash: null, showOverlay: false,
     analysis: null, lastMs: 0, lastCands: 0 };
@@ -61,7 +61,7 @@
   const cv = $('board'), ctx = cv.getContext('2d'), chv = $('chart'), cctx = chv.getContext('2d'), ncv = $('next'), nctx = ncv.getContext('2d'); let cs = 24, CH = 120;
   function resize() {
     const cw = document.documentElement.clientWidth - 20, wide = cw >= 640, dpr = window.devicePixelRatio || 1, chartOn = $('showchart').checked;
-    CH = Math.max(90, Math.min(150, Math.round(cs * 5))); const avail = window.innerHeight * (wide ? 0.9 : 0.8) - (chartOn ? CH + 30 : 0);
+    CH = Math.max(90, Math.min(150, Math.round(cs * 5))); const avail = window.innerHeight - (chartOn ? CH + 34 : 0) - (wide ? 100 : 40);        // leave room for the title / status line above
     cs = Math.max(13, Math.floor(Math.min((cw - (wide ? 320 : 0)) / W, avail / H, 34)));
     $('left').style.width = W * cs + 'px'; cv.style.width = W * cs + 'px'; cv.style.height = H * cs + 'px'; cv.width = Math.round(W * cs * dpr); cv.height = Math.round(H * cs * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     chv.style.width = W * cs + 'px'; chv.style.height = CH + 'px'; chv.width = Math.round(W * cs * dpr); chv.height = Math.round(CH * dpr); cctx.setTransform(dpr, 0, 0, dpr, 0, 0); $('chartbox').style.display = chartOn ? '' : 'none';
@@ -72,17 +72,17 @@
   function footprint(piece, rot, x, y) { const c = E.CELLS[piece][rot], out = []; for (let k = 0; k < 8; k += 2) out.push([y + c[k], x + c[k + 1]]); return out; }
   function draw() { drawBoard(); drawChart(); drawNext(); }
   function drawBoard() {
-    const c = ctx, b = state.flash ? state.flash.board : state.board; c.clearRect(0, 0, W * cs, H * cs); c.fillStyle = '#0c0e12'; c.fillRect(0, 0, W * cs, H * cs);
-    c.fillStyle = '#161018'; c.fillRect(0, 0, W * cs, HID * cs);                                        // the two hidden spawn rows
-    c.strokeStyle = '#1b1f27'; c.lineWidth = 1; c.beginPath(); for (let i = 1; i < W; i++) { c.moveTo(i * cs, 0); c.lineTo(i * cs, H * cs); } for (let i = 1; i < H; i++) { c.moveTo(0, i * cs); c.lineTo(W * cs, i * cs); } c.stroke();
-    c.strokeStyle = '#5a2a3a'; c.setLineDash([4, 3]); c.beginPath(); c.moveTo(0, HID * cs); c.lineTo(W * cs, HID * cs); c.stroke(); c.setLineDash([]);
-    for (let r = 0; r < H; r++) for (let x = 0; x < W; x++) if (b[r * W + x]) cell(c, x * cs, r * cs, cs, state.flash && state.flash.rows.has(r) ? '#ffffff' : '#7a869e');
+    const c = ctx, b = state.flash ? state.flash.board : state.board; c.clearRect(0, 0, W * cs, H * cs); c.fillStyle = '#ffffff'; c.fillRect(0, 0, W * cs, H * cs);
+    c.fillStyle = '#fdecea'; c.fillRect(0, 0, W * cs, HID * cs);                                        // the two hidden spawn rows
+    c.strokeStyle = '#e3e6ec'; c.lineWidth = 1; c.beginPath(); for (let i = 1; i < W; i++) { c.moveTo(i * cs, 0); c.lineTo(i * cs, H * cs); } for (let i = 1; i < H; i++) { c.moveTo(0, i * cs); c.lineTo(W * cs, i * cs); } c.stroke();
+    c.strokeStyle = '#d9534f'; c.setLineDash([4, 3]); c.beginPath(); c.moveTo(0, HID * cs); c.lineTo(W * cs, HID * cs); c.stroke(); c.setLineDash([]);
+    for (let r = 0; r < H; r++) for (let x = 0; x < W; x++) if (b[r * W + x]) cell(c, x * cs, r * cs, cs, state.flash && state.flash.rows.has(r) ? '#ffd54a' : '#6f7d99');
     const a = state.analysis, f = state.falling || state.cur;
     if (a && f && a.piece === f.piece && $('showcand').checked && (state.showOverlay || state.mode === 'human')) {   // every candidate lock position, brighter = higher score
       a.cands.forEach((q, i) => { const t = a.hi > a.lo ? (q.score - a.lo) / (a.hi - a.lo) : 1; footprint(a.piece, q.rot, q.x, q.y).forEach(([r, x]) => cell(c, x * cs, r * cs, cs, COL[a.piece], 0.05 + 0.3 * t * t)); });
     }
     if (a && f && a.piece === f.piece && (state.mode === 'ai' ? state.showOverlay : $('hint').checked)) {            // the AI's favourite placement
-      const q = a.cands[a.best]; c.strokeStyle = '#fff'; c.lineWidth = 2; footprint(a.piece, q.rot, q.x, q.y).forEach(([r, x]) => { cell(c, x * cs, r * cs, cs, COL[a.piece], 0.35); c.strokeRect(x * cs + 1.5, r * cs + 1.5, cs - 3, cs - 3); });
+      const q = a.cands[a.best]; c.strokeStyle = '#111'; c.lineWidth = 2; footprint(a.piece, q.rot, q.x, q.y).forEach(([r, x]) => { cell(c, x * cs, r * cs, cs, COL[a.piece], 0.35); c.strokeRect(x * cs + 1.5, r * cs + 1.5, cs - 3, cs - 3); });
     }
     if (state.cur && state.mode === 'human') {                                                                   // landing shadow of the piece you are moving
       const g = state.cur, gy = E.dropY(state.board, g.piece, g.rot, g.x, g.y); c.strokeStyle = COL[g.piece]; c.lineWidth = 1.5; footprint(g.piece, g.rot, g.x, gy).forEach(([r, x]) => c.strokeRect(x * cs + 2, r * cs + 2, cs - 4, cs - 4));
@@ -92,24 +92,24 @@
   }
   function drawChart() {
     if (!$('showchart').checked) return;
-    const c = cctx, w = W * cs, h = CH, a = state.analysis; c.clearRect(0, 0, w, h); c.fillStyle = '#0c0e12'; c.fillRect(0, 0, w, h);
-    c.strokeStyle = '#1b1f27'; c.lineWidth = 1; c.beginPath(); for (let i = 1; i < W; i++) { c.moveTo(i * cs, 0); c.lineTo(i * cs, h); } c.stroke();          // same column grid as the board
-    c.fillStyle = '#98a0b3'; c.font = '12px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const c = cctx, w = W * cs, h = CH, a = state.analysis; c.clearRect(0, 0, w, h); c.fillStyle = '#ffffff'; c.fillRect(0, 0, w, h);
+    c.strokeStyle = '#e3e6ec'; c.lineWidth = 1; c.beginPath(); for (let i = 1; i < W; i++) { c.moveTo(i * cs, 0); c.lineTo(i * cs, h); } c.stroke();          // same column grid as the board
+    c.fillStyle = '#6b7280'; c.font = '12px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
     if (!a) { c.fillText(state.over ? '' : 'AI 正在评估这一块的所有落点…', w / 2, h / 2); $('sScore').textContent = '—'; return; }
     const pad = (a.hi - a.lo) * 0.16 + 0.12, top = a.hi + pad, bot = a.lo - pad, Y = (s) => 10 + (top - s) / (top - bot) * (h - 20), X = (xl) => (xl + 0.5) * cs;
     const best = a.cands[a.best], bcls = E.shapeClass(a.piece, best.rot), bxl = best.x + E.minCol(a.piece, best.rot);
-    c.setLineDash([3, 4]); c.strokeStyle = '#3a4152'; c.beginPath(); c.moveTo(0, Y(a.hi)); c.lineTo(w, Y(a.hi)); c.moveTo(0, Y(a.lo)); c.lineTo(w, Y(a.lo)); c.stroke(); c.setLineDash([]);
-    c.textAlign = 'left'; c.fillStyle = '#6c7487'; c.font = '10px sans-serif'; c.fillText(a.hi.toFixed(2), 3, Y(a.hi) - 6); c.fillText(a.lo.toFixed(2), 3, Y(a.lo) + 7);
+    c.setLineDash([3, 4]); c.strokeStyle = '#c3c9d6'; c.beginPath(); c.moveTo(0, Y(a.hi)); c.lineTo(w, Y(a.hi)); c.moveTo(0, Y(a.lo)); c.lineTo(w, Y(a.lo)); c.stroke(); c.setLineDash([]);
+    const axLeft = bxl >= 3; c.textAlign = axLeft ? 'left' : 'right'; c.fillStyle = '#7b8496'; c.font = '10px sans-serif'; c.fillText(a.hi.toFixed(2), axLeft ? 3 : w - 3, Y(a.hi) - 6); c.fillText(a.lo.toFixed(2), axLeft ? 3 : w - 3, Y(a.lo) + 7);   // axis labels go to the side the best point is not on
     a.classes.forEach((cls) => {
       const col = CLS_COL[cls % 4]; c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 2; c.beginPath(); let pen = false;
       for (let xl = 0; xl < W; xl++) { const p = a.pts.get(cls * 16 + xl); if (!p) { pen = false; continue; } if (pen) c.lineTo(X(xl), Y(p.score)); else c.moveTo(X(xl), Y(p.score)); pen = true; }
       c.stroke(); for (let xl = 0; xl < W; xl++) { const p = a.pts.get(cls * 16 + xl); if (p) { c.beginPath(); c.arc(X(xl), Y(p.score), 3, 0, 6.3); c.fill(); } }
     });
     const cur = cursorPoint();
-    if (cur) { c.setLineDash([2, 3]); c.strokeStyle = '#ffffff88'; c.lineWidth = 1; c.beginPath(); c.moveTo(X(cur.xl), 0); c.lineTo(X(cur.xl), h); c.stroke(); c.setLineDash([]);
-      if (cur.pt) { c.fillStyle = '#fff'; c.beginPath(); c.arc(X(cur.xl), Y(cur.pt.score), 5, 0, 6.3); c.fill(); } }
-    c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.arc(X(bxl), Y(best.score), 7, 0, 6.3); c.stroke();                                   // the best point
-    c.fillStyle = '#fff'; c.font = 'bold 11px sans-serif'; c.textAlign = 'center'; c.fillText(best.score.toFixed(2), Math.min(w - 16, Math.max(16, X(bxl))), Math.max(8, Y(best.score) - 14));
+    if (cur) { c.setLineDash([2, 3]); c.strokeStyle = '#11111166'; c.lineWidth = 1; c.beginPath(); c.moveTo(X(cur.xl), 0); c.lineTo(X(cur.xl), h); c.stroke(); c.setLineDash([]);
+      if (cur.pt) { c.fillStyle = '#2d3748'; c.beginPath(); c.arc(X(cur.xl), Y(cur.pt.score), 5, 0, 6.3); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); } }
+    c.strokeStyle = '#111'; c.lineWidth = 2; c.beginPath(); c.arc(X(bxl), Y(best.score), 7, 0, 6.3); c.stroke();                                   // the best point
+    c.fillStyle = '#111'; c.font = 'bold 11px sans-serif'; c.textAlign = 'center'; c.fillText(best.score.toFixed(2), Math.min(w - 16, Math.max(16, X(bxl))), Math.max(8, Y(best.score) - 14));
     const el = $('sScore'), pt = cur && cur.pt; el.textContent = (pt ? pt.score.toFixed(2) : '—') + ' / ' + best.score.toFixed(2);
   }
   function drawNext() {
@@ -118,10 +118,16 @@
     const ox = (88 - (maxC - minC + 1) * s) / 2, oy = (56 - (maxR - minR + 1) * s) / 2;
     for (let k = 0; k < 8; k += 2) cell(nctx, ox + (cells[k + 1] - minC) * s, oy + (cells[k] - minR) * s, s, COL[p]);
   }
+  function shapeSvg(piece, rot, color) {                                              // the piece as it looks in this rotation, in the colour of its curve
+    const cells = E.CELLS[piece][rot], s = 9; let minR = 9, maxR = 0, minC = 9, maxC = 0;
+    for (let k = 0; k < 8; k += 2) { minR = Math.min(minR, cells[k]); maxR = Math.max(maxR, cells[k]); minC = Math.min(minC, cells[k + 1]); maxC = Math.max(maxC, cells[k + 1]); }
+    let r = ''; for (let k = 0; k < 8; k += 2) r += `<rect x="${(cells[k + 1] - minC) * s}" y="${(cells[k] - minR) * s}" width="${s - 1}" height="${s - 1}" rx="1.5" fill="${color}"/>`;
+    return `<svg width="${(maxC - minC + 1) * s}" height="${(maxR - minR + 1) * s}" style="margin:0 5px 0 2px">${r}</svg>`;
+  }
   function updateLegend() {
-    const a = state.analysis, el = $('legend'); if (!a) { el.innerHTML = '<span>每个旋转角度一条曲线：横轴 = 方块最左格所在的列，纵轴 = AI 给这个落点的评分</span>'; return; }
+    const a = state.analysis, el = $('legend'); if (!a) { el.innerHTML = '<span>评分曲线：每个旋转角度一条</span>'; return; }
     const two = a.piece === 0 || a.piece === 3 || a.piece === 4, name = (cls) => (a.piece === 1 ? '不用转' : two ? (cls === 0 ? '0° / 180°' : '90° / 270°') : cls * 90 + '°');
-    el.innerHTML = '<span>旋转：</span>' + a.classes.map((cls) => `<span><i style="background:${CLS_COL[cls % 4]}"></i>${name(cls)}</span>`).join('') + '<span>◯ = AI 的选择　● = 方块此刻的位置</span>';
+    el.innerHTML = a.classes.map((cls) => `<span class="lg"><i style="background:${CLS_COL[cls % 4]}"></i>${shapeSvg(a.piece, cls, CLS_COL[cls % 4])}${name(cls)}</span>`).join('') + '<span>◯ AI 选择　● 当前位置</span>';
   }
   function stats() {
     $('sGame').textContent = state.game; $('sPieces').textContent = state.pieces; $('sLines').textContent = state.lines; $('sTet').textContent = state.tetris;
