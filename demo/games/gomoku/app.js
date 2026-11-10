@@ -9,8 +9,7 @@
 
   // ---------- settings
   const store = { get: (k, d) => { try { const v = localStorage.getItem('gomoku_' + k); return v === null ? d : v; } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem('gomoku_' + k, v); } catch (e) {} } };
-  const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
-  $('level').value = store.get('level', '16'); $('confirm').checked = store.get('confirm', coarse ? '1' : '0') === '1'; $('showheat').checked = store.get('heat', '1') === '1'; $('basic').checked = store.get('basic', '1') === '1';
+  $('level').value = store.get('level', '0'); $('confirm').checked = store.get('confirm', '0') === '1'; $('showheat').checked = store.get('heat', '1') === '1'; $('basic').checked = store.get('basic', '0') === '1';
   $('level').onchange = () => { store.set('level', $('level').value); updateInfo(); };
   $('confirm').onchange = () => { store.set('confirm', $('confirm').checked ? '1' : '0'); state.pending = -1; draw(); };
   $('basic').onchange = () => { store.set('basic', $('basic').checked ? '1' : '0'); updateInfo(); };

@@ -53,15 +53,15 @@
   </div>
   <div class="row"><span>强度</span>
     <select id="level">
-      <option value="0">快速 · 纯 CNN</option>
-      <option value="16" selected>中等 · CNN + MCTS 16</option>
+      <option value="0" selected>快速 · 纯 CNN（默认）</option>
+      <option value="16">中等 · CNN + MCTS 16</option>
       <option value="48">较强 · CNN + MCTS 48</option>
       <option value="128">最强 · CNN + MCTS 128（慢）</option>
     </select>
   </div>
-  <div class="row"><label class="chk"><input type="checkbox" id="basic" checked> 基础规则：AI 能成五就成五，对方有四就堵（关掉就是纯网络）</label></div>
+  <div class="row"><label class="chk"><input type="checkbox" id="basic"> 基础规则：AI 能成五就成五，对方有四就堵（关掉就是纯网络）</label></div>
   <div class="row"><label class="chk"><input type="checkbox" id="showheat" checked> 显示小棋盘热力图（CNN 的落点概率，想自己下可关）</label></div>
-  <div class="row"><label class="chk"><input type="checkbox" id="confirm"> 点两次确认落子（防误触，手机默认开启）</label></div>
+  <div class="row"><label class="chk"><input type="checkbox" id="confirm"> 点两次确认落子（防误触，手机上建议开）</label></div>
   <div id="info"></div>
 </div>
 <script src="app.js"></script>
