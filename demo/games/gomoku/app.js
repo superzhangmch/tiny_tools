@@ -8,7 +8,7 @@
   const state = { board: new Int8Array(N), moves: [], human: 1, turn: 1, over: false, winLine: null, thinking: false, pending: -1, ready: false, reqId: 0, forwardMs: 70, heat: null, heatFor: 0, heatSeq: 0, hv: { mine: null, ai: null }, heatView: 'mine', lastReason: 'net' };
 
   // ---------- settings
-  const store = { get: (k, d) => { try { const v = localStorage.getItem('gomoku_' + k); return v === null ? d : v; } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem('gomoku_' + k, v); } catch (e) {} } };
+  const store = { get: (k, d) => { try { const v = localStorage.getItem('gomoku2_' + k); return v === null ? d : v; } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem('gomoku2_' + k, v); } catch (e) {} } };
   $('level').value = store.get('level', '0'); $('confirm').checked = store.get('confirm', '0') === '1'; $('showheat').checked = store.get('heat', '1') === '1'; $('basic').checked = store.get('basic', '0') === '1';
   $('level').onchange = () => { store.set('level', $('level').value); updateInfo(); };
   $('confirm').onchange = () => { store.set('confirm', $('confirm').checked ? '1' : '0'); state.pending = -1; draw(); };
