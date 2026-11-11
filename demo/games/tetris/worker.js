@@ -14,6 +14,7 @@ onmessage = (e) => {
   const m = e.data;
   if (m.type === 'init') { init().catch((err) => postMessage({ type: 'error', message: String(err) })); return; }
   if (m.type !== 'decide' || !net) return;
+  if (m.rules) E.setRules(m.rules);                                          // the page tells the worker which rotation rules are on
   const t0 = performance.now(), r = E.decide(net, model, Uint8Array.from(m.board), m.piece);
   if (!r) { postMessage({ type: 'decision', id: m.id, over: true }); return; }
   postMessage({ type: 'decision', id: m.id, best: r.best, ms: performance.now() - t0, cands: r.cands.map((c) => ({ rot: c.rot, x: c.x, y: c.y, lines: c.lines, v: c.v, score: c.score })) });

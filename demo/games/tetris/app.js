@@ -17,7 +17,8 @@
   const bindChk = (id, key, def, after) => { $(id).checked = store.get(key, def) === '1'; $(id).onchange = () => { store.set(key, $(id).checked ? '1' : '0'); $(id).blur(); if (after) after(); }; };
   bindSel('speed', 'speed', '1', () => { state.speed = +$('speed').value; }); state.speed = +$('speed').value;
   bindSel('gravity', 'gravity', '0');
-  bindChk('showfrozen', 'frozen', '1', () => resize()); bindChk('showchart', 'chart', '1', () => resize()); bindChk('showcand', 'cand', '0', () => draw()); bindChk('hint', 'hint', '0', () => draw());
+  bindChk('phys', 'phys', '1', () => { E.setRules($('phys').checked ? 'phys' : 'srs'); if (state.ready) startLoop(); }); E.setRules($('phys').checked ? 'phys' : 'srs');      // rotation rules: physical (default) or SRS with wall kicks
+  bindChk('showfrozen', 'frozen', '1', () => resize()); bindChk('showchart', 'chart', '1', () => resize()); bindChk('showcand', 'cand2', '1', () => draw());           // the heat map is ON by default ('cand2': an old stored 'off' no longer applies) bindChk('hint', 'hint', '0', () => draw());
 
   // ---------- random 7-bag (seeded)
   function mulberry32(a) { return function () { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -36,7 +37,7 @@
     else if (m.type === 'decision') { const r = waiting.get(m.id); if (r) { waiting.delete(m.id); r(m); } }
   };
   worker.postMessage({ type: 'init' });
-  const decide = (board, piece) => new Promise((res) => { const id = ++reqId; waiting.set(id, res); worker.postMessage({ type: 'decide', id, board: Array.from(board), piece }); });
+  const decide = (board, piece) => new Promise((res) => { const id = ++reqId; waiting.set(id, res); worker.postMessage({ type: 'decide', id, board: Array.from(board), piece, rules: E.getRules() }); });
 
   // ---------- analysis of the piece in play: score of every reachable placement, grouped by rotation (shape class) and shift
   function makeAnalysis(piece, res) {
@@ -97,10 +98,10 @@
       if (h) { c.strokeStyle = '#111'; c.lineWidth = 2; crOutline(c, r, x, 1.5); }
     }
     const a = state.analysis, f = state.falling || state.cur;
-    if (a && f && a.piece === f.piece && $('showcand').checked && (state.showOverlay || state.mode === 'human')) {   // every candidate lock position, brighter = higher score
+    if (a && f && a.piece === f.piece && $('showcand').checked) {                                                    // HEAT MAP: every reachable lock position of the piece in play, brighter = higher score (before 开始, paused, running, and in human mode)
       a.cands.forEach((q, i) => { const t = a.hi > a.lo ? (q.score - a.lo) / (a.hi - a.lo) : 1; footprint(a.piece, q.rot, q.x, q.y).forEach(([r, x]) => cr(c, r, x, COL[a.piece], 0.05 + 0.3 * t * t)); });
     }
-    if (a && f && a.piece === f.piece && (state.mode === 'ai' ? state.showOverlay : $('hint').checked)) {            // the AI's favourite placement: a light fill and a thin outline in the piece's own colour
+    if (a && f && a.piece === f.piece && (state.mode === 'ai' || $('hint').checked)) {                                  // the AI's favourite placement: a light fill and a thin outline in the piece's own colour
       const q = a.cands[a.best]; c.strokeStyle = COL[a.piece]; c.lineWidth = 1.5; c.globalAlpha = 0.85; footprint(a.piece, q.rot, q.x, q.y).forEach(([r, x]) => { c.globalAlpha = 1; cr(c, r, x, COL[a.piece], 0.2); c.globalAlpha = 0.85; crOutline(c, r, x, 1.5); }); c.globalAlpha = 1;
     }
     if (state.cur && state.mode === 'human') {                                                                   // landing shadow of the piece you are moving
@@ -139,7 +140,7 @@
   function drawFrozen() {
     const f = state.frozen, c = fzctx, w = W * fcs, h = (H - HID) * fcs; c.clearRect(0, 0, w, h); c.fillStyle = '#fff'; c.fillRect(0, 0, w, h);
     c.strokeStyle = '#e3e6ec'; c.lineWidth = 1; c.beginPath(); for (let i = 1; i < W; i++) { c.moveTo(i * fcs, 0); c.lineTo(i * fcs, h); } for (let i = 1; i < H - HID; i++) { c.moveTo(0, i * fcs); c.lineTo(w, i * fcs); } c.stroke();
-    if (!f) { $('frozencap').textContent = '还没有落子。'; return; }
+    if (!f) return;
     const hot = new Set(f.cells.map(([r, x]) => r * W + x)), full = new Set(f.full);
     c.fillStyle = '#fff1b8'; full.forEach((r) => { if (r >= HID) c.fillRect(0, (r - HID) * fcs, w, fcs); });                // complete rows: tinted yellow (they disappear in the main board)
     c.strokeStyle = '#e3e6ec'; c.lineWidth = 1; c.beginPath(); for (let i = 1; i < W; i++) { c.moveTo(i * fcs, 0); c.lineTo(i * fcs, h); } for (let i = 1; i < H - HID; i++) { c.moveTo(0, i * fcs); c.lineTo(w, i * fcs); } c.stroke();
@@ -147,7 +148,6 @@
       const isHot = hot.has(r * W + x); c.fillStyle = isHot ? COL[f.piece] : full.has(r) ? '#f0b24a' : '#8a96ae'; c.fillRect(x * fcs + 1, (r - HID) * fcs + 1, fcs - 2, fcs - 2);
       if (isHot) { c.strokeStyle = '#111'; c.lineWidth = 2; c.strokeRect(x * fcs + 1.5, (r - HID) * fcs + 1.5, fcs - 3, fcs - 3); }
     }
-    $('frozencap').innerHTML = `<b>刚落子的那一刻（冻结，还没消行）</b>：第 ${f.n} 块 <b>${E.ORDER[f.piece]}</b>，旋转 ${f.rot * 90}°，方块框左上角在第 ${f.x} 列、第 ${f.y - HID + 1} 行（从上数）<br>${f.lines ? `满行（橙黄色的格子）：第 ${f.full.map((r) => r - HID + 1).join('、')} 行，共 ${f.lines} 行，上面的主盘面里它们已被消掉` : '没有满行，不消行'}<br>路线：${f.route}`;
   }
   function drawPreview(c, p) {                                                                            // a piece in a small box (current / next)
     c.clearRect(0, 0, 88, 36); const cells = E.CELLS[p][0], s = 11; let minC = 9, maxC = 0, minR = 9, maxR = 0;
@@ -174,7 +174,7 @@
     $('sCand').textContent = state.lastCands ? `${state.lastCands} / ${state.lastMs.toFixed(0)} ms` : '—';
   }
   function updateInfo(m) {
-    $('info').innerHTML = `<small>20×10 盘面，真实规则：SRS 旋转 + 踢墙，7 块随机袋。</small><b>AI 怎么下棋：</b>每来一块，先列出它能真正到达的所有落点（含旋转、踢墙、塞到悬挑下面），再用一个小 CNN（${(m.params / 1e6).toFixed(2)}M 参数，只看<b>落下后的盘面</b>）给每个落点打分，选「消行奖励 + 0.99 × 盘面价值」最高的。<b>它看不到下一块</b>，也没有任何手写的"别留洞"之类规则。<br>`
+    $('info').innerHTML = `<small>20×10 盘面，真实规则：SRS 旋转 + 踢墙，7 块随机袋。</small><b>旋转规则：</b>面板里的复选框可选「物理」（转动范围要空，不踢墙，默认）或标准 SRS（允许踢墙，是 The Tetris Company 的行业约定，不是物理规律）。注意 <b>AI 训练时没有考虑物理约束</b>，训练环境用的是 SRS；这里只是限制它能选的落点（实测 AI 在两种规则下几乎一样好）。<br><b>AI 怎么下棋：</b>每来一块，先列出它能真正到达的所有落点（含旋转、踢墙、塞到悬挑下面），再用一个小 CNN（${(m.params / 1e6).toFixed(2)}M 参数，只看<b>落下后的盘面</b>）给每个落点打分，选「消行奖励 + 0.99 × 盘面价值」最高的。<b>它看不到下一块</b>，也没有任何手写的"别留洞"之类规则。<br>`
       + `<b>盘面上方的曲线：</b>这一块的每个旋转角度一条曲线；横轴是方块<b>最左一格</b>所在的列（和下面的盘面对齐），纵轴是 AI 给"落在这里"的评分，断开的地方是到不了。白点是方块此刻所在的位置，所以你左右移动时能看到评分怎么变。<br>`
       + `<b>操作：</b>打开页面后先停着，点「开始」才动，随时可以「暂停」/「继续」。「我来玩」时用 ← → 移动，↑ 或 X 顺时针转，Z 逆时针转，↓ 下落一格，空格直接落到底，P 暂停 / 继续（手机用盘面下面的按钮）。刚落下的那一块会用它本来的颜色加黑边突出，下一块落下后再变回灰色。盘面下面还有一块<b>冻结</b>的小盘面：显示上一步落子<b>那一刻、还没消行</b>的局面（满了的行染成橙黄色），刚落下的块着重显示，并写出它的落点和走过的路线，方便核对。任何时候都可以点「AI 玩」让它接着下；「单步」= 让 AI 走一块然后停住（我来玩时，就是 AI 替你走手上这一块）。<br>`
       + `<b>效率</b> = 每块平均消的行数 ÷ 0.4（10 列宽、每块 4 格，0.4 行/块是上限）。`;
@@ -196,7 +196,7 @@
     if (placed) {                                                                                      // remember the cells of the piece that was just placed, at their FINAL positions
       const tmp = Uint8Array.from(state.board), cells = footprint(placed.piece, placed.rot, placed.x, placed.y); cells.forEach(([r, x]) => { tmp[r * W + x] = 1; });
       const full = fullRows(tmp); state.lastPlaced = { piece: placed.piece, cells: cells.filter(([r]) => !full.has(r)).map(([r, x]) => [r + Array.from(full).filter((q) => q > r).length, x]) };
-      state.frozen = { board: tmp, piece: placed.piece, cells, full: Array.from(full), rot: placed.rot, x: placed.x, y: placed.y, lines, route: placed.route || '手动操作', n: state.pieces + 1 };      // the position at the moment of locking: rows NOT yet removed
+      state.frozen = { board: tmp, piece: placed.piece, cells, full: Array.from(full), rot: placed.rot, x: placed.x, y: placed.y, lines, route: placed.route || '手动操作', rules: E.getRules(), n: state.pieces + 1 };      // the position at the moment of locking: rows NOT yet removed
     }
     state.board = rr.board; state.pieces++; state.lines += lines; state.clears[lines]++; if (lines === 4) state.tetris++;
     state.piece = state.next; state.next = draw7(); stats(); drawFrozen();
@@ -225,10 +225,10 @@
       setAnalysis(makeAnalysis(piece, res)); state.falling = { piece, rot: 0, x: E.SPAWN_X[piece], y: 0 }; draw();          // chart + the new piece are shown even before "开始"
       const pw = whilePaused(); if (pw) { await pw; if (lid !== state.loopId) return; }
       if (state.speed > 0) {                                                  // the animation follows the REAL route: rotate / shift on top and drop straight when that works, otherwise slide into the gap
-        const s = state.speed; state.showOverlay = true;
-        if (state.logPaths) (state.pathLog = state.pathLog || []).push({ board: Array.from(cur), piece, path: route, target: { rot: mv.rot, x: mv.x, y: mv.y } });
+        const s = state.speed, anim = E.naturalRoute(cur, piece, { rot: mv.rot, x: mv.x, y: mv.y }); state.showOverlay = true;          // the piece comes into the well and keeps falling while it is moved / turned
+        if (state.logPaths) (state.pathLog = state.pathLog || []).push({ board: Array.from(cur), piece, path: anim, target: { rot: mv.rot, x: mv.x, y: mv.y } });
         state.falling = { piece, rot: 0, x: E.SPAWN_X[piece], y: 0 }; draw(); await sleep(260 / s); if (lid !== state.loopId) return;
-        for (const st of (route || [{ rot: mv.rot, x: mv.x, y: mv.y, move: 'D' }]).slice(1)) { state.falling = { piece, rot: st.rot, x: st.x, y: st.y }; draw(); await sleep((st.move === 'D' ? 20 : 85) / s); if (lid !== state.loopId) return; }
+        for (const st of (anim || [{ rot: mv.rot, x: mv.x, y: mv.y, move: 'D' }]).slice(1)) { state.falling = { piece, rot: st.rot, x: st.x, y: st.y }; draw(); await sleep((st.move === 'D' ? 38 : 95) / s); if (lid !== state.loopId) return; }
         await sleep(90 / s); if (lid !== state.loopId) return;
         if (mv.lines) { const tmp = Uint8Array.from(cur); footprint(piece, mv.rot, mv.x, mv.y).forEach(([rr, x]) => { tmp[rr * W + x] = 1; }); state.falling = null; state.flash = { board: tmp, rows: fullRows(tmp) }; draw(); await sleep(170 / s); state.flash = null; if (lid !== state.loopId) return; }
       }
