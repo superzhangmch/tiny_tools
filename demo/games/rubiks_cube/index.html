@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>3x3 魔方 · 浏览器里的小模型求解</title>
+<style>
+  :root { --bg:#f4f6f9; --panel:#ffffff; --fg:#1f2328; --dim:#6a737d; --acc:#2f7de1; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 -apple-system, "PingFang SC", sans-serif;
+         display:flex; height:100vh; overflow:hidden; }
+  #side { width:380px; padding:16px; background:var(--panel); border-right:1px solid #dde2e8; overflow-y:auto; display:flex; flex-direction:column; gap:14px; }
+  #view { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #stage { flex:1; position:relative; min-height:0; }
+  #stage canvas { display:block; width:100% !important; height:100% !important; }
+  #toolbar { display:flex; align-items:center; gap:8px; padding:10px 16px; background:var(--panel);
+             border-top:1px solid #dde2e8; flex-wrap:nowrap; white-space:nowrap; }
+  #toolbar button { min-width:44px; }
+  #scrub { flex:1; min-width:200px; accent-color:var(--acc); padding:0; border:none; background:transparent; }
+  #stepTxt { min-width:150px; font-family:ui-monospace, Menlo, monospace; font-size:13px; color:var(--fg); }
+  #toolbar .sep { width:1px; height:24px; background:#dde2e8; margin:0 4px; }
+  h1 { font-size:17px; margin:0; }
+  h2 { font-size:13px; margin:0 0 6px; color:var(--dim); font-weight:600; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  button, select, input { background:#f6f8fa; color:var(--fg); border:1px solid #c9d1d9; border-radius:6px; padding:6px 10px; font:inherit; }
+  button { cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--acc); }
+  button:disabled { opacity:.4; cursor:default; }
+  button.primary { background:var(--acc); border-color:var(--acc); color:#fff; font-weight:600; }
+  select { max-width:100%; }
+  input[type=number] { width:70px; }
+  .moves { display:flex; flex-wrap:wrap; gap:4px; font-family:ui-monospace, Menlo, monospace; font-size:13px; }
+  .mv { padding:2px 6px; border-radius:4px; background:#eef1f4; color:var(--dim); cursor:pointer; }
+  .mv.done { color:var(--fg); }
+  .mv.cur { background:var(--acc); color:#fff; }
+  #status { color:var(--dim); min-height:20px; }
+  #status.err { color:#d1242f; }
+  #big { position:absolute; left:20px; top:16px; font-size:22px; font-weight:600; pointer-events:none; }
+  #sub { position:absolute; left:20px; top:50px; color:var(--dim); pointer-events:none; }
+  #hint { position:absolute; right:16px; bottom:8px; color:var(--dim); font-size:12px; pointer-events:none; }
+  #net { display:grid; grid-template-columns:repeat(12, 14px); grid-auto-rows:14px; gap:1px; }
+  #net div { border-radius:2px; }
+  #net div.c { outline:1px solid #b8c0c8; }
+  #keyinfo { display:none; }
+  @media (max-width: 820px) {
+    /* 手机：关键信息 → 魔方 + 展开图并排 → 播放按钮 → 操作 → 说明文字（最下面） */
+    body { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:start; gap:6px 8px;
+           height:auto; min-height:100vh; overflow-x:hidden; overflow-y:auto; padding:8px; width:100%; }
+    #side > *, #view > * { min-width:0; }
+    #side, #view { display:contents; }
+    #side > *, #view > * { grid-column:1 / -1; }
+    #keyinfo { display:block; order:1; font-size:15px; font-weight:600; line-height:1.4; }
+    #stage { order:2; grid-column:1; height:46vw; max-height:40vh; background:var(--bg); }
+    #netBox { order:3; grid-column:2; align-self:center; }
+    #net { grid-template-columns:repeat(12, 10px); grid-auto-rows:10px; }
+    #toolbar { order:4; gap:6px; padding:6px 0; flex-wrap:wrap; background:none; border:none; }
+    #toolbar button { padding:7px 10px; min-width:0; flex:1; }
+    #toolbar .sep, #speedTxt { display:none; }
+    #scrub { order:10; flex-basis:100%; min-width:0; }
+    #stepTxt { display:none; }
+    #secScr { order:5; } #secSolve { order:6; }
+    h1 { order:7; font-size:15px; margin-top:10px; } #status { order:8; font-size:12.5px; }
+    #modelNote { order:9; } #desc { order:10; } #secMoves { order:11; }
+    .lbl, #big, #sub, #hint { display:none !important; }
+    h2 { margin-bottom:4px; }
+  }
+</style>
+</head>
+<body>
+<div id="side">
+  <div id="keyinfo">复原态</div>
+  <h1>3x3 魔方：小模型 + beam search</h1>
+  <div id="desc" style="color:var(--dim); font-size:12.5px; line-height:1.6">
+    模型直接在浏览器里运行（JavaScript，Web Worker），不需要服务器。网络看当前局面，预测下一步该拧哪个面（12 种转动的概率），再用 beam search 搜出复原路径。
+  </div>
+
+  <div id="secScr">
+    <h2>1. 打乱</h2>
+    <div class="row">
+      随机拧 <input id="scrN" type="number" value="50" min="1" max="200"> 步
+      <button id="btnScr">打乱</button>
+      <button id="btnReset" title="回到复原态">复原态</button>
+    </div>
+  </div>
+
+  <div id="secSolve">
+    <h2>2. 求解</h2>
+    <div class="row"><select id="model"></select></div>
+    <div class="row" style="margin-top:6px">
+      beam <select id="beam">
+        <option>1</option><option>4</option><option>16</option><option selected>64</option><option>256</option><option>1024</option>
+      </select>
+      <label title="beam search 失败时，把原局面随机拧 4 步再搜"><input id="retry" type="checkbox" checked> 失败时随机拧 4 步重试</label>
+      最多尝试 <input id="maxAtt" type="number" value="50" min="1" max="500" style="width:60px"> 次
+      <button id="btnSolve" class="primary">求解</button>
+    </div>
+  </div>
+
+  <div id="modelNote" style="color:var(--dim); font-size:12px"></div>
+  <div id="status"></div>
+
+  <div id="secMoves">
+    <h2><span id="tlTitle">步骤</span> <button id="btnExpand" style="padding:1px 8px; font-size:12px; margin-left:6px" hidden>展开 ▸</button></h2>
+    <div id="moves" class="moves" hidden></div>
+  </div>
+
+  <div id="netBox">
+    <h2>展开图<span class="lbl">（U 上、L F R B 中、D 下）</span></h2>
+    <div id="net"></div>
+  </div>
+</div>
+
+<div id="view">
+  <div id="stage">
+    <div id="big"></div>
+    <div id="sub"></div>
+    <div id="hint">拖动旋转视角 · 滚轮缩放 · 键盘 ← → 上一步/下一步，空格播放/暂停</div>
+  </div>
+  <div id="toolbar">
+    <button id="btnFirst" title="回到开头（第 0 步）">⏮<span class="lbl"> 开头</span></button>
+    <button id="btnBack" title="上一步（←）">◀<span class="lbl"> 上一步</span></button>
+    <button id="btnPlay" class="primary" title="播放 / 暂停（空格）">▶<span class="lbl"> 播放</span></button>
+    <button id="btnFwd" title="下一步（→）"><span class="lbl">下一步 </span>▶|</button>
+    <button id="btnLast" title="跳到最后一步"><span class="lbl">结尾 </span>⏭</button>
+    <div class="sep"></div>
+    <input id="scrub" type="range" min="0" max="0" value="0" title="拖动回放到任意一步">
+    <span id="stepTxt">—</span>
+    <div class="sep"></div>
+    <span class="lbl">速度</span> <input id="speed" type="range" min="80" max="1200" value="450" style="width:110px; padding:0; border:none; background:transparent">
+    <span id="speedTxt" style="color:var(--dim)"></span>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+let worker = null;      // 浏览器本地模型在 Web Worker 里求解，停止时直接 terminate
+let solveToken = 0, solving = false;     // 每次求解 +1；停止时也 +1，旧的结果回来后直接丢弃
+function solveInWorker(msg, onProgress) {
+  if (!worker) worker = new Worker("./worker.js", { type: "module" });
+  return new Promise((resolve) => {
+    worker.onmessage = (e) => { if (e.data.progress) onProgress(e.data.progress); else resolve(e.data); };
+    worker.postMessage(msg);
+  });
+}
+
+const COLORS = [0xffffff, 0xd0202a, 0x1fa83a, 0xffd500, 0xff7a00, 0x1d5fd6];  // U R F D L B
+const CSS = ["#fff", "#d0202a", "#1fa83a", "#ffd500", "#ff7a00", "#1d5fd6"];
+const $ = (id) => document.getElementById(id);
+
+// ---------------- three.js 场景 ----------------
+const view = $("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xf4f6f9);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+camera.position.set(17, 13.5, 21);   // 拉远一些，魔方在画面里小一点
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+const dl = new THREE.DirectionalLight(0xffffff, 0.6); dl.position.set(5, 10, 7); scene.add(dl);
+
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  if (!w || !h) return;
+  // 手机上相机拉近，让魔方填满较小的显示区域
+  const mobile = matchMedia("(max-width: 820px)").matches;
+  if (mobile !== resize.mobile) { camera.position.setLength(mobile ? 17 : 30.2); resize.mobile = mobile; }
+  renderer.setSize(w, h, false);   // 只设绘图缓冲区；显示尺寸由 CSS 决定（否则画布的固定像素宽度会把手机布局撑宽）
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize);
+new ResizeObserver(resize).observe(view);
+
+let META, stickers = [], cubies = [], current = null;
+
+function buildCube() {
+  const n = META.n, half = n - 1;   // 小块中心坐标 ∈ {-2,0,2}
+  const boxGeo = new THREE.BoxGeometry(1.96, 1.96, 1.96);
+  const boxMat = new THREE.MeshLambertMaterial({ color: 0x0b0b0b });
+  for (let x = -half; x <= half; x += 2) for (let y = -half; y <= half; y += 2) for (let z = -half; z <= half; z += 2) {
+    if (x === 0 && y === 0 && z === 0) continue;
+    const m = new THREE.Mesh(boxGeo, boxMat);
+    m.position.set(x, y, z); m.userData.home = m.position.clone();
+    scene.add(m); cubies.push(m);
+  }
+  const stGeo = new THREE.PlaneGeometry(1.72, 1.72);
+  META.pos.forEach((p, i) => {
+    const nrm = META.normal[i];
+    const mat = new THREE.MeshBasicMaterial({ color: 0x777777, side: THREE.DoubleSide });  // 不受光照影响，颜色真实
+    const m = new THREE.Mesh(stGeo, mat);
+    m.position.set(p[0] + nrm[0] * 0.01, p[1] + nrm[1] * 0.01, p[2] + nrm[2] * 0.01);
+    m.lookAt(m.position.x + nrm[0], m.position.y + nrm[1], m.position.z + nrm[2]);
+    m.userData.homePos = m.position.clone(); m.userData.homeQuat = m.quaternion.clone();
+    scene.add(m); stickers.push(m);
+  });
+}
+
+function setState(state) {
+  current = state.slice();
+  state.forEach((c, i) => stickers[i].material.color.setHex(COLORS[c]));
+  drawNet(state);
+}
+
+// 把某一层的小块和贴纸挂到一个枢轴上转 90°，转完把它们放回原位、按新状态重新上色
+function animateMove(m, ms) {
+  const mv = META.moves[m];
+  const axis = new THREE.Vector3(...mv.axis);
+  const pivot = new THREE.Group(); scene.add(pivot);
+  const layerSt = mv.layer.map((i) => stickers[i]);
+  const layerCb = cubies.filter((c) => c.userData.home.dot(axis) >= META.n - 1.5);
+  [...layerSt, ...layerCb].forEach((o) => pivot.attach(o));
+  const target = THREE.MathUtils.degToRad(mv.angle);
+  return new Promise((resolve) => {
+    const t0 = performance.now();
+    function tick(now) {
+      const t = Math.min(1, (now - t0) / ms);
+      const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;   // easeInOut
+      pivot.quaternion.setFromAxisAngle(axis, target * e);
+      if (t < 1) { requestAnimationFrame(tick); return; }
+      [...layerSt, ...layerCb].forEach((o) => scene.attach(o));
+      scene.remove(pivot);
+      layerSt.forEach((s) => { s.position.copy(s.userData.homePos); s.quaternion.copy(s.userData.homeQuat); });
+      layerCb.forEach((c) => { c.position.copy(c.userData.home); c.quaternion.identity(); });
+      resolve();
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+// ---------------- 2D 展开图 ----------------
+function drawNet(state) {
+  const net = $("net"); net.innerHTML = "";
+  const n = META.n, cells = new Array(12 * 9).fill(null);
+  const place = { 0: [0, 3], 4: [3, 0], 2: [3, 3], 1: [3, 6], 5: [3, 9], 3: [6, 3] };  // 面索引 → [行, 列] 偏移
+  for (let f = 0; f < 6; f++) for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const [r0, c0] = place[f];
+    cells[(r0 + r) * 12 + c0 + c] = state[f * 9 + r * 3 + c];
+  }
+  cells.forEach((v) => {
+    const d = document.createElement("div");
+    d.style.background = v === null ? "transparent" : CSS[v];
+    if (v !== null) d.className = "c";   // 浅色背景下给白色格子加描边
+    net.appendChild(d);
+  });
+}
+
+// ---------------- 时间线 / 播放 ----------------
+let TL = null;          // {kind, moves, names, states, idx}
+let movesExpanded = false;  // 步骤列表默认折叠
+let playing = false, busy = false;
+let pendingJump = null;   // 动画进行中拖动进度条：等这一步转完再跳过去
+
+// 打乱动画固定快速播放（60ms/步）；求解回放用速度滑块
+function speedMs() { return TL && TL.kind === "scramble" ? 60 : +$("speed").value; }
+function status(msg, err = false) { $("status").textContent = msg; $("status").className = err ? "err" : ""; }
+
+function renderTimeline() {
+  const box = $("moves"); box.innerHTML = "";
+  $("btnExpand").hidden = !TL;
+  $("btnExpand").textContent = movesExpanded ? "收起 ▾" : "展开 ▸";
+  $("moves").hidden = !TL || !movesExpanded;
+  if (!TL) {
+    $("tlTitle").textContent = "步骤"; $("big").textContent = ""; $("sub").textContent = ""; $("keyinfo").textContent = "复原态";
+    $("scrub").max = 0; $("scrub").value = 0; $("stepTxt").textContent = "—"; updateButtons(); return;
+  }
+  $("tlTitle").textContent = (TL.kind === "scramble" ? "打乱序列" : "解法序列") + `（${TL.moves.length} 步，四分之一转计）`;
+  TL.names.forEach((nm, i) => {
+    const s = document.createElement("span");
+    s.className = "mv" + (i < TL.idx ? " done" : "") + (i === TL.idx - 1 ? " cur" : "");
+    s.textContent = nm; s.title = `第 ${i + 1} 步`;
+    s.onclick = () => jumpTo(i + 1);
+    box.appendChild(s);
+  });
+  const solved = TL.idx === TL.moves.length && TL.kind === "solve";
+  $("big").textContent = TL.kind === "scramble" ? `打乱 ${TL.idx} / ${TL.moves.length}`
+                        : (solved ? `✅ 复原完成：${TL.moves.length} 步` : `求解 ${TL.idx} / ${TL.moves.length}`);
+  $("sub").textContent = (TL.attemptNote ? TL.attemptNote + "　" : "") + (TL.idx > 0 ? `刚执行：${TL.names[TL.idx - 1]}` : "");
+  // 手机上的一行关键信息：进度 + 尝试次数 + 用时
+  const parts = [TL.kind === "scramble" ? `已打乱 ${TL.moves.length} 步`
+                 : (solved ? `✅ 复原完成 ${TL.moves.length} 步` : `求解 ${TL.idx}/${TL.moves.length}`)];
+  if (TL.kind === "solve") parts.push(TL.attempts > 1 ? `第 ${TL.attempts} 次尝试成功` : "1 次成功", TL.secShort);
+  if (TL.kind === "solve" && TL.idx > 0) parts.push(TL.names[TL.idx - 1]);
+  $("keyinfo").textContent = parts.join(" · ");
+  // 底部回放工具栏：进度条 + "第 k / N 步：转动"
+  $("scrub").max = TL.moves.length; $("scrub").value = TL.idx;
+  $("stepTxt").textContent = `${TL.kind === "scramble" ? "打乱" : "求解"} ${TL.idx} / ${TL.moves.length}` +
+                             (TL.idx > 0 ? `：${TL.names[TL.idx - 1]}` : "：初始");
+  updateButtons();
+}
+
+function updateButtons() {
+  const has = !!TL;
+  $("btnFirst").disabled = !has || busy || TL.idx === 0;
+  $("btnBack").disabled = !has || busy || TL.idx === 0;
+  $("btnFwd").disabled = !has || busy || TL.idx === TL.moves.length;
+  $("btnLast").disabled = !has || busy || TL.idx === TL.moves.length;
+  $("btnPlay").disabled = !has || (TL.idx === TL.moves.length && !playing);
+  $("btnPlay").innerHTML = playing ? '⏸<span class="lbl"> 暂停</span>' : '▶<span class="lbl"> 播放</span>';
+  $("scrub").disabled = !has;            // 有步骤序列就一直可以拖（播放中拖动会先停止播放）
+  $("btnSolve").disabled = busy || playing;
+  $("btnScr").disabled = busy || playing;
+  $("btnReset").disabled = busy || playing;
+}
+
+async function stepFwd() {
+  if (!TL || TL.idx >= TL.moves.length) return;
+  busy = true; updateButtons();
+  await animateMove(TL.moves[TL.idx], speedMs());
+  TL.idx++; setState(TL.states[TL.idx]);
+  busy = false; applyPendingJump(); renderTimeline();
+}
+async function stepBack() {
+  if (!TL || TL.idx <= 0) return;
+  busy = true; updateButtons();
+  await animateMove(TL.moves[TL.idx - 1] ^ 1, speedMs());   // 逆操作：m ^ 1
+  TL.idx--; setState(TL.states[TL.idx]);
+  busy = false; applyPendingJump(); renderTimeline();
+}
+function jumpTo(k) {
+  if (!TL) return;
+  playing = false;
+  if (busy) { pendingJump = k; return; }   // 正在转动：转完再跳
+  TL.idx = k; setState(TL.states[k]); renderTimeline();
+}
+function applyPendingJump() {
+  if (pendingJump === null || !TL) return;
+  TL.idx = pendingJump; pendingJump = null; setState(TL.states[TL.idx]);
+}
+async function play() {
+  if (!TL) return;
+  playing = true; updateButtons();
+  while (playing && TL.idx < TL.moves.length) await stepFwd();
+  playing = false; renderTimeline();
+}
+
+// ---------------- 交互 ----------------
+// 三个蒸馏出来的小模型（老师 1545 万参数）；数字是 1000 个打乱 100 步的魔方上 beam=64 的结果
+const MODELS = [
+  { id: "./models/tiny_L_157w", label: "L：157 万参数，3.1 MB",
+    note: "beam=64：单次解出约 76%；失败后随机拧 4 步重试，平均 1.3 次全部解出，约 36 步" },
+  { id: "./models/tiny_M_46w", label: "M：46 万参数，0.9 MB",
+    note: "beam=64：单次解出约 56%；配合重试可全部解出" },
+  { id: "./models/tiny_S_15w", label: "S：15 万参数，0.3 MB",
+    note: "beam=64：单次解出约 27%；失败后随机拧 4 步重试，平均 3.8 次全部解出，约 42 步" },
+];
+
+$("btnScr").onclick = async () => {
+  // 打乱：重置为复原态 → 随机拧 N 步 → 只显示最终状态（不显示中间过程，不播放动画）
+  const n = Math.max(1, Math.min(200, +$("scrN").value || 50)), moves = [];
+  for (let t = 0; t < n; t++) {
+    let a; do { a = Math.floor(Math.random() * 12); } while (t > 0 && a === (moves[t - 1] ^ 1));
+    moves.push(a);
+  }
+  const states = [META.solved.slice()];
+  for (const a of moves) { const p = META.moves[a].perm, s0 = states[states.length - 1]; states.push(p.map((k) => s0[k])); }
+  const d = { moves, names: moves.map((a) => META.moves[a].name), states };
+  TL = { kind: "scramble", ...d, idx: d.moves.length };
+  playing = false;
+  setState(d.states[d.moves.length]);
+  status(`已打乱：从复原态随机拧 ${d.moves.length} 步`);
+  renderTimeline();
+};
+$("btnReset").onclick = () => { TL = null; setState(META.solved); status(""); renderTimeline(); updateButtons(); };
+$("btnSolve").onclick = async () => {
+  const beam = +$("beam").value, model = $("model").value, retry = $("retry").checked;
+  const maxAttempts = Math.max(1, Math.min(500, +$("maxAtt").value || 50));
+  const token = ++solveToken;
+  busy = true; solving = true; updateButtons();
+  status(`求解中… (beam=${beam})`);
+  let d;
+  {                                            // 浏览器本地推理（Web Worker）
+    const r = await solveInWorker({ model, META: { moves: META.moves, solved: META.solved }, state: current, beam, retry, maxAttempts },
+      (k) => { status(`求解中… 第 ${k} 次尝试（beam=${beam}，最多 ${retry ? maxAttempts : 1} 次）`);
+               $("keyinfo").textContent = `求解中… 第 ${k} 次尝试`; });
+    if (token !== solveToken) return;            // 已被停止
+    if (!r.ok) { busy = solving = false; status(r.error, true); updateButtons(); return; }
+    const moves = r.moves, attempts = r.attempts;
+    const sec = r.sec.toFixed(2);
+    if (!moves) d = { ok: false, error: `尝试了 ${attempts} 次（已达上限）都没有解出，可以调大 beam 再试（beam=${beam}，浏览器本地，${sec}s）` };
+    else {
+      const states = [current.slice()];
+      for (const a of moves) { const p = META.moves[a].perm, s0 = states[states.length - 1]; states.push(p.map((k) => s0[k])); }
+      const ok = states[states.length - 1].join("") === META.solved.join("");
+      d = { ok, moves, names: moves.map((a) => META.moves[a].name), states, attempts, n_pre: r.nPre,
+            seconds: sec + " 秒（浏览器本地计算）", error: ok ? "" : "内部错误：解没有复原" };
+    }
+  }
+  busy = solving = false;
+  if (!d.ok) { status(d.error || "求解失败", true); updateButtons(); return; }
+  TL = { kind: "solve", ...d, idx: 0, secShort: `${(+String(d.seconds).split(" ")[0]).toFixed(1)} 秒` };
+  const att = d.attempts || 1;
+  TL.attemptNote = att === 1 ? "第 1 次尝试就成功" : `第 ${att} 次尝试成功（失败 ${att - 1} 次；前 ${d.n_pre} 步是重试时随机拧的）`;
+  status(`找到 ${d.moves.length} 步的解，用时 ${d.seconds}，${TL.attemptNote}（已验证能复原）。点 ▶ 播放 或 下一步 查看复原过程`);
+  renderTimeline();
+};
+$("btnPlay").onclick = () => { if (playing) { playing = false; updateButtons(); } else play(); };
+$("btnFwd").onclick = stepFwd;
+$("btnBack").onclick = stepBack;
+$("btnFirst").onclick = () => jumpTo(0);
+$("btnLast").onclick = () => jumpTo(TL.moves.length);
+$("btnExpand").onclick = () => { movesExpanded = !movesExpanded; renderTimeline(); };
+$("scrub").oninput = () => { playing = false; jumpTo(+$("scrub").value); };   // 拖动进度条回放到任意一步
+$("speed").oninput = () => { $("speedTxt").textContent = `${speedMs()}ms`; };
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (e.key === "ArrowRight") stepFwd();
+  else if (e.key === "ArrowLeft") stepBack();
+  else if (e.key === " ") { e.preventDefault(); $("btnPlay").click(); }
+});
+
+(async () => {
+  META = await fetch("./meta.json").then((r) => r.json());
+  MODELS.forEach((m) => { const o = document.createElement("option"); o.value = m.id; o.textContent = m.label; $("model").appendChild(o); });
+  $("model").value = "./models/tiny_S_15w";   // 默认用最小的 S（15 万参数，0.3 MB）
+  const showNote = () => { $("modelNote").textContent = MODELS.find((m) => m.id === $("model").value).note + "。首次使用会下载模型文件。"; };
+  $("model").onchange = showNote; showNote();
+  buildCube(); setState(META.solved); resize(); $("speed").oninput(); updateButtons();
+  (function loop() { controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
+  // ?selftest=1：逐个转动检查"3D 几何旋转后贴纸落点"与模拟器置换是否一致
+  if (new URLSearchParams(location.search).get("selftest")) {
+    let bad = 0;
+    const key = (v) => [v.x, v.y, v.z].map((a) => Math.round(a * 10)).join(",");
+    const homeIdx = new Map(stickers.map((s, i) => [key(s.userData.homePos), i]));
+    META.moves.forEach((mv, m) => {
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(...mv.axis), THREE.MathUtils.degToRad(mv.angle));
+      mv.layer.forEach((i) => {
+        const k = homeIdx.get(key(stickers[i].userData.homePos.clone().applyQuaternion(q)));
+        if (k === undefined || mv.perm[k] !== i) bad++;   // 贴纸 i 转到位置 k ⇒ 应有 perm[k] == i
+      });
+    });
+    $("big").textContent = bad === 0 ? `SELFTEST OK: 12 个转动的 3D 旋转与模拟器置换一致` : `SELFTEST FAIL: ${bad} 处不一致`;
+  }
+  // ?scramble=N：打开页面时直接打乱 N 步（不播放动画），方便分享 / 截图
+  const q = new URLSearchParams(location.search).get("scramble");
+  if (q) { $("scrN").value = q; $("btnScr").click(); }
+  // ?solve=1（测试用，需和 ?scramble 一起）：打乱后立即求解；?model=S/M/L 选模型
+  const pm = new URLSearchParams(location.search);
+  if (pm.get("model")) { const m = MODELS.find((x) => x.id.includes("tiny_" + pm.get("model"))); if (m) { $("model").value = m.id; showNote(); } }
+  if (q && pm.get("solve")) setTimeout(() => $("btnSolve").click(), 50);
+})();
+</script>
+</body>
+</html>
