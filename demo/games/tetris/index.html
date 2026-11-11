@@ -10,32 +10,43 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif; }
   body { padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom); }
-  #app { max-width: 820px; margin: 0 auto; padding: 8px 0 24px; }
-  h1 { font-size: 18px; margin: 6px 2px 2px; font-weight: 600; }
-  h1 small { font-size:12px; color:var(--muted); font-weight:400; }
-  #status { min-height: 20px; margin: 2px 2px 6px; font-size: 14px; color: var(--muted); }
+  #app { max-width: 820px; margin: 0 auto; padding: 4px 0 24px; }
+  h1 { font-size: 18px; margin: 4px 2px 6px; font-weight: 600; white-space: nowrap; line-height: 26px; }
+  #status { min-height: 20px; margin-top: 8px; font-size: 13.5px; color: var(--muted); }
   #stage { display:flex; flex-wrap:wrap; justify-content:center; align-items:flex-start; gap:14px; }
-  #left { display:flex; flex-direction:column; align-items:center; }
+  #left { display:grid; column-gap:14px; align-items:start; }                      /* column 1: chart above the board (same width, same columns); column 2: the side column, level with the BOARD */
+  #chartbox { grid-column:1; grid-row:1; } #board { grid-column:1; grid-row:2; } #side { grid-column:2; grid-row:2; } #touch { grid-column:1; grid-row:3; }
+  #status { grid-column:1 / span 2; grid-row:4; } #legendnote { grid-column:1 / span 2; grid-row:5; } #frozenbox { grid-column:1 / span 2; grid-row:6; margin-top:10px; }
+  #legend { grid-column:2; grid-row:1; }                                       /* right next to the chart: two rotations per row */
   canvas { border-radius: 8px; display:block; }
   #board { box-shadow: 0 4px 16px #0002; border:1px solid var(--line); }
   #chartbox { width:100%; }
-  #legend { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:12px; color:var(--muted); margin-bottom:4px; min-height:40px; align-items:center; }
-  #legend .lg { display:inline-flex; align-items:center; color:var(--text); }
-  #legend i { display:inline-block; width:14px; height:3px; border-radius:2px; vertical-align:middle; margin-right:5px; }
-  #legend b { color:var(--text); font-weight:600; }
+  #legend { display:grid; grid-template-columns:1fr 1fr; gap:6px 4px; align-content:start; font-size:11px; color:var(--muted); }
+  #legend .lg { display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--text); line-height:1.1; }
+  #legend i { display:block; width:70%; height:3px; border-radius:2px; }
+  #legend svg { display:block; margin:0 !important; }
+  #frozenbox { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 10px 10px; }
+  #frozencap { font-size:12px; color:var(--muted); line-height:1.5; margin-bottom:6px; word-break:break-all; }
+  #frozencap b { color:var(--text); }
+  #frozen { border:1px solid var(--line); border-radius:4px; }
+  #legendnote { font-size:12px; color:var(--muted); margin-top:4px; min-height:16px; }
   #chart { background:#fff; border:1px solid var(--line); border-radius:8px 8px 0 0; margin-bottom:2px; }
+  #info small { display:block; margin-bottom:6px; }
   #touch { display:none; grid-template-columns: repeat(6, 1fr); gap:6px; margin-top:10px; width:100%; }
   body.human #touch { display:grid; }
   #touch button { padding:14px 0; font-size:20px; }
-  #panel { flex:1; min-width:230px; max-width:310px; }
+  #side { width:108px; flex:none; display:flex; flex-direction:column; gap:6px; }
+  #side button { padding:8px 2px; font-size:14px; }
+  #side .seg { gap:4px; margin-bottom:0; } #side .seg button { font-size:13px; padding:9px 0; }
+  .pv { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:3px 0 1px; text-align:center; font-size:11px; line-height:14px; color:var(--muted); }
+  .pv canvas { margin:0 auto; border-radius:0; }
+  #panel { flex:1 1 260px; min-width:230px; max-width:310px; }
+  @media (max-width: 639px) { #panel { flex-basis:100%; max-width:none; } }
   .seg { display:grid; grid-template-columns: 1fr 1fr; gap:6px; margin-bottom:10px; }
   .seg button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
   .stat { display:grid; grid-template-columns: 1fr auto; gap:4px 10px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:14px; }
   .stat span:nth-child(odd) { color:var(--muted); }
   .stat span:nth-child(even) { text-align:right; font-variant-numeric: tabular-nums; font-weight:600; }
-  #nextrow { display:flex; align-items:center; gap:10px; margin:10px 0; color:var(--muted); font-size:13px; }
-  #next { box-shadow:none; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
-  #controls { display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin:10px 0; }
   button { padding:11px 6px; font-size:15px; border:1px solid var(--line); border-radius:10px; background:var(--panel); color:var(--text); font-weight:500; }
   button:active { background:#e6e9f0; }
   button:disabled { opacity:.4; }
@@ -52,18 +63,30 @@
 </head>
 <body>
 <div id="app">
-  <h1>俄罗斯方块 · AI 与人 <small>20×10，真实规则：SRS 旋转 + 踢墙</small></h1>
-  <div id="status">正在加载模型…</div>
+  <h1>俄罗斯方块</h1>
+  <div id="svh" style="position:fixed;left:0;top:0;width:0;height:100svh;visibility:hidden"></div>
   <div id="stage">
     <div id="left">
-      <div id="chartbox"><div id="legend"></div><canvas id="chart"></canvas></div>
+      <div id="chartbox"><canvas id="chart"></canvas></div>
       <canvas id="board"></canvas>
       <div id="touch">
         <button data-k="left">◀</button><button data-k="right">▶</button><button data-k="ccw">⟲</button><button data-k="cw">⟳</button><button data-k="down">▼</button><button data-k="drop">⤓</button>
       </div>
+    <div id="side">
+        <div class="seg"><button id="modeAI" class="on">AI 玩</button><button id="modeHuman">我来玩</button></div>
+        <div class="pv">当前<canvas id="cur" width="88" height="36"></canvas></div>
+        <div class="pv">下一块<canvas id="next" width="88" height="36"></canvas></div>
+        <button id="start" class="primary">开始</button>
+        <button id="pause" disabled>暂停</button>
+        <button id="aiStep" title="AI 走一块，然后停住">单步</button>
+        <button id="restart">新的一局</button>
+      </div>
+      <div id="legend"></div>
+      <div id="status">正在加载模型…</div>
+      <div id="legendnote"></div>
+      <div id="frozenbox"><div id="frozencap">还没有落子。</div><canvas id="frozen"></canvas></div>
     </div>
     <div id="panel">
-      <div class="seg"><button id="modeAI" class="on">AI 玩</button><button id="modeHuman">我来玩</button></div>
       <div class="stat">
         <span>局数</span><span id="sGame">1</span>
         <span>已放方块</span><span id="sPieces">0</span>
@@ -73,11 +96,6 @@
         <span>当前最高列</span><span id="sH">0</span>
         <span>候选数 / 决策耗时</span><span id="sCand">—</span>
         <span>此刻落点评分 / 最高</span><span id="sScore">—</span>
-      </div>
-      <div id="nextrow"><span>下一块</span><canvas id="next" width="88" height="56"></canvas></div>
-      <div id="controls">
-        <button id="pause" class="primary">暂停</button>
-        <button id="restart">新的一局</button>
       </div>
       <div class="row aionly"><span>速度</span>
         <select id="speed">
@@ -89,9 +107,9 @@
           <option value="0" selected>回合制（不自动下落）</option><option value="1000">慢 1 秒/格</option><option value="500">中 0.5 秒/格</option><option value="200">快 0.2 秒/格</option>
         </select>
       </div>
-      <div class="row humanonly"><button id="aiStep" style="flex:1">让 AI 走这一步</button></div>
       <div class="row"><label class="chk"><input type="checkbox" id="showchart" checked> 显示 AI 评分曲线（盘面上方）</label></div>
       <div class="row"><label class="chk"><input type="checkbox" id="showcand"> 在盘面上显示所有候选落点（越亮 = 评分越高）</label></div>
+      <div class="row"><label class="chk"><input type="checkbox" id="showfrozen" checked> 盘面下面显示「刚落子那一刻、还没消行」的局面（冻结的，调试用）</label></div>
       <div class="row humanonly"><label class="chk"><input type="checkbox" id="hint"> 在盘面上标出 AI 的最佳落点</label></div>
     </div>
   </div>

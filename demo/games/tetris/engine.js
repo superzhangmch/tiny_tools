@@ -130,10 +130,49 @@
     return null;
   }
   function dropY(board, piece, rot, x, y) { while (!collide(board, CELLS[piece][rot], x, y + 1)) y++; return y; }
+  /* The real route a piece takes to a lock position: the cheapest legal sequence of left / right / down / rotate moves (every state on it is collision-free and every step is
+   * a legal single move).  First choice: rotate / shift where the piece is, then drop straight down.  Only if that is blocked: the cheapest route (sideways moves and rotations cost about 1, slightly more the lower they are; a step down 0.01) that slides into a gap.
+   * -> [{rot, x, y, move}] from the start (default: the spawn position) to the target, move in 'L' 'R' 'D' 'CW' 'CCW' ; null if the target cannot be reached. */
+  function straightRoute(board, piece, target, s0) {               // rotate / shift where the piece is (same row), then drop straight down; null if that is not possible
+    const key = (t) => t.rot * 64 + (t.x + 16), prev = new Map([[key(s0), null]]), q = [s0];
+    while (q.length) {
+      const t = q.shift();
+      if (t.rot === target.rot && t.x === target.x) {
+        const out = []; let cur = t; while (cur) { const p = prev.get(key(cur)); out.push({ rot: cur.rot, x: cur.x, y: cur.y, move: p ? p.move : null }); cur = p ? p.state : null; } out.reverse();
+        for (let y = t.y + 1; y <= target.y; y++) { if (collide(board, CELLS[piece][t.rot], t.x, y)) return null; out.push({ rot: t.rot, x: t.x, y, move: 'D' }); }
+        return out[out.length - 1].y === target.y && collide(board, CELLS[piece][t.rot], t.x, target.y + 1) ? out : null;          // it must really rest at the target
+      }
+      const cells = CELLS[piece][t.rot], nb = [];
+      if (!collide(board, cells, t.x - 1, t.y)) nb.push([{ rot: t.rot, x: t.x - 1, y: t.y }, 'L']);
+      if (!collide(board, cells, t.x + 1, t.y)) nb.push([{ rot: t.rot, x: t.x + 1, y: t.y }, 'R']);
+      for (const dir of [1, -1]) { const r = rotate(board, piece, t.rot, t.x, t.y, dir); if (r && r.y === t.y) nb.push([r, dir > 0 ? 'CW' : 'CCW']); }
+      for (const [u, mv] of nb) { const ku = key(u); if (!prev.has(ku)) { prev.set(ku, { state: t, move: mv }); q.push(u); } }
+    }
+    return null;
+  }
+  function pathTo(board, piece, target, start) {
+    const s0 = start || { rot: 0, x: SPAWN_X[piece], y: 0 }; if (collide(board, CELLS[piece][s0.rot], s0.x, s0.y)) return null;
+    const straight = straightRoute(board, piece, target, s0); if (straight) return straight;                  // 1st choice: a straight drop; otherwise search for a route that slides into a gap
+    const key = (t) => (t.rot * 64 + (t.x + 16)) * 64 + t.y, dist = new Map([[key(s0), 0]]), prev = new Map(), done = new Set(), open = [[0, s0]];
+    while (open.length) {
+      let bi = 0; for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
+      const [d, t] = open.splice(bi, 1)[0], kt = key(t); if (done.has(kt)) continue; done.add(kt);
+      if (t.rot === target.rot && t.x === target.x && t.y === target.y) {
+        const out = []; let k = kt, cur = t; while (true) { const p = prev.get(k); out.push({ rot: cur.rot, x: cur.x, y: cur.y, move: p ? p.move : null }); if (!p) break; k = p.from; cur = p.state; } return out.reverse();
+      }
+      const cells = CELLS[piece][t.rot], nb = [];
+      if (!collide(board, cells, t.x - 1, t.y)) nb.push([{ rot: t.rot, x: t.x - 1, y: t.y }, 1 + 0.001 * t.y, 'L']);
+      if (!collide(board, cells, t.x + 1, t.y)) nb.push([{ rot: t.rot, x: t.x + 1, y: t.y }, 1 + 0.001 * t.y, 'R']);
+      if (!collide(board, cells, t.x, t.y + 1)) nb.push([{ rot: t.rot, x: t.x, y: t.y + 1 }, 0.01, 'D']);
+      for (const dir of [1, -1]) { const r = rotate(board, piece, t.rot, t.x, t.y, dir); if (r) nb.push([r, 1 + 0.001 * t.y, dir > 0 ? 'CW' : 'CCW']); }
+      for (const [u, w, mv] of nb) { const ku = key(u), nd = d + w; if (!dist.has(ku) || nd < dist.get(ku) - 1e-9) { dist.set(ku, nd); prev.set(ku, { from: kt, state: t, move: mv }); open.push([nd, u]); } }
+    }
+    return null;
+  }
   // rotations that give the same shape (I, S, Z: 0 = 2, R = L; O: all) share one "shape class", so each distinct orientation gets one curve
   const shapeClass = (piece, rot) => { const n = ORDER[piece]; return n === 'O' ? 0 : (n === 'I' || n === 'S' || n === 'Z') ? rot % 2 : rot; };
   const minCol = (piece, rot) => { const c = CELLS[piece][rot]; return Math.min(c[1], c[3], c[5], c[7]); };
 
-  root.TetrisEngine = { H, W, HIDDEN, ORDER, CELLS, SPAWN_X, enumerate, lockAndClear, loadModel, Net, decide, canPlace, rotate, dropY, shapeClass, minCol };
+  root.TetrisEngine = { H, W, HIDDEN, ORDER, CELLS, SPAWN_X, enumerate, lockAndClear, loadModel, Net, decide, canPlace, rotate, dropY, pathTo, shapeClass, minCol };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.TetrisEngine;
 })(typeof self !== 'undefined' ? self : (typeof window !== 'undefined' ? window : globalThis));
