@@ -26,6 +26,48 @@
   const SPAWN_X = ORDER.map((n) => (W - (n === 'I' ? 4 : n === 'O' ? 2 : 3)) >> 1);
   const KICKS = [K_JLSTZ, K_I].map((tab) => ['cw', 'ccw'].map((key) => tab[key].map((row) => row.map(([dx, dyUp]) => [dx, -dyUp]))));   // board rows grow downward
 
+  /* ---- rules.  'srs'  : standard SRS - a rotation only needs the destination to be free and may be "kicked" sideways / up (the piece is teleported by the kick offset).
+   *      'phys' : physical - the piece rotates about its pivot (centre of its 3x3 box, of the 4x4 box for I) and EVERY cell swept while it turns must be free (no block, no wall, no floor);
+   *               no kicks.  If there is not enough room to turn, the rotation is simply impossible.  (Open air above the board does not block.) */
+  let RULES = 'phys';
+  const setRules = (r) => { RULES = r === 'srs' ? 'srs' : 'phys'; };
+  const getRules = () => RULES;
+  const SWEEP_STEPS = 60, SWEEP_MIN_AREA = 0.02;                                   // angle steps over 90 degrees; a grid cell counts as swept when a moving square overlaps it by >= 2% of the cell
+  function clipArea(poly, x0, y0, x1, y1) {                                        // area of (convex polygon) ∩ (axis-aligned box): Sutherland-Hodgman
+    const clip = (pts, inside, inter) => { const out = []; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length], ia = inside(a), ib = inside(b); if (ia) out.push(a); if (ia !== ib) out.push(inter(a, b)); } return out; };
+    let p = poly;
+    p = clip(p, (q) => q[0] >= x0, (a, b) => [x0, a[1] + (b[1] - a[1]) * (x0 - a[0]) / (b[0] - a[0])]); if (!p.length) return 0;
+    p = clip(p, (q) => q[0] <= x1, (a, b) => [x1, a[1] + (b[1] - a[1]) * (x1 - a[0]) / (b[0] - a[0])]); if (!p.length) return 0;
+    p = clip(p, (q) => q[1] >= y0, (a, b) => [a[0] + (b[0] - a[0]) * (y0 - a[1]) / (b[1] - a[1]), y0]); if (!p.length) return 0;
+    p = clip(p, (q) => q[1] <= y1, (a, b) => [a[0] + (b[0] - a[0]) * (y1 - a[1]) / (b[1] - a[1]), y1]); if (!p.length) return 0;
+    let ar = 0; for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length]; ar += a[0] * b[1] - b[0] * a[1]; } return Math.abs(ar) / 2;
+  }
+  function buildSweep() {                                                          // SWEEP[piece][rot][0 = cw, 1 = ccw] = [[dr, dc], ...] relative to the 4x4 / 3x3 box origin
+    const out = [];
+    for (let p = 0; p < 7; p++) {
+      out.push([]); const pivot = ORDER[p] === 'I' ? 2 : 1.5;                      // y down, x right: the cell (r, c) is the square [r, r+1] x [c, c+1]
+      for (let rot = 0; rot < 4; rot++) {
+        out[p].push([]);
+        for (const dir of [1, -1]) {
+          const set = new Set();
+          if (ORDER[p] !== 'O') for (let k = 0; k < 8; k += 2) {
+            const cy = CELLS[p][rot][k] + 0.5 - pivot, cx = CELLS[p][rot][k + 1] + 0.5 - pivot;
+            for (let st = 0; st <= SWEEP_STEPS; st++) {
+              const th = dir * (Math.PI / 2) * st / SWEEP_STEPS, co = Math.cos(th), si = Math.sin(th);
+              const poly = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([u, v]) => { const dx = cx + u, dy = cy + v; return [pivot + dx * co - dy * si, pivot + dx * si + dy * co]; });   // [x, y]
+              const xs = poly.map((q) => q[0]), ys = poly.map((q) => q[1]);
+              for (let r = Math.floor(Math.min(...ys)); r <= Math.floor(Math.max(...ys)); r++) for (let c = Math.floor(Math.min(...xs)); c <= Math.floor(Math.max(...xs)); c++)
+                if (clipArea(poly, c, r, c + 1, r + 1) >= SWEEP_MIN_AREA) set.add(r + ',' + c);
+            }
+          }
+          out[p][rot].push(Array.from(set).map((q) => q.split(',').map(Number)));
+        }
+      }
+    }
+    return out;
+  }
+  const SWEEP = buildSweep();
+
   function collide(board, cells, x, y) {
     for (let k = 0; k < 8; k += 2) { const r = y + cells[k], c = x + cells[k + 1]; if (c < 0 || c >= W || r < 0 || r >= H || board[r * W + c]) return true; }
     return false;
@@ -43,12 +85,7 @@
       const y = stack.pop(), x = stack.pop(), rot = stack.pop(), cells = cellsAll[rot];
       if (!collide(board, cells, x - 1, y)) push(rot, x - 1, y);
       if (!collide(board, cells, x + 1, y)) push(rot, x + 1, y);
-      if (kind !== 2) {
-        for (let d = 0; d < 2; d++) {
-          const nr = d === 0 ? (rot + 1) % 4 : (rot + 3) % 4, kk = kind === 1 ? 1 : 0, nc = cellsAll[nr];
-          for (let k = 0; k < 5; k++) { const kick = KICKS[kk][d][rot][k], nx = x + kick[0], ny = y + kick[1]; if (!collide(board, nc, nx, ny)) { push(nr, nx, ny); break; } }
-        }
-      }
+      if (kind !== 2) for (const dir of [1, -1]) { const r = rotate(board, piece, rot, x, y, dir); if (r) push(r.rot, r.x, r.y); }
       if (!collide(board, cells, x, y + 1)) { push(rot, x, y + 1); continue; }
       let lockout = true; const ids = [];
       for (let k = 0; k < 8; k += 2) { const r = y + cells[k]; if (r >= HIDDEN) lockout = false; ids.push(r * W + x + cells[k + 1]); }
@@ -123,9 +160,14 @@
 
   /* ---- single-step moves for a human player (same rules as the search above) ---- */
   const canPlace = (board, piece, rot, x, y) => !collide(board, CELLS[piece][rot], x, y);
-  function rotate(board, piece, rot, x, y, dir) {                // dir +1 = clockwise, -1 = counter-clockwise; first SRS kick that fits is used. -> {rot,x,y} | null
+  function rotate(board, piece, rot, x, y, dir) {                                  // dir +1 = clockwise, -1 = counter-clockwise.  -> {rot,x,y} | null   (rules: see RULES above)
     if (KIND[piece] === 2) return null;
-    const d = dir > 0 ? 0 : 1, nr = dir > 0 ? (rot + 1) % 4 : (rot + 3) % 4, kk = KIND[piece] === 1 ? 1 : 0, nc = CELLS[piece][nr];
+    const d = dir > 0 ? 0 : 1, nr = dir > 0 ? (rot + 1) % 4 : (rot + 3) % 4, nc = CELLS[piece][nr];
+    if (RULES === 'phys') {                                                        // physical: every cell the turning piece sweeps must be free; no kick
+      for (const [dr, dc] of SWEEP[piece][rot][d]) { const r = y + dr, c = x + dc; if (c < 0 || c >= W || r >= H || (r >= 0 && board[r * W + c])) return null; }
+      return collide(board, nc, x, y) ? null : { rot: nr, x, y };
+    }
+    const kk = KIND[piece] === 1 ? 1 : 0;
     for (let k = 0; k < 5; k++) { const kick = KICKS[kk][d][rot][k], nx = x + kick[0], ny = y + kick[1]; if (!collide(board, nc, nx, ny)) return { rot: nr, x: nx, y: ny }; }
     return null;
   }
@@ -169,10 +211,27 @@
     }
     return null;
   }
+  /* The same placement, played the way a person plays it: the piece comes into the well and keeps falling while it is moved / turned (two cells down, then the first move, then one cell
+   * down per move ...), and only then drops the rest of the way - not "arrange everything above the board, then dive".  Every state is checked; if any step would not be legal this way
+   * (a tall stack close to the top), the plain route from pathTo() is returned instead.  Routes that already slide into a gap are returned unchanged. */
+  function naturalRoute(board, piece, target) {
+    const base = pathTo(board, piece, target); if (!base) return null;
+    const lat = base.slice(1).filter((s) => s.move !== 'D').map((s) => s.move), firstD = base.findIndex((s, i) => i > 0 && s.move === 'D');
+    if (!lat.length || (firstD >= 0 && base.slice(firstD).some((s) => s.move !== 'D' && s.move !== null))) return base;
+    let cur = { rot: base[0].rot, x: base[0].x, y: base[0].y, move: null }; const out = [cur]; let ok = true;
+    const down = () => { if (cur.y >= target.y || collide(board, CELLS[piece][cur.rot], cur.x, cur.y + 1)) return false; cur = { rot: cur.rot, x: cur.x, y: cur.y + 1, move: 'D' }; out.push(cur); return true; };
+    const act = (mv) => {
+      const n = mv === 'L' ? { rot: cur.rot, x: cur.x - 1, y: cur.y } : mv === 'R' ? { rot: cur.rot, x: cur.x + 1, y: cur.y } : rotate(board, piece, cur.rot, cur.x, cur.y, mv === 'CW' ? 1 : -1);
+      if (!n || collide(board, CELLS[piece][n.rot], n.x, n.y)) return false; cur = { rot: n.rot, x: n.x, y: n.y, move: mv }; out.push(cur); return true;
+    };
+    lat.forEach((mv, j) => { for (let k = 0; k < (j === 0 ? 2 : 1); k++) down(); if (!act(mv)) ok = false; });
+    while (ok && cur.y < target.y) if (!down()) ok = false;
+    return ok && cur.rot === target.rot && cur.x === target.x && cur.y === target.y ? out : base;
+  }
   // rotations that give the same shape (I, S, Z: 0 = 2, R = L; O: all) share one "shape class", so each distinct orientation gets one curve
   const shapeClass = (piece, rot) => { const n = ORDER[piece]; return n === 'O' ? 0 : (n === 'I' || n === 'S' || n === 'Z') ? rot % 2 : rot; };
   const minCol = (piece, rot) => { const c = CELLS[piece][rot]; return Math.min(c[1], c[3], c[5], c[7]); };
 
-  root.TetrisEngine = { H, W, HIDDEN, ORDER, CELLS, SPAWN_X, enumerate, lockAndClear, loadModel, Net, decide, canPlace, rotate, dropY, pathTo, shapeClass, minCol };
+  root.TetrisEngine = { H, W, HIDDEN, ORDER, CELLS, SPAWN_X, SWEEP, setRules, getRules, enumerate, lockAndClear, loadModel, Net, decide, canPlace, rotate, dropY, pathTo, naturalRoute, shapeClass, minCol };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.TetrisEngine;
 })(typeof self !== 'undefined' ? self : (typeof window !== 'undefined' ? window : globalThis));
