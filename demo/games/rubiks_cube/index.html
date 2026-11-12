@@ -18,7 +18,11 @@
   #toolbar { display:flex; align-items:center; gap:8px; padding:10px 16px; background:var(--panel);
              border-top:1px solid #dde2e8; flex-wrap:nowrap; white-space:nowrap; }
   #toolbar button { min-width:44px; }
-  #scrub { flex:1; min-width:200px; accent-color:var(--acc); padding:0; border:none; background:transparent; }
+  .nw { white-space:nowrap; display:inline-flex; align-items:center; gap:6px; }
+  .sl { display:flex; align-items:center; gap:6px; color:var(--dim); font-size:13px; }
+  .sl input { padding:0; border:none; background:transparent; accent-color:var(--acc); }
+  #scrubWrap { flex:1; min-width:200px; } #scrub { flex:1; min-width:0; }
+  #speed { width:110px; }
   #stepTxt { min-width:150px; font-family:ui-monospace, Menlo, monospace; font-size:13px; color:var(--fg); }
   #toolbar .sep { width:1px; height:24px; background:#dde2e8; margin:0 4px; }
   h1 { font-size:17px; margin:0; }
@@ -57,8 +61,9 @@
     #net { grid-template-columns:repeat(12, 10px); grid-auto-rows:10px; }
     #toolbar { order:4; gap:6px; padding:6px 0; flex-wrap:wrap; background:none; border:none; }
     #toolbar button { padding:7px 10px; min-width:0; flex:1; }
-    #toolbar .sep, #speedTxt { display:none; }
-    #scrub { order:10; flex-basis:100%; min-width:0; }
+    #toolbar .sep { display:none; }
+    #scrubWrap { order:10; flex-basis:100%; min-width:0; }
+    #speedWrap { order:11; flex-basis:100%; } #speed { flex:1; width:auto; }
     #stepTxt { display:none; }
     #secScr { order:5; } #secSolve { order:6; }
     h1 { order:7; font-size:15px; margin-top:10px; } #status { order:8; font-size:12.5px; }
@@ -89,11 +94,17 @@
     <h2>2. 求解</h2>
     <div class="row"><select id="model"></select></div>
     <div class="row" style="margin-top:6px">
-      beam <select id="beam">
+      <span class="nw">beam <select id="beam">
         <option>1</option><option>4</option><option>16</option><option selected>64</option><option>256</option><option>1024</option>
-      </select>
-      <label title="beam search 失败时，把原局面随机拧 4 步再搜"><input id="retry" type="checkbox" checked> 失败时随机拧 4 步重试</label>
-      最多尝试 <input id="maxAtt" type="number" value="50" min="1" max="500" style="width:60px"> 次
+      </select></span>
+      <span class="nw">失败时 <select id="retryMode" title="beam search 失败时怎么重试">
+        <option value="view">换视角重试（解不变长）</option>
+        <option value="scramble">随机拧 4 步重试</option>
+        <option value="none">不重试</option>
+      </select></span>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <span class="nw">最多尝试 <input id="maxAtt" type="number" value="50" min="1" max="500" style="width:60px"> 次</span>
       <button id="btnSolve" class="primary">求解</button>
     </div>
   </div>
@@ -125,11 +136,10 @@
     <button id="btnFwd" title="下一步（→）"><span class="lbl">下一步 </span>▶|</button>
     <button id="btnLast" title="跳到最后一步"><span class="lbl">结尾 </span>⏭</button>
     <div class="sep"></div>
-    <input id="scrub" type="range" min="0" max="0" value="0" title="拖动回放到任意一步">
+    <label id="scrubWrap" class="sl" title="拖动回放到任意一步"><span>进度</span><input id="scrub" type="range" min="0" max="0" value="0"></label>
     <span id="stepTxt">—</span>
     <div class="sep"></div>
-    <span class="lbl">速度</span> <input id="speed" type="range" min="80" max="1200" value="450" style="width:110px; padding:0; border:none; background:transparent">
-    <span id="speedTxt" style="color:var(--dim)"></span>
+    <label id="speedWrap" class="sl" title="播放时每一步的动画时长"><span>速度</span><input id="speed" type="range" min="80" max="1200" value="450"><span id="speedTxt" style="color:var(--dim)"></span></label>
   </div>
 </div>
 
@@ -348,11 +358,13 @@ async function play() {
 // 三个蒸馏出来的小模型（老师 1545 万参数）；数字是 1000 个打乱 100 步的魔方上 beam=64 的结果
 const MODELS = [
   { id: "./models/tiny_L_157w", label: "L：157 万参数，3.1 MB",
-    note: "beam=64：单次解出约 76%；失败后随机拧 4 步重试，平均 1.3 次全部解出，约 36 步" },
+    note: "beam=64：单次解出约 76%；失败后换视角重试平均约 1.4 次全部解出，约 35 步" },
   { id: "./models/tiny_M_46w", label: "M：46 万参数，0.9 MB",
     note: "beam=64：单次解出约 56%；配合重试可全部解出" },
   { id: "./models/tiny_S_15w", label: "S：15 万参数，0.3 MB",
-    note: "beam=64：单次解出约 27%；失败后随机拧 4 步重试，平均 3.8 次全部解出，约 42 步" },
+    note: "beam=64：单次解出约 27%；失败后换视角重试约 4 次全部解出、约 40 步（随机拧 4 步重试约 3.8 次、约 42 步）" },
+  { id: "./models/tiny_Scanon_15w", label: "归一 S：15 万参数，0.3 MB（对称规范化）", canon: true,
+    note: "beam=64：单次解出约 65%；失败后随机拧 4 步重试，平均 1.5 次全部解出，约 40 步。网络只看把魔方摆成「标准姿势」后的局面（48 种整体旋转/镜像里选一个固定的），所以同样大小学得更好；也因此换视角重试对它无效" },
 ];
 
 $("btnScr").onclick = async () => {
@@ -373,14 +385,15 @@ $("btnScr").onclick = async () => {
 };
 $("btnReset").onclick = () => { TL = null; setState(META.solved); status(""); renderTimeline(); updateButtons(); };
 $("btnSolve").onclick = async () => {
-  const beam = +$("beam").value, model = $("model").value, retry = $("retry").checked;
+  const beam = +$("beam").value, model = $("model").value;
+  const mode = $("retryMode").value, retry = mode !== "none";
   const maxAttempts = Math.max(1, Math.min(500, +$("maxAtt").value || 50));
   const token = ++solveToken;
   busy = true; solving = true; updateButtons();
   status(`求解中… (beam=${beam})`);
   let d;
   {                                            // 浏览器本地推理（Web Worker）
-    const r = await solveInWorker({ model, META: { moves: META.moves, solved: META.solved }, state: current, beam, retry, maxAttempts },
+    const r = await solveInWorker({ model, META: { moves: META.moves, solved: META.solved, sym: META.sym }, state: current, beam, retry, maxAttempts, mode },
       (k) => { status(`求解中… 第 ${k} 次尝试（beam=${beam}，最多 ${retry ? maxAttempts : 1} 次）`);
                $("keyinfo").textContent = `求解中… 第 ${k} 次尝试`; });
     if (token !== solveToken) return;            // 已被停止
@@ -392,7 +405,7 @@ $("btnSolve").onclick = async () => {
       const states = [current.slice()];
       for (const a of moves) { const p = META.moves[a].perm, s0 = states[states.length - 1]; states.push(p.map((k) => s0[k])); }
       const ok = states[states.length - 1].join("") === META.solved.join("");
-      d = { ok, moves, names: moves.map((a) => META.moves[a].name), states, attempts, n_pre: r.nPre,
+      d = { ok, moves, names: moves.map((a) => META.moves[a].name), states, attempts, n_pre: r.nPre, how: r.how,
             seconds: sec + " 秒（浏览器本地计算）", error: ok ? "" : "内部错误：解没有复原" };
     }
   }
@@ -400,7 +413,9 @@ $("btnSolve").onclick = async () => {
   if (!d.ok) { status(d.error || "求解失败", true); updateButtons(); return; }
   TL = { kind: "solve", ...d, idx: 0, secShort: `${(+String(d.seconds).split(" ")[0]).toFixed(1)} 秒` };
   const att = d.attempts || 1;
-  TL.attemptNote = att === 1 ? "第 1 次尝试就成功" : `第 ${att} 次尝试成功（失败 ${att - 1} 次；前 ${d.n_pre} 步是重试时随机拧的）`;
+  TL.attemptNote = att === 1 ? "第 1 次尝试就成功"
+    : d.how === "view" ? `第 ${att} 次尝试成功（失败 ${att - 1} 次；换了视角，解没有变长）`
+    : `第 ${att} 次尝试成功（失败 ${att - 1} 次；前 ${d.n_pre} 步是重试时随机拧的）`;
   status(`找到 ${d.moves.length} 步的解，用时 ${d.seconds}，${TL.attemptNote}（已验证能复原）。点 ▶ 播放 或 下一步 查看复原过程`);
   renderTimeline();
 };
@@ -422,9 +437,18 @@ window.addEventListener("keydown", (e) => {
 (async () => {
   META = await fetch("./meta.json").then((r) => r.json());
   MODELS.forEach((m) => { const o = document.createElement("option"); o.value = m.id; o.textContent = m.label; $("model").appendChild(o); });
-  $("model").value = "./models/tiny_S_15w";   // 默认用最小的 S（15 万参数，0.3 MB）
-  const showNote = () => { $("modelNote").textContent = MODELS.find((m) => m.id === $("model").value).note + "。首次使用会下载模型文件。"; };
-  $("model").onchange = showNote; showNote();
+  $("model").value = "./models/tiny_Scanon_15w";   // 默认用最小的 S（15 万参数，0.3 MB，对称规范化）
+  const showNote = () => {
+    const cur = MODELS.find((m) => m.id === $("model").value);
+    $("modelNote").textContent = cur.note + "。首次使用会下载模型文件。";
+    const viewOpt = $("retryMode").querySelector('option[value="view"]');
+    viewOpt.disabled = !!cur.canon;                     // 归一 S：所有视角都转到同一个标准姿势，换视角无效
+    viewOpt.textContent = cur.canon ? "换视角重试（对归一 S 无效）" : "换视角重试（解不变长）";
+    if (cur.canon && $("retryMode").value === "view") $("retryMode").value = "scramble";
+    if (!cur.canon && $("retryMode").value === "scramble" && showNote.auto) $("retryMode").value = "view";
+    showNote.auto = true;
+  };
+  $("model").onchange = () => { showNote.auto = true; showNote(); }; showNote();
   buildCube(); setState(META.solved); resize(); $("speed").oninput(); updateButtons();
   (function loop() { controls.update(); renderer.render(scene, camera); requestAnimationFrame(loop); })();
   // ?selftest=1：逐个转动检查"3D 几何旋转后贴纸落点"与模拟器置换是否一致

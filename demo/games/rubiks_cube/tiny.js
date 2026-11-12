@@ -67,6 +67,23 @@ export function policy(m, s) {
   return z.map((v) => v - lse);
 }
 
+// 规范化（模型导出时带 sym_canon）：48 个对称局面取字典序最小的作代表，网络只算这一个，
+// 再把动作换回原视角；代表不唯一时对并列视角取平均。与 PyTorch 的 _canon_forward 一致。
+function policyCanon(m, s) {
+  const { sym_gather: G, sym_cmap: C, sym_mmap: MM } = m.meta;
+  let best = null, ties = [];
+  for (let g = 0; g < G.length; g++) {
+    const gi = G[g], ci = C[g], t = new Array(gi.length);
+    for (let k = 0; k < gi.length; k++) t[k] = ci[s[gi[k]]];
+    const key = t.join("");
+    if (best === null || key < best.key) { best = { key, t }; ties = [g]; }
+    else if (key === best.key) ties.push(g);
+  }
+  const lp = policy(m, best.t), p = lp.map(Math.exp), out = new Array(lp.length).fill(0);
+  for (const g of ties) for (let a = 0; a < out.length; a++) out[a] += p[MM[g][a]];
+  return out.map((v) => Math.log(Math.max(v / ties.length, 1e-12)));
+}
+
 // beam search：每层保留累计 log-prob 最高的 beam 条路径；同一状态只留分最高的；不立即撤销上一步
 export function beamSearch(m, META, state, beam, maxDepth = 60) {
   const perms = META.moves.map((mv) => mv.perm), solvedKey = META.solved.join("");
@@ -76,7 +93,7 @@ export function beamSearch(m, META, state, beam, maxDepth = 60) {
   for (let d = 0; d < maxDepth; d++) {
     const cands = [];
     cur.forEach((node, i) => {
-      const lp = policy(m, node.s);
+      const lp = m.meta.sym_canon ? policyCanon(m, node.s) : policy(m, node.s);
       const last = node.path.length ? node.path[node.path.length - 1] : -1;
       for (let a = 0; a < lp.length; a++) if (last < 0 || a !== (last ^ 1)) cands.push({ i, a, lp: node.lp + lp[a] });
     });
@@ -98,24 +115,35 @@ export function beamSearch(m, META, state, beam, maxDepth = 60) {
   return null;
 }
 
-// 随机重启：失败时把原局面随机拧 k 步（相邻不互逆）再搜，总共最多尝试 maxAttempts 次。
-// 返回 {moves, attempts, nPre}；moves = 随机拧的 k 步 + 搜出的路径（失败时 moves 为 null）
-export function solveWithRestart(m, META, state, beam, { retry = true, k = 4, maxAttempts = 50, onAttempt = null } = {}) {
+// 失败重试。mode="scramble"：把原局面随机拧 k 步（相邻不互逆）再搜，解 = 拧的 k 步 + 搜出的路径。
+// mode="view"：把原局面换一种对称视角再搜（需要 META.sym），解翻译回原视角，不会变长；47 个视角用完后改为 scramble。
+// 对规范化模型换视角无效（所有视角都会转到同一个标准姿势）。总共最多尝试 maxAttempts 次。
+// 返回 {moves, attempts, nPre, how}：how = "first" | "view" | "scramble"。
+export function solveWithRestart(m, META, state, beam, { retry = true, k = 4, maxAttempts = 50, onAttempt = null, mode = "scramble" } = {}) {
   if (onAttempt) onAttempt(1);
-  let moves = beamSearch(m, META, state, beam), attempts = 1;
+  let moves = beamSearch(m, META, state, beam), attempts = 1, how = moves ? "first" : "";
+  const views = mode === "view" && META.sym ? META.sym.order : [];
+  let vi = 0;
   while (!moves && retry && attempts < maxAttempts) {
     if (onAttempt) onAttempt(attempts + 1);
-    const pre = [];
-    for (let t = 0; t < k; t++) {
-      let a;
-      do { a = Math.floor(Math.random() * META.moves.length); } while (t > 0 && a === (pre[t - 1] ^ 1));
-      pre.push(a);
-    }
-    let s = state.slice();
-    for (const a of pre) { const p = META.moves[a].perm; s = p.map((i) => s[i]); }
-    const sol = beamSearch(m, META, s, beam);
     attempts++;
-    if (sol) moves = [...pre, ...sol];
+    if (vi < views.length) {                              // 换视角：t[k] = cmap[g][state[gather[g][k]]]
+      const g = views[vi++], gi = META.sym.gather[g], ci = META.sym.cmap[g], inv = META.sym.inv_mmap[g];
+      const t = gi.map((src) => ci[state[src]]);
+      const sol = beamSearch(m, META, t, beam);
+      if (sol) { moves = sol.map((a) => inv[a]); how = "view"; }
+    } else {                                              // 随机拧 k 步
+      const pre = [];
+      for (let t = 0; t < k; t++) {
+        let a;
+        do { a = Math.floor(Math.random() * META.moves.length); } while (t > 0 && a === (pre[t - 1] ^ 1));
+        pre.push(a);
+      }
+      let s = state.slice();
+      for (const a of pre) { const p = META.moves[a].perm; s = p.map((i) => s[i]); }
+      const sol = beamSearch(m, META, s, beam);
+      if (sol) { moves = [...pre, ...sol]; how = "scramble"; }
+    }
   }
-  return { moves, attempts, nPre: attempts > 1 ? k : 0 };
+  return { moves, attempts, nPre: how === "scramble" ? k : 0, how };
 }
