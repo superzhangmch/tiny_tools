@@ -1,0 +1,40 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>象棋：和 CNN + MCTS 对弈（浏览器版）</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 -apple-system,Helvetica,Arial,sans-serif;background:#fff;color:#222;padding:6px;max-width:600px;margin:auto}
+h1{font-size:15px;margin:2px 0}.note{color:#667;font-size:12px}#msg{font-size:14px;font-weight:600;margin:2px 0}#msg:empty{display:none}
+button,select{background:#fff;color:#222;border:1px solid #bbb;border-radius:6px;padding:6px 8px;font-size:13px}button:disabled{opacity:.45}.left{flex:0 0 60%;width:60%}.seg{display:flex;gap:6px;margin-top:6px}.seg button{flex:1;font-size:14px;padding:7px 8px}.seg button.on{background:#1565c0;color:#fff;border-color:#1565c0}
+#wrap{width:min(100%,calc((100vh - 16px) / 1.95));margin:0 auto}#board{width:100%;display:block;background:#f1d9a5;border-radius:8px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.under{display:flex;gap:8px;align-items:flex-start;margin-top:6px}#mini{width:100%;display:block;background:#fff;border:1px solid #ccc;border-radius:6px}
+.ctl{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0}.ctl select,.ctl button{width:100%}.ctl .two{display:flex;gap:5px}.ctl label{font-size:12px;color:#444}
+.bar{height:12px;border-radius:6px;background:#cfd3da;overflow:hidden;position:relative}.bar i{position:absolute;left:0;top:0;bottom:0;background:#d33}
+#toplist{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:6px;font-size:13px}#toplist .it{display:flex;gap:6px;align-items:baseline;border-bottom:1px solid #eee}#toplist .it b{width:16px;color:#0d47a1}#toplist .it span{flex:1}#toplist .it i{font-style:normal;color:#555}#toplist .pick{color:#2e7d32;font-weight:700}#toplist .pick b{color:#2e7d32}
+#toplist{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:6px;font-size:13px}#toplist .it{display:flex;gap:6px;align-items:baseline;border-bottom:1px solid #eee}#toplist .it b{min-width:18px;text-align:center;color:#fff;border-radius:9px;font-size:11px;line-height:18px}#toplist .it span{flex:1}#toplist .it i{font-style:normal;color:#555}#toplist .pick{font-weight:700}
+table{width:100%;border-collapse:collapse}td,th{padding:2px 6px;border-bottom:1px solid #ddd;text-align:right}th:first-child,td:first-child{text-align:left}th{color:#667;font-weight:normal}
+</style></head><body>
+<div id="msg"></div>
+<div id="wrap">
+<svg id="board" viewBox="0 0 528 584"></svg>
+<div class="under">
+ <div class="left"><svg id="mini" viewBox="0 0 280 310"></svg><div class="seg"><button id="vguide" class="on" title="当前局面：网络建议我怎么走">我</button><button id="vai" disabled title="对方为什么走了这一步">对方</button></div></div>
+ <div class="ctl">
+  <div class="two"><button id="new">新局</button><button id="undo">悔棋</button></div>
+  <select id="side"><option value="red">我执红（先手）</option><option value="black">我执黑</option></select>
+  <select id="lvl"><option value="cnn" selected>纯 CNN（不搜索）</option><option value="cnn_rules">纯 CNN + 规则规避</option><option value="m:4">搜索 4 次</option><option value="m:10">搜索 10 次</option><option value="m:20">搜索 20 次</option><option value="m:40">搜索 40 次</option><option value="m:100">搜索 100 次（慢）</option></select>
+  <input id="heatsrc" type="hidden" value="guide">
+  <label><input id="dbg" type="checkbox"> 调试：点己方棋子，看模型认为它能走哪里</label>
+  <label><input id="arrows" type="checkbox" checked> 棋盘上画 AI 思路箭头</label>
+ </div>
+</div>
+<div class="note" id="dbginfo" style="margin-top:6px"></div>
+<div id="toplist"></div>
+</div>
+<div class="note" id="polwho" style="margin-top:6px"></div>
+<div class="note" style="margin-top:6px">AI 评估（红色 = 对 AI 有利）：<span id="ev">—</span></div><div class="bar"><i id="evb" style="width:50%"></i></div>
+<div class="note" id="foot" style="margin-top:8px">浏览器版：网络（int8，约 4 MB）和规则都在你的浏览器里运行。 规则：将军/将死/困毙判负；同一局面第 3 次出现：长将方判负，否则和棋；100 步没有吃子和棋。不判“长捉”。纯 CNN = 只在合法着里选网络概率最高的；规则规避 = 另外跳过会长将自败或送一步杀的着法。 走子由浏览器里的规则校验。</div>
+<script>
+window.XQ_DEBUG_OK = true;
+window.XQ_API = (function () { const w = new Worker('worker.js'); let n = 0; const pend = {};
+  w.onmessage = (e) => { const p = pend[e.data.id]; delete pend[e.data.id]; if (e.data.error) p[1](new Error(e.data.error)); else p[0](e.data.result); };
+  return (path, body) => new Promise((res, rej) => { const i = ++n; pend[i] = [res, rej]; w.postMessage({ id: i, path, body }); }); })();
+</script><script src="app.js"></script></body></html>
