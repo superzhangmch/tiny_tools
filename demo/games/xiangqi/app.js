@@ -8,7 +8,7 @@
   const sq = (s) => ({ f: s.charCodeAt(0) - 97, r: +s[1] }), name = (f, r) => String.fromCharCode(97 + f) + r;
   function setup() { board = {}; START.split('/').forEach((row, i) => { let f = 0; for (const ch of row) { if (/\d/.test(ch)) f += +ch; else { board[name(f, 9 - i)] = ch; f++; } } }); }
   const xy = (f, r) => human === 'red' ? [M + f * C, M + (9 - r) * C] : [M + (8 - f) * C, M + r * C];
-  async function api(path, body) { if ($('model')) body = Object.assign({ model: $('model').value }, body); if (window.XQ_API) return window.XQ_API(path, body); const r = await fetch(path, { method: 'POST', body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; }      // window.XQ_API: the in-browser engine (web_browser/)
+  async function api(path, body) { if (window.XQ_API) return window.XQ_API(path, body); if ($('model')) body = Object.assign({ model: $('model').value }, body); const r = await fetch(path, { method: 'POST', body: JSON.stringify(body) }); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; }      // window.XQ_API: the in-browser engine (web_browser/)
   function el(tag, attrs, parent) { const e = document.createElementNS(SV, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || $('board')).appendChild(e); return e; }
 
   /* 中文记谱（炮二平五）：bd = 走子前的棋盘 */
@@ -50,13 +50,14 @@
       { const [x, y] = xy(sp.f, sp.r); el('circle', { cx: x, cy: y, r: 30, fill: 'none', stroke: '#f9a825', 'stroke-width': 4 }); }
       const isLeg = dbgMap.kind === 'legality', hi = isLeg ? 0.5 : 0.1; let legalMass = 0, illegalMass = 0;
       Object.keys(pm).forEach((k) => { if (truth.has(k)) legalMass += pm[k]; else illegalMass += pm[k]; });
+      const rankOf = new Map([...cells].sort((a, b) => (pm[b] || 0) - (pm[a] || 0)).map((k, i) => [k, i + 1]));          // 1 = the target the model likes most
       cells.forEach((k) => { const p = pm[k] || 0, c = sq(k), [x, y] = xy(c.f, c.r), isT = truth.has(k); if (p > hi) pos++; if (p > hi && !isT) fp++; if (p <= hi && isT) fn++;
-        el('circle', { cx: x, cy: y, r: 21, fill: probColor(isLeg ? p : Math.min(1, p * 1.5), 1), opacity: 0.8 }); const t = el('text', { x, y: y + 5, 'font-size': 15, 'text-anchor': 'middle', fill: '#fff', 'font-weight': 700, stroke: '#000', 'stroke-width': 0.6 }); t.textContent = Math.round(p * 100);
+        el('circle', { cx: x, cy: y, r: 21, fill: probColor(isLeg ? p : Math.min(1, p * 1.5), 1), opacity: 0.8 }); const t = el('text', { x, y: y - 2, 'font-size': 14, 'text-anchor': 'middle', fill: '#fff', 'font-weight': 700, stroke: '#000', 'stroke-width': 0.6 }); t.textContent = rankOf.get(k); const t2 = el('text', { x, y: y + 11, 'font-size': 10.5, 'text-anchor': 'middle', fill: '#fff', 'font-weight': 700, stroke: '#000', 'stroke-width': 0.5 }); t2.textContent = p.toFixed(2);
         if (isT) el('circle', { cx: x, cy: y, r: 25, fill: 'none', stroke: p > hi ? '#000' : '#1565c0', 'stroke-width': 3, 'stroke-dasharray': p > hi ? '' : '5 3' });
         if (p > hi && !isT) { el('line', { x1: x - 14, y1: y - 14, x2: x + 14, y2: y + 14, stroke: '#000', 'stroke-width': 3.5 }); el('line', { x1: x - 14, y1: y + 14, x2: x + 14, y2: y - 14, stroke: '#000', 'stroke-width': 3.5 }); } });
       $('dbginfo').textContent = isLeg
-        ? `${CH[board[dbgSel]]}：合法头认为 ${pos} 个落点可走（p>0.5），规则判定 ${truth.size} 个；多报 ${fp}、漏报 ${fn}。数字 = 合法头给的概率（%），越红越高；黑圈 = 规则判定合法；✕ = 模型以为能走但违规；蓝虚线圈 = 合法但模型漏掉。`
-        : `${CH[board[dbgSel]]}：模型把这颗子的走法概率分到各落点（没有屏蔽非法着，所有落点加起来 100%）：落在规则合法的落点上共 ${Math.round(legalMass * 100)}%，落在非法落点上共 ${Math.round(illegalMass * 100)}%；规则判定合法的有 ${truth.size} 个。数字 = 概率（%）；黑圈 = 规则合法；✕ = 概率 >10% 却不合法；蓝虚线圈 = 合法但概率 ≤10%。`;
+        ? `${CH[board[dbgSel]]}：合法头认为 ${pos} 个落点可走（p>0.5），规则判定 ${truth.size} 个；多报 ${fp}、漏报 ${fn}。圆里：上面的数字 = 名次（模型认为越可能越靠前，1 最高），下面 = 合法头给的概率（两位小数），越红越高；黑圈 = 规则判定合法；✕ = 模型以为能走但违规；蓝虚线圈 = 合法但模型漏掉。`
+        : `${CH[board[dbgSel]]}：模型把这颗子的走法概率分到各落点（没有屏蔽非法着，所有落点加起来 100%）：落在规则合法的落点上共 ${Math.round(legalMass * 100)}%，落在非法落点上共 ${Math.round(illegalMass * 100)}%；规则判定合法的有 ${truth.size} 个。圆里：上面的数字 = 名次（1 = 概率最高），下面 = 概率（两位小数）；黑圈 = 规则合法；✕ = 概率 >10% 却不合法；蓝虚线圈 = 合法但概率 ≤10%。`;
     } else if (dbgOn() && $('dbginfo').textContent.startsWith('调试不可用') && !dbgMap) { /* keep the message */ } else if (dbgOn()) $('dbginfo').textContent = dbgMap ? '调试模式：点一颗轮到走的一方的棋子，看模型认为它能走到哪里。' : '调试模式：模型计算中…'; else $('dbginfo').textContent = '';
     if (sel) for (const m of legal) if (m.startsWith(sel)) { const p = sq(m.slice(2)), [x, y] = xy(p.f, p.r); el('circle', { cx: x, cy: y, r: board[m.slice(2)] ? 27 : 8, fill: board[m.slice(2)] ? 'none' : '#2a8a3a', stroke: '#2a8a3a', 'stroke-width': 3, opacity: 0.8 }); }
     for (let f = 0; f < 9; f++) for (let r = 0; r < 10; r++) { const [x, y] = xy(f, r), s = name(f, r); const h = el('rect', { x: x - 27, y: y - 27, width: 54, height: 54, fill: 'transparent' }); h.addEventListener('pointerdown', (e) => { e.preventDefault(); click(s); }); }
