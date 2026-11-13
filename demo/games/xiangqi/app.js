@@ -76,34 +76,47 @@
     for (const s in bd) { const p = sq(s), ch = bd[s], red = ch === ch.toUpperCase(), t = el('text', { x: X(p.f), y: Y(p.r) + 4.5, 'font-size': 13, 'text-anchor': 'middle', fill: red ? '#b71c1c' : '#111', 'font-family': 'serif', 'font-weight': 700, opacity: 0.8 }, g); t.textContent = CH[ch]; }
     return { X, Y };
   }
+  const twoStep = () => !!($('model') && ['split_indep', 'split_cond'].includes($('model').value));       // 方式 3 / 4: first choose the piece, then its target
+  const pct = (p) => (p >= 0.095 ? Math.round(p * 100) : (p * 100).toFixed(1)) + '%';
   function renderMini() {
     const g = $('mini'); g.innerHTML = ''; const ai = $('heatsrc').value === 'ai' && polAI; $('vguide').classList.toggle('on', !ai); $('vai').classList.toggle('on', !!ai); $('vai').disabled = !polAI;
-    const P = ai ? polAI.pol : pol, bd = ai ? polAI.before : board, chosen = ai ? polAI.chosen : null;
-    const { X, Y } = miniBoard(g, bd);
-    const top = P ? P.all.slice(0, 10) : [], pmax = top.length ? top[0][1] : 1, OFF = [[0, 0], [-7, -7], [7, -7], [-7, 7], [7, 7], [0, -9], [0, 9], [-9, 0], [9, 0], [0, 0]], slot = {}, cnt = {};
-    top.forEach(([m]) => { const to = m.slice(2, 4); cnt[to] = (cnt[to] || 0) + 1; });
-    const place = top.map(([m, p], i) => { const to = m.slice(2, 4); slot[to] = slot[to] === undefined ? 0 : slot[to] + 1; return { m, p, i, k: slot[to] }; });
-    for (const o of place.slice().reverse()) {                       // draw the less likely first so the top ones stay on top
-      const a = sq(o.m.slice(0, 2)), t = sq(o.m.slice(2, 4)), pick = o.m === chosen, col = probColor(o.p, pmax), off = cnt[o.m.slice(2, 4)] > 1 ? OFF[o.k] : [0, 0];
-      el('line', { x1: X(a.f), y1: Y(a.r), x2: X(t.f), y2: Y(t.r), stroke: col, 'stroke-width': pick ? 2 : 1, opacity: 0.5 }, g);
-      el('circle', { cx: X(t.f) + off[0], cy: Y(t.r) + off[1], r: 9, fill: col, stroke: pick ? '#000' : '#fff', 'stroke-width': pick ? 2.5 : 1.2, opacity: 0.95 }, g);
-      const tx = el('text', { x: X(t.f) + off[0], y: Y(t.r) + off[1] + 3.5, 'font-size': o.i === 9 ? 8 : 10, 'text-anchor': 'middle', fill: '#fff', 'font-weight': 700 }, g); tx.textContent = o.i + 1;
+    const P = ai ? polAI.pol : pol, bd = ai ? polAI.before : board, chosen = ai ? polAI.chosen : null, two = twoStep(), { X, Y } = miniBoard(g, bd);
+    $('mini2wrap').style.display = two ? '' : 'none';
+    if (!P) { $('toplist').innerHTML = ''; $('polwho').textContent = ''; renderTop1(null, bd, chosen); return; }
+    if (!two) {                                                   // 方式 1 / 2: one choice of a whole move -> the top-10 moves as curved arrows (start -> target), labelled "rank: probability"
+      const top = P.all.slice(0, 10), pmax = top[0][1], arcs = [];
+      top.forEach(([m, p], i) => { const a = sq(m.slice(0, 2)), t = sq(m.slice(2, 4)), x1 = X(a.f), y1 = Y(a.r), x2 = X(t.f), y2 = Y(t.r), dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
+        const bend = (i % 2 ? -1 : 1) * (Math.max(12, len * 0.28) + Math.floor(i / 2) * 4), cx = (x1 + x2) / 2 + nx * bend, cy = (y1 + y2) / 2 + ny * bend; arcs.push({ m, p, i, x1, y1, x2, y2, cx, cy, col: probColor(p, pmax), pick: m === chosen }); });
+      for (const o of arcs.slice().reverse()) {                    // less likely first, so the top ones stay on top
+        el('path', { d: `M${o.x1},${o.y1} Q${o.cx},${o.cy} ${o.x2},${o.y2}`, fill: 'none', stroke: o.pick ? '#000' : o.col, 'stroke-width': o.pick ? 3.4 : (o.i < 3 ? 2.6 : 1.7), opacity: o.pick ? 0.95 : 0.85 }, g);
+        const tx = o.x2 - o.cx, ty = o.y2 - o.cy, tl = Math.hypot(tx, ty) || 1, ux = tx / tl, uy = ty / tl, bx = o.x2 - ux * 9, by = o.y2 - uy * 9;       // arrow head along the tangent at the end
+        el('polygon', { points: `${o.x2},${o.y2} ${bx - uy * 4.5},${by + ux * 4.5} ${bx + uy * 4.5},${by - ux * 4.5}`, fill: o.pick ? '#000' : o.col }, g); }
+      for (const o of arcs.slice().reverse()) { const mx = 0.25 * o.x1 + 0.5 * o.cx + 0.25 * o.x2, my = 0.25 * o.y1 + 0.5 * o.cy + 0.25 * o.y2, label = `${o.i + 1}: ${pct(o.p)}`, w = 7 * label.length + 6;
+        el('rect', { x: mx - w / 2, y: my - 7, width: w, height: 14, rx: 7, fill: '#fff', stroke: o.pick ? '#000' : o.col, 'stroke-width': o.pick ? 2 : 1.3, opacity: 0.96 }, g);
+        const t = el('text', { x: mx, y: my + 3.5, 'font-size': 10, 'text-anchor': 'middle', fill: '#222', 'font-weight': 700 }, g); t.textContent = label; }
+      const rank = chosen ? P.all.findIndex(([m]) => m === chosen) + 1 : 0;
+      $('toplist').innerHTML = top.map(([m, p], i) => `<div class="it${m === chosen ? ' pick' : ''}"><b style="background:${probColor(p, pmax)}">${i + 1}</b><span>${notate(m, bd)}${m === chosen ? ' ★' : ''}</span><i>${(p * 100).toFixed(1)}%</i></div>`).join('') + (chosen && rank > 10 ? `<div class="it pick" style="grid-column:1/3"><b style="background:#000">★</b><span>AI 选了 ${notate(chosen, bd)}（网络排第 ${rank}）</span><i>${(P.all[rank - 1][1] * 100).toFixed(1)}%</i></div>` : '');
+      $('polwho').textContent = ai ? `AI（${polAI.mover === 'red' ? '红' : '黑'}）走这步时的局面：弧线 = 网络推荐的前 10 个着法（箭头指向终点，弧线上：名次: 概率）；黑色粗线 ★ = AI 实际选的。` : `${P.turn === 'red' ? '红' : '黑'}方的建议：弧线 = 网络推荐的前 10 个着法（箭头指向终点，弧线上：名次: 概率），越红越推荐。网络对局面的评分 ${P.value >= 0 ? '+' : ''}${P.value.toFixed(2)}（对走子方）。`;
+      renderTop1(null, bd, chosen); return;
     }
-    const rank = P && chosen ? P.all.findIndex(([m]) => m === chosen) + 1 : 0;
-    $('toplist').innerHTML = !P ? '' : top.map(([m, p], i) => `<div class="it${m === chosen ? ' pick' : ''}"><b style="background:${probColor(p, pmax)}">${i + 1}</b><span>${notate(m, bd)}${m === chosen ? ' ★' : ''}</span><i>${(p * 100).toFixed(1)}%</i></div>`).join('') + (chosen && rank > 10 ? `<div class="it pick" style="grid-column:1/3"><b style="background:#000">★</b><span>AI 选了 ${notate(chosen, bd)}（网络排第 ${rank}）</span><i>${(P.all[rank - 1][1] * 100).toFixed(1)}%</i></div>` : '');
-    $('polwho').textContent = !P ? '' : ai ? `AI（${polAI.mover === 'red' ? '红' : '黑'}）走这步时的局面：编号 = 网络推荐顺序；黑圈 ★ = AI 实际选的。` : `${P.turn === 'red' ? '红' : '黑'}方的建议：编号 1–10 = 网络推荐顺序（1 最推荐）。网络对局面的评分 ${P.value >= 0 ? '+' : ''}${P.value.toFixed(2)}（对走子方）。`;
-    renderTop1(P, bd);
+    const by = {}; P.all.forEach(([m, p]) => { const s = m.slice(0, 2); by[s] = (by[s] || 0) + p; }); const arr = Object.entries(by).sort((a, b) => b[1] - a[1]), pmax = arr[0][1], chosenSrc = chosen ? chosen.slice(0, 2) : null;      // 方式 3 / 4, first board: which piece to move
+    arr.map((x, i) => [x, i]).reverse().forEach(([[s, p], i]) => { const c = sq(s), x = X(c.f), y = Y(c.r), pick = s === chosenSrc; el('circle', { cx: x, cy: y, r: 13, fill: probColor(p, pmax), stroke: pick ? '#000' : '#fff', 'stroke-width': pick ? 3 : 1.4, opacity: 0.95 }, g);
+      const gl = el('text', { x, y: y + 5, 'font-size': 14, 'text-anchor': 'middle', fill: '#fff', 'font-family': 'serif', 'font-weight': 700, stroke: '#000', 'stroke-width': 0.4 }, g); gl.textContent = CH[bd[s]];       // the piece stays readable, the rank is a small badge at the corner
+      el('circle', { cx: x + 10, cy: y - 10, r: 7, fill: '#fff', stroke: '#455a64', 'stroke-width': 1 }, g); const t = el('text', { x: x + 10, y: y - 6.8, 'font-size': i >= 9 ? 8 : 9.5, 'text-anchor': 'middle', fill: '#222', 'font-weight': 700 }, g); t.textContent = i + 1; });
+    $('toplist').innerHTML = arr.slice(0, 10).map(([s, p], i) => `<div class="it${s === chosenSrc ? ' pick' : ''}"><b style="background:${probColor(p, pmax)}">${i + 1}</b><span>${CH[bd[s]]} ${s}${s === chosenSrc ? ' ★' : ''}</span><i>${(p * 100).toFixed(1)}%</i></div>`).join('');
+    $('polwho').textContent = ai ? `AI（${polAI.mover === 'red' ? '红' : '黑'}）走这步时的局面：第一个小棋盘 = 该动哪颗子（右上角小圆里 = 名次，越红概率越高；黑圈 ★ = AI 实际动的子）；第二个 = 选了 top-1 起点之后，终点怎么选。` : `${P.turn === 'red' ? '红' : '黑'}方的建议：第一个小棋盘 = 该动哪颗子（右上角小圆里 = 名次，越红概率越高）；第二个 = 选了 top-1 起点之后，在它的合法落点里终点怎么选。网络对局面的评分 ${P.value >= 0 ? '+' : ''}${P.value.toFixed(2)}（对走子方）。`;
+    renderTop1(P, bd, chosen);
   }
-  /* second small board: IF the network's top-1 move is chosen, i.e. its start piece, how does it pick the target?  P(target | start) = joint(start, target) / P(start) over the legal targets; works for every model, no debug needed */
-  function renderTop1(P, bd) {
+  /* 方式 3 / 4, second small board: IF the top-1 start piece is chosen, how does the network pick the target?  P(target | start) = joint(start, target) / P(start) over the legal targets */
+  function renderTop1(P, bd, chosen) {
     const g = $('mini2'), list = $('top1list'), note = $('top1note'); g.innerHTML = ''; list.innerHTML = ''; note.textContent = '';
     if (!P || !P.all.length) return;
     const src = P.all[0][0].slice(0, 2), same = P.all.filter(([m]) => m.startsWith(src)), tot = same.reduce((s, [, p]) => s + p, 0), cond = same.map(([m, p]) => [m, p / tot]).sort((a, b) => b[1] - a[1]);
     const { X, Y } = miniBoard(g, bd), sp = sq(src); el('circle', { cx: X(sp.f), cy: Y(sp.r), r: 13, fill: 'none', stroke: '#f9a825', 'stroke-width': 3 }, g);
-    cond.slice().reverse().forEach(([m, p]) => { const i = cond.findIndex((c) => c[0] === m), t = sq(m.slice(2, 4)); el('circle', { cx: X(t.f), cy: Y(t.r), r: 9.5, fill: probColor(p, 1), stroke: '#fff', 'stroke-width': 1.2, opacity: 0.95 }, g);
+    cond.slice().reverse().forEach(([m, p]) => { const i = cond.findIndex((c) => c[0] === m), t = sq(m.slice(2, 4)); el('circle', { cx: X(t.f), cy: Y(t.r), r: 9.5, fill: probColor(p, 1), stroke: m === chosen ? '#000' : '#fff', 'stroke-width': m === chosen ? 2.6 : 1.2, opacity: 0.95 }, g);
       const tx = el('text', { x: X(t.f), y: Y(t.r) + 3.5, 'font-size': i >= 9 ? 8 : 10, 'text-anchor': 'middle', fill: '#fff', 'font-weight': 700 }, g); tx.textContent = i + 1; });
     note.textContent = `选了 top-1 的起点（${CH[bd[src]]} ${src}，它占 ${(tot * 100).toFixed(0)}%）之后：在它的 ${same.length} 个合法落点里，终点怎么选（黄圈 = 起点，编号 = 名次，只在合法落点里比、加起来 100%）。`;
-    list.innerHTML = cond.slice(0, 8).map(([m, p], i) => `<div class="it"><b style="background:${probColor(p, 1)}">${i + 1}</b><span>${notate(m, bd)}</span><i>${(p * 100).toFixed(1)}%</i></div>`).join('');
+    list.innerHTML = cond.slice(0, 8).map(([m, p], i) => `<div class="it${m === chosen ? ' pick' : ''}"><b style="background:${probColor(p, 1)}">${i + 1}</b><span>${notate(m, bd)}${m === chosen ? ' ★' : ''}</span><i>${(p * 100).toFixed(1)}%</i></div>`).join('');
   }
   async function refreshPolicy() {
     refreshDbg(); const my = ++polBusy; if (status[0]) { pol = null; renderMini(); return; }
