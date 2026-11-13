@@ -96,11 +96,13 @@
     let i = SLIDE_H.findIndex((x) => x[0] === dr && x[1] === df); if (i >= 0) return 36 + i; i = ELE.findIndex((x) => x[0] === dr && x[1] === df); if (i >= 0) return 44 + i; i = ADVD.findIndex((x) => x[0] === dr && x[1] === df); if (i >= 0) return 48 + i; throw new Error('bad move geometry');
   }
   const PW = 11, PL = 132, LO = 12, HI = 119;                      // padded plane: 12 rows x 11 cols, interior rows 1..10, cols 1..9
-  function loadModel(man, i8, aux) {
+  function loadModel(man, i8, aux, common) {
     const q = new Int8Array(i8), W = {}; for (const t of man.tensors) {
       const co = t.shape[0], row = t.n / co, w = new Float32Array(t.n); for (let o = 0; o < co; o++) { const sc = aux[t.aux_off + o]; for (let j = 0; j < row; j++) w[o * row + j] = q[t.w_off + o * row + j] * sc; }
       W[t.name] = { kind: t.kind, w, b: aux.slice(t.aux_off + co, t.aux_off + 2 * co), co, ci: row / (t.kind === 'conv3' ? 9 : 1) };
     }
+    W._kind = man.kind; W._c = common;                               // 'cell' (方式 2) | 'fc' (方式 1) | 'indep' (方式 3) | 'cond' (方式 4)
+    if (common && !common.idx) { common.idx = new Map(); common.by = Array.from({ length: 90 }, () => []); common.table_from.forEach((f, i) => { common.idx.set(f * 90 + common.table_to[i], i); common.by[f].push(i); }); }
     return W;
   }
   function conv(x, L, relu) {                                       // x: ci planes of PL; 3x3 (pad 1) or 1x1
@@ -128,13 +130,47 @@
     for (let i = 0; i < 10; i++) { const y = conv(conv(h, W['blk' + i + '.a'], true), W['blk' + i + '.b'], false), n = new Float32Array(h.length); for (let j = 0; j < n.length; j++) { const v = h[j] + y[j]; n[j] = v > 0 ? v : 0; } h = n; }
     return h;
   }
-  function forward(W, b, red, last, legalMoves) {                  // -> {logits: array aligned with legalMoves, value}
-    const h = trunk(W, b, red, last);
-    const pol = conv(conv(conv(h, W['pol.0'], true), W['pol.1'], true), W['pol.2'], false), logits = legalMoves.map((m) => {
-      let f = Math.floor(m / 90), t = m % 90; if (!red) { f = 89 - f; t = 89 - t; } const ty = typeOf(Math.floor(t / 9) - Math.floor(f / 9), t % 9 - f % 9); return pol[ty * PL + (Math.floor(f / 9) + 1) * PW + (f % 9) + 1]; });
+  const lin = (L, x, relu) => { const nin = x.length, o = new Float32Array(L.co); for (let j = 0; j < L.co; j++) { let s = L.b[j]; const wb = j * nin; for (let i = 0; i < nin; i++) s += L.w[wb + i] * x[i]; o[j] = relu && s < 0 ? 0 : s; } return o; };
+  const pos = (cell) => (Math.floor(cell / 9) + 1) * PW + (cell % 9) + 1;
+  function valueOf(W, h) {
     const vv = conv(h, W.v, true), flat = new Float32Array(32 * 90); for (let c = 0; c < 32; c++) for (let r = 0; r < 10; r++) for (let f = 0; f < 9; f++) flat[c * 90 + r * 9 + f] = vv[c * PL + (r + 1) * PW + f + 1];
-    const lin = (L, x, relu) => { const nin = x.length, o = new Float32Array(L.co); for (let j = 0; j < L.co; j++) { let s = L.b[j]; const wb = j * nin; for (let i = 0; i < nin; i++) s += L.w[wb + i] * x[i]; o[j] = relu && s < 0 ? 0 : s; } return o; };
-    return { logits, value: Math.tanh(lin(W.vf2, lin(W.vf1, flat, true), false)[0]) };
+    return Math.tanh(lin(W.vf2, lin(W.vf1, flat, true), false)[0]);
+  }
+  function rawPolicy(W, h) {                                       // raw policy-head outputs in the side-to-move VIEW frame (no legal mask)
+    const k = W._kind;
+    if (k === 'cell') return { pol: conv(conv(conv(h, W['pol.0'], true), W['pol.1'], true), W['pol.2'], false) };
+    if (k === 'fc') { const p = conv(h, W.p, true), flat = new Float32Array(16 * 90); for (let c = 0; c < 16; c++) for (let r = 0; r < 10; r++) for (let f = 0; f < 9; f++) flat[c * 90 + r * 9 + f] = p[c * PL + (r + 1) * PW + f + 1]; return { z: lin(W.pf, flat, false) }; }
+    const fh = conv(conv(h, W['fh.0'], true), W['fh.1'], false), th = conv(conv(h, W['th.0'], true), W['th.1'], false), fl = new Float32Array(90), prior = new Float32Array(90);
+    for (let c = 0; c < 90; c++) { fl[c] = fh[pos(c)]; prior[c] = th[pos(c)]; }
+    const R = { fl, prior }; if (k === 'cond') { const Kp = conv(h, W.k, false), qs = {}; R.q = (f) => { if (!qs[f]) { const x = new Float32Array(W.q.ci); for (let c = 0; c < x.length; c++) x[c] = h[c * PL + pos(f)]; qs[f] = lin(W.q, x, false); } return qs[f]; }; R.K = (t) => { const o = new Float32Array(W.k.co); for (let j = 0; j < o.length; j++) o[j] = Kp[j * PL + pos(t)]; return o; }; R.Kc = {}; }
+    return R;
+  }
+  function splitScore(R, f, t) {                                    // S[f][t] = prior[t] (+ <Q[f], K[t]> / 8 for the conditional structure)
+    if (!R.q) return R.prior[t]; const q = R.q(f), kk = R.Kc[t] || (R.Kc[t] = R.K(t)); let d = 0; for (let j = 0; j < q.length; j++) d += q[j] * kk[j]; return R.prior[t] + d / 8;
+  }
+  const lse = (a) => { let m = -Infinity; for (const x of a) if (x > m) m = x; let s = 0; for (const x of a) s += Math.exp(x - m); return m + Math.log(s); };
+  function forward(W, b, red, last, legalMoves) {                  // -> {logits: array aligned with legalMoves (log-probabilities up to a constant), value}
+    const h = trunk(W, b, red, last), R = rawPolicy(W, h), k = W._kind, vf = legalMoves.map((m) => { const f = Math.floor(m / 90), t = m % 90; return red ? [f, t] : [89 - f, 89 - t]; });
+    let logits;
+    if (k === 'cell') logits = vf.map(([f, t]) => R.pol[typeOf(Math.floor(t / 9) - Math.floor(f / 9), t % 9 - f % 9) * PL + pos(f)]);
+    else if (k === 'fc') logits = vf.map(([f, t]) => R.z[W._c.idx.get(f * 90 + t)]);
+    else {                                                         // P(move) = P(from) * P(to | from), both normalised over the legal moves
+      const byF = new Map(); vf.forEach(([f, t], i) => { if (!byF.has(f)) byF.set(f, []); byF.get(f).push(i); }); const froms = [...byF.keys()], lf = lse(froms.map((f) => R.fl[f])); logits = new Array(vf.length);
+      for (const f of froms) { const ids = byF.get(f), sc = ids.map((i) => splitScore(R, f, vf[i][1])), lt = lse(sc); ids.forEach((i, n) => { logits[i] = R.fl[f] - lf + sc[n] - lt; }); }
+    }
+    return { logits, value: valueOf(W, h) };
+  }
+  /* debug view, kind "policy": for every own piece, P(target | this piece) taken from the policy output WITHOUT masking to the legal moves (softmax over the piece's targets); works for all four structures */
+  function policyMap(W, b, red, last) {                            // -> { fromAbs: [[toAbs, p], ...] }
+    const h = trunk(W, b, red, last), R = rawPolicy(W, h), k = W._kind, lo = red ? 1 : 9, hi = red ? 7 : 15, out = {};
+    for (let s = 0; s < 90; s++) {
+      if (b[s] < lo || b[s] > hi) continue; const f = red ? s : 89 - s; let ts, lg;
+      if (k === 'cell') { ts = W._c.by[f].map((i) => W._c.table_to[i]); lg = ts.map((t) => R.pol[typeOf(Math.floor(t / 9) - Math.floor(f / 9), t % 9 - f % 9) * PL + pos(f)]); }
+      else if (k === 'fc') { const ids = W._c.by[f]; ts = ids.map((i) => W._c.table_to[i]); lg = ids.map((i) => R.z[i]); }
+      else { ts = Array.from({ length: 90 }, (x, t) => t); lg = ts.map((t) => splitScore(R, f, t)); }
+      const z = lse(lg), list = []; ts.forEach((t, n) => { const p = Math.exp(lg[n] - z); if (p >= 0.005) list.push([red ? t : 89 - t, p]); }); out[s] = list;
+    }
+    return out;
   }
   /* legality head: for every (move type, from-cell) a logit "this move is legal here".  legalLogits(...) returns, for the given legal moves, the logits (parity test);
      legalMap(...) returns for every own piece the probabilities of all geometrically possible targets (debug view). */
@@ -190,8 +226,9 @@
     return { all: order.map((i) => [mStr(mv[i]), pr[i]]), value: r.value, turn: st.turn, ply: st.ply };
   }
   function legalMapApi(W, req) {
-    const g = replay(req.moves), st = state(g); if (st.status[0] !== null) return { map: {}, legal: [], turn: st.turn };
-    return { map: legalMap(W, g.board, g.red, g.last), legal: st.legal, turn: st.turn };
+    const g = replay(req.moves), st = state(g), cell = W._kind === 'cell', kind = req.kind === 'legality' && cell ? 'legality' : req.kind === 'policy' || !cell ? 'policy' : 'legality';
+    if (st.status[0] !== null) return { map: {}, legal: [], turn: st.turn, kind };
+    return { map: kind === 'legality' ? legalMap(W, g.board, g.red, g.last) : policyMap(W, g.board, g.red, g.last), legal: st.legal, turn: st.turn, kind };
   }
   function engineApi(W, req) {
     const g = replay(req.moves), st = state(g); if (st.status[0] !== null) return Object.assign({ error: 'game is over' }, st);
@@ -208,6 +245,6 @@
     g.play(move); return Object.assign({ move: mStr(move), eval: ev, stats, pv, seconds: (Date.now() - t0) / 1000, sims, skipped, mode }, state(g));
   }
 
-  root.XQ = { legal, pseudo, attacked, inCheck, push, fromFen, perft, Game, unsafe, mStr, mParse, loadModel, forward, planes, search, state, replay, policyApi, engineApi, legalLogits, legalMap, legalMapApi, START_FEN, cycleResult };
+  root.XQ = { legal, pseudo, attacked, inCheck, push, fromFen, perft, Game, unsafe, mStr, mParse, loadModel, forward, planes, search, state, replay, policyApi, engineApi, legalLogits, legalMap, legalMapApi, policyMap, START_FEN, cycleResult };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.XQ;
 })(typeof self !== 'undefined' ? self : globalThis);
