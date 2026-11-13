@@ -161,14 +161,16 @@
     return { logits, value: valueOf(W, h) };
   }
   /* debug view, kind "policy": for every own piece, P(target | this piece) taken from the policy output WITHOUT masking to the legal moves (softmax over the piece's targets); works for all four structures */
-  function policyMap(W, b, red, last) {                            // -> { fromAbs: [[toAbs, p], ...] }
-    const h = trunk(W, b, red, last), R = rawPolicy(W, h), k = W._kind, lo = red ? 1 : 9, hi = red ? 7 : 15, out = {};
+  function policyMap(W, b, red, last, legalMoves) {                 // -> { fromAbs: [[toAbs, p], ...] }; with legalMoves: only the rule-legal targets of each piece, renormalised (what the policy loss was trained on)
+    const h = trunk(W, b, red, last), R = rawPolicy(W, h), k = W._kind, lo = red ? 1 : 9, hi = red ? 7 : 15, out = {}, legalTo = {};
+    if (legalMoves) for (const m of legalMoves) { const f = Math.floor(m / 90), t = m % 90; (legalTo[f] = legalTo[f] || new Set()).add(t); }
     for (let s = 0; s < 90; s++) {
       if (b[s] < lo || b[s] > hi) continue; const f = red ? s : 89 - s; let ts, lg;
       if (k === 'cell') { ts = W._c.by[f].map((i) => W._c.table_to[i]); lg = ts.map((t) => R.pol[typeOf(Math.floor(t / 9) - Math.floor(f / 9), t % 9 - f % 9) * PL + pos(f)]); }
       else if (k === 'fc') { const ids = W._c.by[f]; ts = ids.map((i) => W._c.table_to[i]); lg = ids.map((i) => R.z[i]); }
       else { ts = Array.from({ length: 90 }, (x, t) => t); lg = ts.map((t) => splitScore(R, f, t)); }
-      const z = lse(lg), list = []; ts.forEach((t, n) => { const p = Math.exp(lg[n] - z); if (p >= 0.005) list.push([red ? t : 89 - t, p]); }); out[s] = list;
+      if (legalMoves) { const keep = ts.map((t, n) => (legalTo[s] && legalTo[s].has(red ? t : 89 - t)) ? n : -1).filter((n) => n >= 0); ts = keep.map((n) => ts[n]); lg = keep.map((n) => lg[n]); }
+      const z = ts.length ? lse(lg) : 0, list = []; ts.forEach((t, n) => { const p = Math.exp(lg[n] - z); if (legalMoves || p >= 0.005) list.push([red ? t : 89 - t, p]); }); out[s] = list;
     }
     return out;
   }
@@ -226,9 +228,9 @@
     return { all: order.map((i) => [mStr(mv[i]), pr[i]]), value: r.value, turn: st.turn, ply: st.ply };
   }
   function legalMapApi(W, req) {
-    const g = replay(req.moves), st = state(g), cell = W._kind === 'cell', kind = req.kind === 'legality' && cell ? 'legality' : req.kind === 'policy' || !cell ? 'policy' : 'legality';
+    const g = replay(req.moves), st = state(g), cell = W._kind === 'cell', kind = req.kind === 'raw' ? 'raw' : req.kind === 'legality' && cell ? 'legality' : req.kind === 'legality' ? 'policy' : req.kind === 'policy' ? 'policy' : cell ? 'legality' : 'policy';
     if (st.status[0] !== null) return { map: {}, legal: [], turn: st.turn, kind };
-    return { map: kind === 'legality' ? legalMap(W, g.board, g.red, g.last) : policyMap(W, g.board, g.red, g.last), legal: st.legal, turn: st.turn, kind };
+    return { map: kind === 'legality' ? legalMap(W, g.board, g.red, g.last) : policyMap(W, g.board, g.red, g.last, kind === 'policy' ? g.legal() : null), legal: st.legal, turn: st.turn, kind };
   }
   function engineApi(W, req) {
     const g = replay(req.moves), st = state(g); if (st.status[0] !== null) return Object.assign({ error: 'game is over' }, st);
