@@ -19,10 +19,12 @@ table{width:100%;border-collapse:collapse}td,th{padding:2px 6px;border-bottom:1p
  <div class="left"><svg id="mini" viewBox="0 0 280 310"></svg><div class="seg"><button id="vguide" class="on" title="当前局面：网络建议我怎么走">我</button><button id="vai" disabled title="对方为什么走了这一步">对方</button></div></div>
  <div class="ctl">
   <div class="two"><button id="new">新局</button><button id="undo">悔棋</button></div>
+  <select id="model"><option value="new">方式 2</option></select>
   <select id="side"><option value="red">我执红（先手）</option><option value="black">我执黑</option></select>
   <select id="lvl"><option value="cnn" selected>纯 CNN（不搜索）</option><option value="cnn_rules">纯 CNN + 规则规避</option><option value="m:4">搜索 4 次</option><option value="m:10">搜索 10 次</option><option value="m:20">搜索 20 次</option><option value="m:40">搜索 40 次</option><option value="m:100">搜索 100 次（慢）</option></select>
   <input id="heatsrc" type="hidden" value="guide">
-  <label><input id="dbg" type="checkbox"> 调试：点己方棋子，看模型认为它能走哪里</label>
+  <label><input id="dbg" type="checkbox"> 调试：点己方棋子，看模型认为它能走哪里（走位分布）</label>
+  <select id="dbgkind"><option value="legality">走位分布：合法头（只有方式 2 有）</option><option value="policy">走位分布：策略输出（不屏蔽非法着，四种都有）</option></select>
   <label><input id="arrows" type="checkbox" checked> 棋盘上画 AI 思路箭头</label>
  </div>
 </div>
@@ -31,7 +33,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:2px 6px;border-bottom:1p
 </div>
 <div class="note" id="polwho" style="margin-top:6px"></div>
 <div class="note" style="margin-top:6px">AI 评估（红色 = 对 AI 有利）：<span id="ev">—</span></div><div class="bar"><i id="evb" style="width:50%"></i></div>
-<div class="note" id="foot" style="margin-top:8px">浏览器版：网络（int8，约 4 MB）和规则都在你的浏览器里运行。 规则：将军/将死/困毙判负；同一局面第 3 次出现：长将方判负，否则和棋；100 步没有吃子和棋。不判“长捉”。纯 CNN = 只在合法着里选网络概率最高的；规则规避 = 另外跳过会长将自败或送一步杀的着法。 走子由浏览器里的规则校验。</div>
+<div class="note" id="foot" style="margin-top:8px">浏览器版：网络（int8，每种方式 4–7 MB，选到哪个才下载哪个）和规则都在你的浏览器里运行。 规则：将军/将死/困毙判负；同一局面第 3 次出现：长将方判负，否则和棋；100 步没有吃子和棋。不判“长捉”。纯 CNN = 只在合法着里选网络概率最高的；规则规避 = 另外跳过会长将自败或送一步杀的着法。 走子由浏览器里的规则校验。</div>
 <script>
 window.XQ_DEBUG_OK = true;
 window.XQ_API = (function () { const w = new Worker('worker.js'); let n = 0; const pend = {};
