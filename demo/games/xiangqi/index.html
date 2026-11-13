@@ -24,7 +24,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:2px 6px;border-bottom:1p
   <select id="lvl"><option value="cnn" selected>纯 CNN（不搜索）</option><option value="cnn_rules">纯 CNN + 规则规避</option><option value="m:4">搜索 4 次</option><option value="m:10">搜索 10 次</option><option value="m:20">搜索 20 次</option><option value="m:40">搜索 40 次</option><option value="m:100">搜索 100 次（慢）</option></select>
   <input id="heatsrc" type="hidden" value="guide">
   <label><input id="dbg" type="checkbox"> 调试：点己方棋子，看模型认为它能走哪里（走位分布）</label>
-  <select id="dbgkind"><option value="legality">走位分布：合法头（只有方式 2 有）</option><option value="policy">走位分布：策略输出（不屏蔽非法着，四种都有）</option></select>
+  <select id="dbgkind"><option value="legality">看合法性：合法头（只有方式 2 有）</option><option value="policy">看哪个更好：只在合法落点里比（四种都有）</option><option value="raw">原始输出：不屏蔽非法着（看它没学规则）</option></select>
   <label><input id="arrows" type="checkbox" checked> 棋盘上画 AI 思路箭头</label>
  </div>
 </div>
