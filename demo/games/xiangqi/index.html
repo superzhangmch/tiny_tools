@@ -5,26 +5,26 @@
 h1{font-size:15px;margin:2px 0}.note{color:#667;font-size:12px}#msg{font-size:14px;font-weight:600;margin:2px 0}#msg:empty{display:none}
 button,select{background:#fff;color:#222;border:1px solid #bbb;border-radius:6px;padding:6px 8px;font-size:13px}button:disabled{opacity:.45}.left{flex:0 0 60%;width:60%}.seg{display:flex;gap:6px;margin-top:6px}.seg button{flex:1;font-size:14px;padding:7px 8px}.seg button.on{background:#1565c0;color:#fff;border-color:#1565c0}
 #wrap{width:min(100%,calc((100vh - 16px) / 1.95));margin:0 auto}#board{width:100%;display:block;background:#f1d9a5;border-radius:8px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
-.under{display:flex;gap:8px;align-items:flex-start;margin-top:6px}#mini{width:100%;display:block;background:#fff;border:1px solid #ccc;border-radius:6px}
+.under{display:flex;gap:8px;align-items:flex-start;margin-top:6px}#mini,#mini2{width:100%;display:block;background:#fff;border:1px solid #ccc;border-radius:6px}
 .ctl{flex:1;display:flex;flex-direction:column;gap:5px;min-width:0}.ctl select,.ctl button{width:100%}.ctl .two{display:flex;gap:5px}.ctl label{font-size:12px;color:#444}
 .bar{height:12px;border-radius:6px;background:#cfd3da;overflow:hidden;position:relative}.bar i{position:absolute;left:0;top:0;bottom:0;background:#d33}
-#toplist{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:6px;font-size:13px}#toplist .it{display:flex;gap:6px;align-items:baseline;border-bottom:1px solid #eee}#toplist .it b{width:16px;color:#0d47a1}#toplist .it span{flex:1}#toplist .it i{font-style:normal;color:#555}#toplist .pick{color:#2e7d32;font-weight:700}#toplist .pick b{color:#2e7d32}
-#toplist{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:6px;font-size:13px}#toplist .it{display:flex;gap:6px;align-items:baseline;border-bottom:1px solid #eee}#toplist .it b{min-width:18px;text-align:center;color:#fff;border-radius:9px;font-size:11px;line-height:18px}#toplist .it span{flex:1}#toplist .it i{font-style:normal;color:#555}#toplist .pick{font-weight:700}
+#toplist,#top1list{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:6px;font-size:13px}#toplist .it,#top1list .it{display:flex;gap:6px;align-items:baseline;border-bottom:1px solid #eee}#toplist .it b,#top1list .it b{width:16px;color:#0d47a1}#toplist .it span,#top1list .it span{flex:1}#toplist .it i,#top1list .it i{font-style:normal;color:#555}#toplist .pick,#top1list .pick{color:#2e7d32;font-weight:700}#toplist .pick b,#top1list .pick b{color:#2e7d32}
+#toplist,#top1list{display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;margin-top:6px;font-size:13px}#toplist .it,#top1list .it{display:flex;gap:6px;align-items:baseline;border-bottom:1px solid #eee}#toplist .it b,#top1list .it b{min-width:18px;text-align:center;color:#fff;border-radius:9px;font-size:11px;line-height:18px}#toplist .it span,#top1list .it span{flex:1}#toplist .it i,#top1list .it i{font-style:normal;color:#555}#toplist .pick,#top1list .pick{font-weight:700}
 table{width:100%;border-collapse:collapse}td,th{padding:2px 6px;border-bottom:1px solid #ddd;text-align:right}th:first-child,td:first-child{text-align:left}th{color:#667;font-weight:normal}
 </style></head><body>
 <div id="msg"></div>
 <div id="wrap">
 <svg id="board" viewBox="0 0 528 584"></svg>
 <div class="under">
- <div class="left"><svg id="mini" viewBox="0 0 280 310"></svg><div class="seg"><button id="vguide" class="on" title="当前局面：网络建议我怎么走">我</button><button id="vai" disabled title="对方为什么走了这一步">对方</button></div></div>
+ <div class="left"><svg id="mini" viewBox="0 0 280 310"></svg><div class="seg"><button id="vguide" class="on" title="当前局面：网络建议我怎么走">我</button><button id="vai" disabled title="对方为什么走了这一步">对方</button></div><svg id="mini2" viewBox="0 0 280 310" style="margin-top:10px"></svg><div class="note" id="top1note" style="margin-top:4px"></div><div id="top1list"></div></div>
  <div class="ctl">
   <div class="two"><button id="new">新局</button><button id="undo">悔棋</button></div>
   <select id="model"><option value="new">方式 2</option></select>
   <select id="side"><option value="red">我执红（先手）</option><option value="black">我执黑</option></select>
   <select id="lvl"><option value="cnn" selected>纯 CNN（不搜索）</option><option value="cnn_rules">纯 CNN + 规则规避</option><option value="m:4">搜索 4 次</option><option value="m:10">搜索 10 次</option><option value="m:20">搜索 20 次</option><option value="m:40">搜索 40 次</option><option value="m:100">搜索 100 次（慢）</option></select>
   <input id="heatsrc" type="hidden" value="guide">
-  <label><input id="dbg" type="checkbox"> 调试：点己方棋子，看模型认为它能走哪里（走位分布）</label>
-  <select id="dbgkind"><option value="legality">看合法性：合法头（只有方式 2 有）</option><option value="policy">看哪个更好：只在合法落点里比（四种都有）</option><option value="raw">原始输出：不屏蔽非法着（看它没学规则）</option></select>
+  <div id="dbgbox" style="display:flex;flex-direction:column;gap:5px"><label><input id="dbg" type="checkbox"> 调试（方式 2 专用）：点己方棋子，看合法头认为它能走哪里</label>
+  <select id="dbgkind"><option value="legality">看合法性：合法头</option><option value="policy">看哪个更好：只在合法落点里比</option><option value="raw">原始输出：不屏蔽非法着</option></select></div>
   <label><input id="arrows" type="checkbox" checked> 棋盘上画 AI 思路箭头</label>
  </div>
 </div>

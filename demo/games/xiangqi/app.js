@@ -68,14 +68,18 @@
 
   /* 小棋盘：网络（不搜索）最推荐的前 10 个着法，编号 1..10 标在落点上（颜色绿→红 = 概率低→高），列表在下面。来源可选：给我的建议（当前局面）/ AI 的选择（它走上一步时的局面） */
   const probColor = (p, pmax) => `hsl(${Math.round(120 * (1 - Math.sqrt(p / pmax)))},72%,40%)`;
-  function renderMini() {
-    const g = $('mini'); g.innerHTML = ''; const ai = $('heatsrc').value === 'ai' && polAI; $('vguide').classList.toggle('on', !ai); $('vai').classList.toggle('on', !!ai); $('vai').disabled = !polAI;
-    const P = ai ? polAI.pol : pol, bd = ai ? polAI.before : board, chosen = ai ? polAI.chosen : null;
+  function miniBoard(g, bd) {                                       // small board (lines + piece glyphs) into the svg g; returns the coordinate functions
     const cs = 30, ox = 20, oy = 20, X = (f) => ox + (human === 'red' ? f : 8 - f) * cs, Y = (r) => oy + (human === 'red' ? 9 - r : r) * cs;
     const L = (x1, y1, x2, y2) => el('line', { x1, y1, x2, y2, stroke: '#9a9a9a', 'stroke-width': 0.8 }, g);
     for (let r = 0; r < 10; r++) L(X(0), Y(r), X(8), Y(r));
     for (let f = 0; f < 9; f++) { if (f === 0 || f === 8) L(X(f), Y(0), X(f), Y(9)); else { L(X(f), Y(0), X(f), Y(4)); L(X(f), Y(5), X(f), Y(9)); } }
     for (const s in bd) { const p = sq(s), ch = bd[s], red = ch === ch.toUpperCase(), t = el('text', { x: X(p.f), y: Y(p.r) + 4.5, 'font-size': 13, 'text-anchor': 'middle', fill: red ? '#b71c1c' : '#111', 'font-family': 'serif', 'font-weight': 700, opacity: 0.8 }, g); t.textContent = CH[ch]; }
+    return { X, Y };
+  }
+  function renderMini() {
+    const g = $('mini'); g.innerHTML = ''; const ai = $('heatsrc').value === 'ai' && polAI; $('vguide').classList.toggle('on', !ai); $('vai').classList.toggle('on', !!ai); $('vai').disabled = !polAI;
+    const P = ai ? polAI.pol : pol, bd = ai ? polAI.before : board, chosen = ai ? polAI.chosen : null;
+    const { X, Y } = miniBoard(g, bd);
     const top = P ? P.all.slice(0, 10) : [], pmax = top.length ? top[0][1] : 1, OFF = [[0, 0], [-7, -7], [7, -7], [-7, 7], [7, 7], [0, -9], [0, 9], [-9, 0], [9, 0], [0, 0]], slot = {}, cnt = {};
     top.forEach(([m]) => { const to = m.slice(2, 4); cnt[to] = (cnt[to] || 0) + 1; });
     const place = top.map(([m, p], i) => { const to = m.slice(2, 4); slot[to] = slot[to] === undefined ? 0 : slot[to] + 1; return { m, p, i, k: slot[to] }; });
@@ -88,6 +92,18 @@
     const rank = P && chosen ? P.all.findIndex(([m]) => m === chosen) + 1 : 0;
     $('toplist').innerHTML = !P ? '' : top.map(([m, p], i) => `<div class="it${m === chosen ? ' pick' : ''}"><b style="background:${probColor(p, pmax)}">${i + 1}</b><span>${notate(m, bd)}${m === chosen ? ' ★' : ''}</span><i>${(p * 100).toFixed(1)}%</i></div>`).join('') + (chosen && rank > 10 ? `<div class="it pick" style="grid-column:1/3"><b style="background:#000">★</b><span>AI 选了 ${notate(chosen, bd)}（网络排第 ${rank}）</span><i>${(P.all[rank - 1][1] * 100).toFixed(1)}%</i></div>` : '');
     $('polwho').textContent = !P ? '' : ai ? `AI（${polAI.mover === 'red' ? '红' : '黑'}）走这步时的局面：编号 = 网络推荐顺序；黑圈 ★ = AI 实际选的。` : `${P.turn === 'red' ? '红' : '黑'}方的建议：编号 1–10 = 网络推荐顺序（1 最推荐）。网络对局面的评分 ${P.value >= 0 ? '+' : ''}${P.value.toFixed(2)}（对走子方）。`;
+    renderTop1(P, bd);
+  }
+  /* second small board: IF the network's top-1 move is chosen, i.e. its start piece, how does it pick the target?  P(target | start) = joint(start, target) / P(start) over the legal targets; works for every model, no debug needed */
+  function renderTop1(P, bd) {
+    const g = $('mini2'), list = $('top1list'), note = $('top1note'); g.innerHTML = ''; list.innerHTML = ''; note.textContent = '';
+    if (!P || !P.all.length) return;
+    const src = P.all[0][0].slice(0, 2), same = P.all.filter(([m]) => m.startsWith(src)), tot = same.reduce((s, [, p]) => s + p, 0), cond = same.map(([m, p]) => [m, p / tot]).sort((a, b) => b[1] - a[1]);
+    const { X, Y } = miniBoard(g, bd), sp = sq(src); el('circle', { cx: X(sp.f), cy: Y(sp.r), r: 13, fill: 'none', stroke: '#f9a825', 'stroke-width': 3 }, g);
+    cond.slice().reverse().forEach(([m, p]) => { const i = cond.findIndex((c) => c[0] === m), t = sq(m.slice(2, 4)); el('circle', { cx: X(t.f), cy: Y(t.r), r: 9.5, fill: probColor(p, 1), stroke: '#fff', 'stroke-width': 1.2, opacity: 0.95 }, g);
+      const tx = el('text', { x: X(t.f), y: Y(t.r) + 3.5, 'font-size': i >= 9 ? 8 : 10, 'text-anchor': 'middle', fill: '#fff', 'font-weight': 700 }, g); tx.textContent = i + 1; });
+    note.textContent = `选了 top-1 的起点（${CH[bd[src]]} ${src}，它占 ${(tot * 100).toFixed(0)}%）之后：在它的 ${same.length} 个合法落点里，终点怎么选（黄圈 = 起点，编号 = 名次，只在合法落点里比、加起来 100%）。`;
+    list.innerHTML = cond.slice(0, 8).map(([m, p], i) => `<div class="it"><b style="background:${probColor(p, 1)}">${i + 1}</b><span>${notate(m, bd)}</span><i>${(p * 100).toFixed(1)}%</i></div>`).join('');
   }
   async function refreshPolicy() {
     refreshDbg(); const my = ++polBusy; if (status[0]) { pol = null; renderMini(); return; }
@@ -136,7 +152,7 @@
     if (thinking || !moves.length) return; const keep = moves.slice(0, moves.length - (turn === human && moves.length >= 2 ? 2 : 1)); busy++;
     setup(); moves = []; last = null; for (const m of keep) apply(m); if (!keep.length) last = null; cand = []; polAI = null; const st = await api('/api/state', { moves }); setStatus(st); render(); btns(); refreshPolicy(); if (turn !== human) engineMove();
   }
-  $('new').onclick = newGame; $('undo').onclick = undo; $('side').onchange = newGame; $('arrows').onchange = render; const syncKind = (reset) => { const has = $('model').value === 'new', o = $('dbgkind').querySelector('option[value=legality]'); o.disabled = !has; if (!has && ($('dbgkind').value === 'legality' || reset)) $('dbgkind').value = 'policy'; else if (has && reset) $('dbgkind').value = 'legality'; }; if ($('model')) $('model').onchange = () => { polAI = null; pol = null; syncKind(true); renderMini(); refreshPolicy(); refreshDbg(); }; if ($('dbgkind')) $('dbgkind').onchange = () => { refreshDbg(); }; if ($('dbg')) $('dbg').onchange = () => { dbgSel = null; refreshDbg(); render(); }; $('heatsrc').onchange = renderMini; $('vguide').onclick = () => { $('heatsrc').value = 'guide'; renderMini(); }; $('vai').onclick = () => { $('heatsrc').value = 'ai'; renderMini(); };
+  $('new').onclick = newGame; $('undo').onclick = undo; $('side').onchange = newGame; $('arrows').onchange = render; const syncKind = (reset) => { const has = $('model').value === 'new'; $('dbgbox').style.display = has ? '' : 'none'; if (!has && $('dbg').checked) { $('dbg').checked = false; dbgMap = null; dbgSel = null; render(); } if (has && reset) $('dbgkind').value = 'legality'; }; if ($('model')) $('model').onchange = () => { polAI = null; pol = null; syncKind(true); renderMini(); refreshPolicy(); refreshDbg(); }; if ($('dbgkind')) $('dbgkind').onchange = () => { refreshDbg(); }; if ($('dbg')) $('dbg').onchange = () => { dbgSel = null; refreshDbg(); render(); }; $('heatsrc').onchange = renderMini; $('vguide').onclick = () => { $('heatsrc').value = 'guide'; renderMini(); }; $('vai').onclick = () => { $('heatsrc').value = 'ai'; renderMini(); };
   window.xqDebug = { click, state: () => ({ moves: moves.slice(), turn, status, thinking, human, sel, nlegal: legal.length, pol: pol && pol.all.length, ai: polAI && polAI.chosen, dbgSel, dbgN: dbgMap && dbgSel ? (dbgMap.map[sq(dbgSel).r * 9 + sq(dbgSel).f] || []).length : -1, notes: pol ? pol.all.slice(0, 3).map((x) => notate(x[0], board)) : [] }), newGame, undo, notate: (m) => notate(m, board) };
   (async () => { if ($('model')) { try { const r = await api('/api/models', {}); const names = { old: '方式 1（2102 项着法表）', new: '方式 2（52×90 格子级，有合法头）', split_indep: '方式 3（起点、终点独立）', split_cond: '方式 4（终点依赖起点，指针式打分）' }; const ORDER = ['old', 'new', 'split_indep', 'split_cond']; r.models.sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)); $('model').innerHTML = r.models.map((m) => `<option value="${m}">${names[m] || m}</option>`).join(''); $('model').value = r.default; syncKind(); } catch (e) {} } newGame(); })();
 })();
