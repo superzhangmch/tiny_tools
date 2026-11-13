@@ -7,6 +7,7 @@
 - 五子棋（CNN 模仿 Rapfi + MCTS，纯浏览器推理，手机可玩）: demo/games/gomoku/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/gomoku/index.html)
 - 俄罗斯方块（AI 自动玩 / 自己玩，盘面上方是 AI 对每个旋转角度、每个平移位置的评分曲线）: demo/games/tetris/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/tetris/index.html)
 - 象棋（CNN 模仿 Pikafish + MCTS，纯浏览器 int8 推理约 4 MB，手机可玩；热力图/调试模式可看模型认为哪些着法、哪些落点可行）: demo/games/xiangqi/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/xiangqi/index.html)
+- 黑白棋（Edax 标注的小 CNN + 剪枝搜索，纯浏览器 int8 推理，每个模型不到 1 MB，手机可玩；可选两种模型、纯 CNN / 加规则 / 搜索三档，可看网络认为的好走法，可让子）: demo/games/othello/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/othello/index.html)
 - 物理模拟（只给最底层定律，让公式自己涌现）: demo/physics/windtunnel.html / demo/physics/idealgas.html / demo/physics/idealgas_kelvin.html / demo/physics/blackbody.html / demo/physics/catenary.html / demo/physics/catenary_compare.html / demo/physics/cloth3d.html / demo/physics/solarsystem.html / demo/physics/fermat_light.html
   
 
