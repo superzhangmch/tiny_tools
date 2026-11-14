@@ -9,7 +9,7 @@
 - 象棋（CNN 模仿 Pikafish + MCTS，纯浏览器 int8 推理，四种策略头可选（每种 4–7 MB，选到才下载），手机可玩；热力图/调试模式可看模型认为哪些着法、每颗子的落点分布）: demo/games/xiangqi/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/xiangqi/index.html)
 - 黑白棋（Edax 标注的小 CNN + 剪枝搜索，纯浏览器 int8 推理，每个模型不到 1 MB，手机可玩；可选两种模型、纯 CNN / 加规则 / 搜索三档，可看网络认为的好走法，可让子）: demo/games/othello/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/othello/index.html)
 - 魔方 3x3（小模型 + beam search，纯浏览器推理，手机可玩）: demo/games/rubiks_cube/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/rubiks_cube/index.html)
-- 魔方 scan and resolve（手机拍 6 张实物魔方 → 浏览器里读色、还原出整个魔方 → 用上面的小模型求解，3D 魔方 + 箭头一步步指导你还原；纯网页，无服务端）: demo/games/rubiks_cube/scan/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/rubiks_cube/scan/index.html)
+- 魔方还原（手机拍 6 张实物魔方 → 浏览器里读色、还原出整个魔方 → 用上面的小模型求解，3D 魔方 + 箭头一步步指导你还原；纯网页，无服务端）: demo/games/rubiks_cube/scan/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/rubiks_cube/scan/index.html)
 - 物理模拟（只给最底层定律，让公式自己涌现）: demo/physics/windtunnel.html / demo/physics/idealgas.html / demo/physics/idealgas_kelvin.html / demo/physics/blackbody.html / demo/physics/catenary.html / demo/physics/catenary_compare.html / demo/physics/cloth3d.html / demo/physics/solarsystem.html / demo/physics/fermat_light.html
   
 
