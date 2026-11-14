@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>自助超市</title>
+<style>
+*{box-sizing:border-box}
+html,body{height:100%}
+body{display:flex;flex-direction:column;overflow:hidden;margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#fff7e0;color:#333}
+header{display:flex;justify-content:space-between;align-items:center;padding:10px 20px;background:#ff9f43;color:#fff}
+h1{margin:0;font-size:28px}.stats{font-size:20px;font-weight:bold}
+h2{margin:0 0 8px}
+#top{padding:8px 20px}
+.modes{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{font:inherit;cursor:pointer;border:none;border-radius:10px;padding:8px 14px;background:#54a0ff;color:#fff;font-weight:bold}
+button:hover{filter:brightness(1.1)}
+.mode{background:#c8d6e5;color:#333}.mode.active{background:#10ac84;color:#fff}
+#next{background:#ee5253}
+#task{font-size:18px;margin:0 0 10px;padding:10px 14px;background:#fff;border-radius:12px;border-left:8px solid #10ac84}
+#wallet{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:12px;padding:8px;background:#e8f8f0;border:2px solid #10ac84;border-radius:10px}
+#wallet>span:first-child{width:100%;font-weight:bold}
+.note{padding:6px 12px;border-radius:6px;font-weight:bold;color:#fff;box-shadow:0 2px 3px #0003}
+.n100{background:#d63031}.n50{background:#00a8a8}.n20{background:#8854d0}.n10{background:#2e86de}.n5{background:#e17055}
+.coin{width:34px;height:34px;border-radius:50%;background:#f9ca24;display:flex;align-items:center;justify-content:center;font-weight:bold;box-shadow:0 2px 3px #0003}
+main{display:flex;gap:16px;padding:0 20px 12px;flex:1;min-height:0}
+#shop{flex:3;min-width:0;overflow-y:auto;padding-right:8px}
+#basket{flex:1.6;min-width:380px;background:#fff;border-radius:14px;padding:14px;overflow-y:auto;box-shadow:0 2px 6px #0002}
+#shelves .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+h3.cat{margin:4px 0 8px;font-size:22px}
+.card{background:#fff;border-radius:14px;padding:10px;text-align:center;box-shadow:0 2px 5px #0002;border-top:6px solid #ccc}
+.card.daily{border-color:#54a0ff}.card.snack{border-color:#ff6b6b}.card.toy{border-color:#a55eea}.card.study{border-color:#feca57}
+.card .em{font-size:44px}.card .nm{font-weight:bold;font-size:18px}
+.price{margin:4px 0;font-size:17px;color:#d63031;font-weight:bold}
+.tag{font-size:12px;color:#777}
+.btns{display:flex;gap:4px;justify-content:center;flex-wrap:wrap}
+.btns button{padding:5px 9px;font-size:14px}
+.btns .minus{background:#ff9f43}
+.cartrow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px dashed #ddd;font-size:17px}
+.cartrow .tag{font-size:14px;color:#666}
+.sub{color:#10ac84;font-size:14px}
+.empty{color:#999;padding:10px 0}
+#table{display:flex;gap:8px;margin-top:12px}
+.side{flex:1;background:#f1f8ff;border-radius:10px;padding:8px}
+.side:last-child{background:#fff4e6}
+.side h4{margin:0 0 6px;font-size:14px}
+.pile{min-height:54px;display:flex;flex-wrap:wrap;gap:5px;padding:5px;border:2px dashed #aaa;border-radius:8px;background:#fff;align-content:flex-start}
+.sum{margin-top:6px;font-size:16px}
+#drawer{margin-bottom:10px;padding:8px;background:#eee;border-radius:10px}
+#drawerBtns{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+#wallet .note,#wallet .coin,.pile .note,.pile .coin,#drawerBtns .note,#drawerBtns .coin{cursor:pointer;user-select:none}
+#wallet .used{opacity:.25;pointer-events:none}
+#confirm{margin-top:10px;background:#10ac84;width:100%;font-size:18px}
+.hidden{display:none}
+.paid{margin:8px 0;font-size:19px}
+
+#msg{margin-top:10px;font-size:18px;font-weight:bold;min-height:24px}
+#msg.ok{color:#10ac84}#msg.bad{color:#d63031}
+.shake{animation:sh .3s}@keyframes sh{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+#guard{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px;border-radius:12px}
+#guard.hidden{display:none}
+#guard.warn{background:#ffe3e3;border:3px solid #d63031;animation:flash .4s 4}
+#guard.glee{background:#fff3cd;border:3px solid #e1b12c}
+.gface{font-size:52px}.gsay{font-size:17px;font-weight:bold}
+#guard.warn .gsay{color:#d63031}
+@keyframes flash{50%{background:#ff7675}}
+.stats.neg #score{color:#ffeaa7}
+</style>
+</head>
+<body>
+<header>
+  <h1>🛒 自助超市</h1>
+  <div class="stats">⭐ <span id="score">0</span> &nbsp; 🔥连对 <span id="streak">0</span></div>
+</header>
+
+<section id="top">
+  <div class="modes">
+    <button id="m1" class="mode">模式1：花光</button>
+    <button id="m2" class="mode active">模式2：不用花光</button>
+    <button id="next">再次购物 ↻</button>
+  </div>
+</section>
+
+<main>
+  <section id="shop"><h2>🏪 商店</h2><div id="shelves"></div></section>
+  <aside id="basket">
+    <div id="task"></div>
+    <h2>🧺 篮子 <small>（最多 3 种）</small></h2>
+    <div id="cart"></div>
+    <div id="table">
+      <div class="side">
+        <h4>💵 桌子左边：我付出的钱</h4><div id="left" class="pile"></div><div class="sum">共 <b id="paidAmt">0</b> 元</div>
+        <div id="wallet"></div>
+      </div>
+      <div class="side">
+        <div id="drawer"><span class="tag">🏦 商店零钱库（点一下拿一张）：</span><div id="drawerBtns"></div></div>
+        <h4>🪙 桌子右边：我找回的零钱</h4><div id="right" class="pile"></div><div class="sum">共 <b id="chgAmt">0</b> 元</div>
+      </div>
+    </div>
+    <button id="confirm">结账 ✔</button>
+    <div id="msg"></div>
+    <div id="guard" class="hidden"><div class="gface" id="gface"></div><div class="gsay" id="gsay"></div></div>
+  </aside>
+</main>
+<script>
+// 商品: u=每个单价(元); n=一批个数(1=按个卖); 批价=n*u
+const ALL = [
+  {id:'bg',name:'饼干',em:'🍪',cat:'snack',u:4,n:1,lo:3,hi:6},
+  {id:'qkl',name:'巧克力',em:'🍫',cat:'snack',u:7,n:1,lo:5,hi:9},
+  {id:'bbt',name:'棒棒糖',em:'🍭',cat:'snack',u:2,n:1,lo:1,hi:3},
+  {id:'mt',name:'面包',em:'🍞',cat:'snack',u:6,n:1,lo:4,hi:8},
+  {id:'tg',name:'软糖',em:'🍬',cat:'snack',u:2,n:6,unit:'颗',lo:1,hi:3},
+  {id:'pm',name:'爆米花',em:'🍿',cat:'snack',u:3,n:1,lo:3,hi:6},
+  {id:'pg',name:'苹果',em:'🍎',cat:'snack',u:3,n:4,unit:'个',lo:2,hi:4},
+  {id:'xj',name:'香蕉',em:'🍌',cat:'snack',u:2,n:6,unit:'根',lo:2,hi:4},
+  {id:'cm',name:'草莓',em:'🍓',cat:'snack',u:3,n:8,unit:'个',lo:3,hi:6},
+  {id:'bq',name:'冰淇淋',em:'🍦',cat:'snack',u:5,n:1,lo:3,hi:7},
+  {id:'nn',name:'牛奶',em:'🥛',cat:'snack',u:4,n:3,unit:'盒',lo:3,hi:6},
+  {id:'cz',name:'橙子',em:'🍊',cat:'snack',u:5,n:4,unit:'个',lo:3,hi:6},
+  {id:'ys',name:'牙刷',em:'🪥',cat:'daily',u:6,n:1,lo:4,hi:8},
+  {id:'fz',name:'肥皂',em:'🧼',cat:'daily',u:4,n:1,lo:3,hi:6},
+  {id:'mj',name:'毛巾',em:'🧣',cat:'daily',u:9,n:1,lo:6,hi:9},
+  {id:'sb',name:'水杯',em:'🥤',cat:'daily',u:8,n:1,lo:6,hi:9},
+  {id:'zj',name:'纸巾',em:'🧻',cat:'daily',u:3,n:4,unit:'卷',lo:2,hi:4},
+  {id:'wz',name:'袜子',em:'🧦',cat:'daily',u:5,n:3,unit:'双',lo:3,hi:7},
+  {id:'dc',name:'电池',em:'🔋',cat:'daily',u:2,n:6,unit:'节',lo:2,hi:4},
+  {id:'sh',name:'梳子',em:'💈',cat:'daily',u:3,n:1,lo:2,hi:5},
+  {id:'yg',name:'牙膏',em:'🧴',cat:'daily',u:7,n:1,lo:5,hi:9},
+  {id:'dp',name:'灯泡',em:'💡',cat:'daily',u:6,n:1,lo:4,hi:8},
+  {id:'ls',name:'垃圾袋',em:'🗑️',cat:'daily',u:2,n:8,unit:'个',lo:1,hi:3},
+  {id:'sj',name:'雨伞',em:'☂️',cat:'daily',u:9,n:1,lo:7,hi:9},
+  {id:'bj',name:'笔记本',em:'📓',cat:'study',u:7,n:1,lo:3,hi:8},
+  {id:'cl',name:'尺子',em:'📏',cat:'study',u:5,n:1,lo:2,hi:5},
+  {id:'jz',name:'剪刀',em:'✂️',cat:'study',u:8,n:1,lo:4,hi:8},
+  {id:'qb',name:'铅笔',em:'✏️',cat:'study',u:2,n:5,unit:'支',lo:1,hi:3},
+  {id:'cb',name:'彩笔',em:'🖍️',cat:'study',u:3,n:6,unit:'支',lo:3,hi:7},
+  {id:'js',name:'胶水',em:'🧪',cat:'study',u:3,n:1,lo:2,hi:5},
+  {id:'xp',name:'橡皮',em:'🧽',cat:'study',u:2,n:4,unit:'块',lo:1,hi:3},
+  {id:'sbk',name:'书本',em:'📘',cat:'study',u:6,n:1,lo:4,hi:8},
+  {id:'hz',name:'回形针',em:'📎',cat:'study',u:1,n:9,unit:'个',lo:1,hi:2},
+  {id:'dd',name:'订书机',em:'🗜️',cat:'study',u:9,n:1,lo:6,hi:9},
+  {id:'mb',name:'毛笔',em:'🖌️',cat:'study',u:4,n:1,lo:3,hi:6},
+  {id:'bl',name:'便利贴',em:'🗒️',cat:'study',u:2,n:5,unit:'本',lo:2,hi:4},
+  {id:'xx',name:'小熊',em:'🧸',cat:'toy',u:9,n:1,lo:7,hi:9},
+  {id:'qq',name:'皮球',em:'⚽',cat:'toy',u:8,n:1,lo:6,hi:9},
+  {id:'jm',name:'积木',em:'🧱',cat:'toy',u:3,n:6,unit:'块',lo:2,hi:5},
+  {id:'fx',name:'风筝',em:'🪁',cat:'toy',u:7,n:1,lo:5,hi:9},
+  {id:'qc',name:'小汽车',em:'🚗',cat:'toy',u:5,n:1,lo:3,hi:7},
+  {id:'yy',name:'悠悠球',em:'🪀',cat:'toy',u:6,n:1,lo:4,hi:7},
+  {id:'pz',name:'拼图',em:'🧩',cat:'toy',u:9,n:1,lo:6,hi:9},
+  {id:'qzb',name:'气球',em:'🎈',cat:'toy',u:1,n:8,unit:'个',lo:1,hi:3},
+  {id:'hj',name:'飞机',em:'✈️',cat:'toy',u:4,n:1,lo:3,hi:6},
+  {id:'wj',name:'弹珠',em:'🔮',cat:'toy',u:2,n:9,unit:'颗',lo:1,hi:3},
+  {id:'mf',name:'魔方',em:'🎲',cat:'toy',u:5,n:1,lo:4,hi:8},
+  {id:'pp',name:'泡泡水',em:'🫧',cat:'toy',u:3,n:1,lo:2,hi:5},
+];
+const CATS=[['snack','🍭 零食'],['daily','🧴 日用'],['study','✏️ 文具'],['toy','🧸 玩具']];
+const $ = id => document.getElementById(id);
+const rnd = (a,b) => a + Math.floor(Math.random()*(b-a+1));
+const shuffle = a => { a=a.slice(); for(let i=a.length-1;i>0;i--){const j=rnd(0,i);[a[i],a[j]]=[a[j],a[i]];} return a; };
+const maxPieces = it => it.n===1 ? 9 : it.n*4;
+
+let S = {wallet:[], left:new Set(), right:[], mode:2, score:0, streak:0, budget:0, shop:[], cart:{}, solved:false};
+
+function newRound(){
+  S.cart = {}; S.solved = false;
+  setMsg(''); $('guard').className='hidden';
+  S.shop = ALL;                       // 商品全部上架
+  do {
+    ALL.forEach(it => it.u = rnd(it.lo, it.hi));   // 每位顾客价格随机（在合理范围内）
+    S.budget = S.mode===1 ? rnd(12,60) : rnd(10,100);
+  } while (S.mode===1 && !feasible(S.budget));
+  S.wallet = makeWallet(S.budget); S.left = new Set(); S.right = [];
+  render();
+}
+
+// 模式1：检查是否存在恰好花完的方案（用1~2种商品），保证有解
+function feasible(B){
+  const items = S.shop;
+  for (let i=0;i<items.length;i++){
+    const a = items[i];
+    for (let p=1;p<=maxPieces(a);p++){
+      const r = B-p*a.u; if (r<0) break;
+      if (r===0) return true;
+      for (let j=i+1;j<items.length;j++){
+        const b = items[j];
+        if (r%b.u===0 && r/b.u<=maxPieces(b)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function totalCost(){ return S.shop.reduce((s,it)=>s+(S.cart[it.id]||0)*it.u,0); }
+function setMsg(t,cls){ const m=$('msg'); m.textContent=t; m.className=cls||''; }
+
+const piece = (v,attr,cls='') => v>=5 ? `<span class="note n${v} ${cls}" ${attr}>${v}元</span>` : `<span class="coin ${cls}" ${attr}>1</span>`;
+const sumOf = a => a.reduce((x,y)=>x+y,0);
+const paidSum = () => sumOf([...S.left].map(i=>S.wallet[i]));
+const chgSum = () => sumOf(S.right);
+function renderWallet(){
+  $('wallet').innerHTML = '<span>👛 我的钱包（点一下，把钱放到桌子左边）：</span>' + S.wallet.map((v,i)=>piece(v,`data-w="${i}"`,S.left.has(i)?'used':'')).join('');
+  $('left').innerHTML = [...S.left].sort((a,b)=>S.wallet[b]-S.wallet[a]||a-b).map(i=>piece(S.wallet[i],`data-l="${i}"`)).join('');
+  $('right').innerHTML = S.right.map((v,k)=>piece(v,`data-r="${k}"`)).join('');
+  $('paidAmt').textContent = paidSum(); $('chgAmt').textContent = chgSum();
+  document.querySelectorAll('[data-w]').forEach(e=>e.onclick=()=>{ if(S.solved)return; S.left.add(+e.dataset.w); setMsg(''); renderWallet(); });
+  document.querySelectorAll('[data-l]').forEach(e=>e.onclick=()=>{ if(S.solved)return; S.left.delete(+e.dataset.l); setMsg(''); renderWallet(); });
+  document.querySelectorAll('[data-r]').forEach(e=>e.onclick=()=>{ if(S.solved)return; S.right.splice(+e.dataset.r,1); setMsg(''); renderWallet(); });
+}
+function initDrawer(){
+  $('drawerBtns').innerHTML = [50,20,10,5,1].map(v=>piece(v,`data-d="${v}"`)).join('');
+  document.querySelectorAll('[data-d]').forEach(e=>e.onclick=()=>{ if(S.solved)return; S.right.push(+e.dataset.d); S.right.sort((a,b)=>b-a); setMsg(''); renderWallet(); });
+}
+function makeWallet(B){
+  const w=[]; let r=B;
+  for (const v of [50,20,10,5]) while (r>=v){ w.push(v); r-=v; }
+  while (r-- > 0) w.push(1);
+  return w;
+}
+
+function pieceText(it,p){
+  if (it.n===1) return `${p} 个`;
+  const b = Math.floor(p/it.n), k = p%it.n, parts=[];
+  if (b) parts.push(`${b}批`); if (k) parts.push(`${k}${it.unit}`);
+  return parts.join(' + ');
+}
+
+function render(){
+  $('m1').classList.toggle('active',S.mode===1);
+  $('m2').classList.toggle('active',S.mode===2);
+  $('task').innerHTML = S.mode===1
+    ? `顾客有 <b>${S.budget}</b> 元，想<b>尽量花光</b>：剩下的钱不能再买更多东西！（篮子最多 3 种）`
+    : `顾客有 <b>${S.budget}</b> 元，随便买点东西，<b>不超过 ${S.budget} 元</b>就行。（篮子最多 3 种）`;
+  renderWallet();
+  const card = it=>{
+    const priceTxt = it.n===1 ? `每个 ${it.u} 元`
+      : `1批 ${it.n}${it.unit} <br>${it.n*it.u} 元`;
+    const btns = it.n===1
+      ? `<button class="minus" data-a="${it.id}" data-d="-1">−1</button><button data-a="${it.id}" data-d="1">+1个</button>`
+      : `<button class="minus" data-a="${it.id}" data-d="-1">−1${it.unit}</button><button data-a="${it.id}" data-d="1">+1${it.unit}</button><button data-a="${it.id}" data-d="${it.n}">+1批</button>`;
+    return `<div class="card ${it.cat}"><div class="em">${it.em}</div><div class="nm">${it.name}</div>
+      <div class="price">${priceTxt}</div>${it.n>1?'<div class="tag">可以零买</div>':''}<div class="btns">${btns}</div></div>`;
+  };
+  $('shelves').innerHTML = CATS.map(([c,t])=>`<h3 class="cat ${c}">${t}</h3><div class="grid">${ALL.filter(x=>x.cat===c).map(card).join('')}</div>`).join('');
+  document.querySelectorAll('.btns button').forEach(b=>b.onclick=()=>change(b.dataset.a,+b.dataset.d));
+  renderCart();
+}
+
+function renderCart(){
+  const rows = S.shop.filter(it=>S.cart[it.id]).map(it=>{
+    const p = S.cart[it.id];
+    const sub = '';
+    const info = it.n===1 ? `每个${it.u}元` : `每批${it.n}${it.unit}共${it.n*it.u}元`;
+    return `<div class="cartrow"><span>${it.em} ${it.name} - ${pieceText(it,p).replace(/ \+ /g,'+')} <span class="tag">(${info})</span>${sub}</span></div>`;
+  });
+  $('cart').innerHTML = rows.length ? rows.join('') : '<div class="empty">篮子是空的</div>';
+}
+
+function change(id,d){
+  if (S.solved) return;
+  const it = S.shop.find(x=>x.id===id), cur = S.cart[id]||0;
+  if (!cur && d>0 && Object.keys(S.cart).length>=3){
+    setMsg('篮子最多放 3 种商品哦！','bad'); $('basket').classList.add('shake');
+    setTimeout(()=>$('basket').classList.remove('shake'),300); return;
+  }
+  const nv = Math.max(0, Math.min(maxPieces(it), cur+d));
+  if (nv) S.cart[id]=nv; else delete S.cart[id];
+  setMsg('');
+  renderCart();
+}
+
+function showGuard(kind,text){
+  const g=$('guard'); g.className=kind; $('gface').textContent = kind==='warn'?'🚨👮':'👮😏'; $('gsay').textContent=text;
+}
+function penalty(n){ S.score-=n; S.streak=0; updStats(); }
+
+function confirmPay(){
+  if (S.solved) return;
+  const total = totalCost();
+  if (!total) return setMsg('先买点东西吧！','bad');
+  if (total > S.budget) return setMsg('商品总价超过顾客的钱啦，拿出一些商品。','bad');
+  if (S.mode===1){
+    const kinds = S.shop.filter(it=>S.cart[it.id]);
+    const pool = (kinds.length===3 ? kinds : S.shop).filter(it=>(S.cart[it.id]||0) < maxPieces(it));
+    const left = S.budget-total;
+    if (pool.some(it=>it.u<=left)) return setMsg('剩下的钱还能再买东西，继续买吧！','bad');
+  }
+  const paid = paidSum(), C = chgSum(), chg = paid-total;
+  if (!paid) return setMsg('先把要付的钱放到桌子左边。','bad');
+  if (paid < total) return setMsg('桌子左边的钱不够付哦。','bad');
+  const storeGets = paid - C;               // 店家实际收到的钱
+  if (storeGets < total){                   // 找多了：店家赔了
+    penalty(2);
+    showGuard('warn',`警告！你多拿了 ${total-storeGets} 元，店家亏了！扣 2 分。`);
+    return setMsg('找零算错了（多找了），再算一算。','bad');
+  }
+  if (storeGets > total){                   // 找少了：自己赔了
+    penalty(1);
+    showGuard('glee',`嘿嘿，你少拿了 ${storeGets-total} 元零钱，巡逻员偷着乐~ 扣 1 分。`);
+    return setMsg('找零算错了（少找了），再算一算。','bad');
+  }
+  S.solved = true; S.score += 1; S.streak++; updStats();
+  $('guard').className='hidden';
+  setMsg(`🎉 答对了 +1 分！商品共 ${total} 元，付 ${paid} 元，找零 ${chg} 元。`,'ok');
+  setTimeout(()=>{ if(S.solved) newRound(); }, 2500);
+}
+
+function updStats(){ $('score').textContent=S.score; $('streak').textContent=S.streak; }
+
+$('m1').onclick = ()=>{S.mode=1;newRound();};
+$('m2').onclick = ()=>{S.mode=2;newRound();};
+$('next').onclick = newRound;
+$('confirm').onclick = confirmPay;
+initDrawer();
+newRound();
+</script>
+</body>
+</html>
