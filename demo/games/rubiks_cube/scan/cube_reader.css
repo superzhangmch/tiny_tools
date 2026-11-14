@@ -1,0 +1,211 @@
+/* cube_reader 页面/组件样式 (前缀 cr-, 可直接嵌进现有 web) */
+.cr-root { --cr-bg:#14161a; --cr-panel:#1d2026; --cr-line:#2c3038; --cr-fg:#e8eaed; --cr-dim:#8b919a; --cr-accent:#4c8dff;
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:var(--cr-fg); background:var(--cr-bg); padding:16px; box-sizing:border-box; }
+.cr-root * { box-sizing:border-box; }
+.cr-root h1 { font-size:18px; margin:0 0 12px; font-weight:600; }
+.cr-main { display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; }
+.cr-stage { position:relative; background:var(--cr-panel); border:1px solid var(--cr-line); border-radius:8px; padding:8px; }
+.cr-canvas { display:block; max-width:min(640px,90vw); max-height:70vh; touch-action:none; cursor:default; border-radius:4px; }
+.cr-drop { width:min(640px,90vw); height:360px; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--cr-dim);
+  border:2px dashed var(--cr-line); border-radius:8px; cursor:pointer; padding:20px; }
+.cr-drop.over { border-color:var(--cr-accent); color:var(--cr-fg); }
+.cr-side { display:flex; flex-direction:column; gap:12px; min-width:260px; }
+.cr-card { background:var(--cr-panel); border:1px solid var(--cr-line); border-radius:8px; padding:12px; }
+.cr-card h2 { font-size:13px; margin:0 0 8px; color:var(--cr-dim); font-weight:500; }
+.cr-faces { display:flex; gap:14px; flex-wrap:wrap; }
+.cr-face h3 { margin:0 0 4px; font-size:12px; color:var(--cr-dim); font-weight:500; }
+.cr-grid { display:grid; grid-template-columns:repeat(3,38px); gap:3px; }
+.cr-cell { width:38px; height:38px; border-radius:5px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px;
+  border:1px solid rgba(0,0,0,.35); cursor:pointer; user-select:none; color:#000; }
+.cr-cell:hover { outline:2px solid var(--cr-accent); }
+.cr-cell[data-c=W]{background:#f4f4f4} .cr-cell[data-c=R]{background:#d0202a;color:#fff} .cr-cell[data-c=O]{background:#ff7a00}
+.cr-cell[data-c=Y]{background:#ffd500} .cr-cell[data-c=G]{background:#1fa83a;color:#fff} .cr-cell[data-c=B]{background:#1d5fd6;color:#fff}
+.cr-btns { display:flex; gap:8px; flex-wrap:wrap; }
+.cr-btn { background:#2a2f38; color:var(--cr-fg); border:1px solid var(--cr-line); border-radius:6px; padding:6px 12px; cursor:pointer; font:inherit; }
+.cr-btn:hover { border-color:var(--cr-accent); } .cr-btn:disabled { opacity:.45; cursor:default; }
+.cr-btn.primary { background:var(--cr-accent); border-color:var(--cr-accent); color:#fff; }
+.cr-status { color:var(--cr-dim); min-height:20px; font-size:13px; }
+.cr-status.err { color:#ff6b6b; }
+.cr-out { width:100%; min-height:64px; background:#101216; color:var(--cr-fg); border:1px solid var(--cr-line); border-radius:6px; padding:6px;
+  font:12px/1.4 ui-monospace,Menlo,monospace; resize:vertical; }
+.cr-hint { color:var(--cr-dim); font-size:12px; }
+
+/* ---- 整魔方 (server 合并结果) ---- */
+.cr-net { display:grid; grid-template-columns:repeat(12,20px); gap:2px; }
+.cr-ncell { width:20px; height:20px; border-radius:3px; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; color:#000; }
+.cr-ncell[data-c=" "] { background:transparent; }
+.cr-ncell[data-c="?"] { background:#2a2f38; }
+.cr-ncell[data-c=W]{background:#f4f4f4} .cr-ncell[data-c=R]{background:#d0202a;color:#fff} .cr-ncell[data-c=O]{background:#ff7a00}
+.cr-ncell[data-c=Y]{background:#ffd500} .cr-ncell[data-c=G]{background:#1fa83a;color:#fff} .cr-ncell[data-c=B]{background:#1d5fd6;color:#fff}
+.cr-ncell.bad { outline:2px solid #ff3030; }
+.cr-cubemsg { margin-top:8px; white-space:pre-wrap; font-size:13px; color:var(--cr-dim); word-break:break-all; }
+.cr-cubemsg.err { color:#ff6b6b; } .cr-cubemsg.ok { color:#5fd38d; }
+.cr-photos { margin-top:8px; display:flex; flex-direction:column; gap:4px; font-size:12px; }
+.cr-photo { display:flex; justify-content:space-between; align-items:center; gap:8px; } .cr-photo.err { color:#ff6b6b; }
+.cr-photo .cr-btn { padding:2px 8px; font-size:12px; }
+.cr-sliders { display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:12px; color:var(--cr-dim); }
+.cr-sliders input[type=range] { width:120px; vertical-align:middle; }
+
+/* ---- 实时取景 ---- */
+.cr-cam { position:fixed; inset:0; z-index:1000; background:#000; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:8px; }
+.cr-camwrap { position:relative; max-width:100vw; }
+.cr-camwrap video { display:block; max-width:100vw; max-height:72vh; }
+.cr-guide { position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; }
+.cr-camctl { display:flex; gap:12px; align-items:center; flex-wrap:wrap; justify-content:center; color:#ddd; font-size:13px; }
+.cr-camctl input[type=range] { width:110px; vertical-align:middle; }
+.cr-camctl .cr-btn.primary { padding:10px 28px; font-size:16px; }
+.cr-camhint { color:#bbb; font-size:12px; text-align:center; max-width:90vw; }
+
+/* 带 display 的类会盖过 UA 的 [hidden]{display:none}, 这里强制 hidden 生效(取景层、拖拽区、整魔方卡片等) */
+.cr-root [hidden] { display:none !important; }
+
+/* 同一格内多个采样点不一致 => 不可靠 */
+.cr-cell.unsure { outline:2px dashed #ff9d00; outline-offset:-3px; }
+
+/* 两张照片解码里被整体约束纠正过的格子 */
+.cr-ncell.fixed { outline:2px dashed #4da3ff; outline-offset:-2px; }
+
+/* ---- 步骤条 ---- */
+.cr-steps { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 8px; }
+.cr-step { flex:1 1 170px; border:1px solid var(--cr-line); border-radius:8px; padding:8px 10px; background:var(--cr-panel); opacity:.5; }
+.cr-step b { display:block; font-size:14px; } .cr-step small { display:block; color:var(--cr-dim); font-size:11px; margin-top:2px; }
+.cr-step.active { opacity:1; border-color:var(--cr-accent); box-shadow:0 0 0 1px var(--cr-accent); }
+.cr-step.done { opacity:1; border-color:#2e8b57; } .cr-step.done b::after { content:" ✓"; color:#5fd38d; }
+.cr-step.bad { opacity:1; border-color:#ff6b6b; } .cr-step.bad b::after { content:" ✗"; color:#ff6b6b; }
+.cr-stepmsg { margin:0 0 12px; font-size:14px; white-space:pre-wrap; padding:8px 10px; border-radius:8px; background:#171a1f; border:1px solid var(--cr-line); }
+.cr-stepmsg.ok { border-color:#2e8b57; color:#9ff0bf; } .cr-stepmsg.err { border-color:#ff6b6b; color:#ffb0b0; }
+/* ---- 3D 魔方(纯 CSS) ---- */
+.c3-scene { perspective:1100px; touch-action:none; cursor:grab; display:block; position:relative; margin:38px auto 62px; }
+.c3-cube { position:absolute; inset:0; transform-style:preserve-3d; }
+.c3-slot { position:absolute; left:50%; top:50%; transform-style:preserve-3d; backface-visibility:hidden; background:#101010; border-radius:12%; }
+.c3-st { position:absolute; inset:5%; border-radius:10%; overflow:hidden; }
+.c3-st img { width:100%; height:100%; object-fit:cover; display:block; }
+.c3-st.fixed { outline:3px dashed #4da3ff; outline-offset:-3px; } .c3-st.amb { outline:3px dashed #ff9d00; outline-offset:-3px; }
+.cr-3d { margin:0 0 14px; } .cr-3dpair { display:flex; gap:24px; flex-wrap:wrap; justify-content:center; } .cr-3dpair figure { margin:0; text-align:center; min-width:250px; } .cr-3dpair figcaption { font-size:12px; color:var(--cr-dim); }
+.cr-3dmsg { margin-top:8px; white-space:pre-wrap; font-size:12px; color:var(--cr-dim); word-break:break-all; }
+
+.cr-3dmsg.warn { color:#ffcf8a; }
+
+/* ---- 简洁模式(默认): 只留 提示 -> 拍/选图/确定 -> 3D(贴片来源 2 选 1); 其余收进 ?adv=1 ---- */
+.cr-simple .cr-adv { display:none !important; }
+.cr-simple .cr-sliders { margin-top:10px; }
+.cr-advlink { float:right; font-size:12px; font-weight:400; color:var(--cr-dim); text-decoration:none; border:1px solid var(--cr-line); border-radius:6px; padding:2px 8px; }
+.cr-seg { display:inline-flex; border:1px solid var(--cr-line); border-radius:8px; overflow:hidden; margin:8px 10px 0 0; }
+.cr-seg button { background:#2a2f38; color:var(--cr-fg); border:0; padding:9px 16px; cursor:pointer; font:inherit; }
+.cr-seg button.on { background:var(--cr-accent); color:#fff; } .cr-seg button:disabled { opacity:.4; cursor:default; }
+.cr-3dsum { margin-top:10px; font-size:13px; color:var(--cr-dim); }
+
+.cr-stepmsg.warn { border-color:#e0a030; color:#ffd89a; }
+
+/* 简洁模式: “读取这张”按钮和大小/透视滑块只在“选图后需要对准”时出现(拍照路径拍完自动读取, 不需要) */
+.cr-simple:not(.cr-guiding) [data-act=locate], .cr-simple:not(.cr-guiding) .cr-sliders { display:none !important; }
+
+/* ---- 浅色主题(默认) ---- */
+.cr-root { --cr-bg:#f3f4f6; --cr-panel:#ffffff; --cr-line:#d8dbe0; --cr-fg:#1f2328; --cr-dim:#667085; --cr-accent:#2f6bff; }
+.cr-btn { background:#eef0f3; color:var(--cr-fg); } .cr-btn.primary { background:var(--cr-accent); border-color:var(--cr-accent); color:#fff; }
+.cr-seg button { background:#eef0f3; color:var(--cr-fg); } .cr-seg button.on { background:var(--cr-accent); color:#fff; }
+.cr-stepmsg { background:#fff; } .cr-stepmsg.ok { color:#166534; border-color:#2e8b57; } .cr-stepmsg.err { color:#b42318; border-color:#e5484d; } .cr-stepmsg.warn { color:#8a5a00; border-color:#e0a030; }
+.cr-3dmsg.warn { color:#8a5a00; } .cr-out { background:#fafafa; color:var(--cr-fg); }
+.cr-status.err, .cr-cubemsg.err { color:#b42318; } .cr-cubemsg.ok { color:#166534; }
+.cr-step.done b::after { color:#1a9d55; } .cr-step.bad b::after { color:#e5484d; }
+.cr-ncell[data-c="?"] { background:#e5e7eb; }
+
+/* ---- 步骤卡片自带 拍照/选图 按钮; 手机友好 ---- */
+.cr-root { padding-bottom:110px; }                                   /* 给手机浏览器底部工具栏留位置 */
+.cr-steps { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:0 0 8px; }
+.cr-step { padding:10px; flex:none; }
+.cr-step[data-slot] { opacity:1; } .cr-step.todo[data-slot] small { opacity:.75; }
+.cr-step3 { grid-column:1 / -1; padding:6px 10px; } .cr-step3 b { display:inline; margin-right:8px; }
+.cr-stepbtns { display:flex; gap:8px; margin-top:8px; } .cr-stepbtns .cr-btn { flex:1; padding:11px 0; font-size:15px; }
+.cr-hdr { float:right; display:flex; gap:6px; } .cr-hdr .cr-advlink { float:none; }
+button.cr-advlink { background:transparent; cursor:pointer; font:inherit; font-size:12px; color:var(--cr-dim); }
+.cr-simple .cr-drop, .cr-simple [data-act=live], .cr-simple [data-act=open] { display:none !important; }
+.cr-simple:not(.cr-guiding) .cr-ops, .cr-simple .cr-cube { display:none !important; }
+.cr-simple .cr-stage:has(.cr-canvas[hidden]) { display:none; }
+.cr-status:empty { display:none; } .cr-simple .cr-stepmsg + .cr-status { margin:-4px 2px 12px; font-size:13px; }
+
+/* 标题一行两端对齐(之前浮动按钮会挤窄下面的步骤卡片) */
+.cr-root h1 { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+.cr-hdr { float:none !important; display:flex; gap:6px; }
+
+.c3-scene { margin:44px auto 90px !important; }
+
+/* ================= 6 张逐面模式(scan6): 手机优先, 整屏相机, 不滚动 ================= */
+.s6-app { position:fixed; inset:0; display:flex; flex-direction:column; padding:0 !important; height:100vh; height:100dvh; overflow:hidden; background:#f3f4f6; }
+.s6-top { flex:none; background:#fff; padding:6px 10px; border-bottom:1px solid var(--cr-line); }
+.s6-row1 { display:flex; align-items:center; justify-content:space-between; } .s6-title { font-weight:700; font-size:16px; }
+.s6-menu { position:relative; } .s6-mbtn { border:1px solid var(--cr-line); background:#fff; border-radius:8px; font-size:18px; width:38px; height:30px; line-height:1; cursor:pointer; color:var(--cr-fg); }
+.s6-mpop { position:absolute; right:0; top:34px; background:#fff; border:1px solid var(--cr-line); border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.18); z-index:20; display:flex; flex-direction:column; min-width:132px; overflow:hidden; }
+.s6-mpop a, .s6-mpop button { padding:13px 14px; border:0; background:transparent; text-align:left; font:inherit; font-size:14px; color:var(--cr-fg); text-decoration:none; cursor:pointer; }
+.s6-dots { display:flex; gap:5px; margin-top:6px; }
+.s6-dot { flex:1; min-width:0; border:1px solid var(--cr-line); border-radius:8px; background:#fff; padding:3px 0 4px; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; font:inherit; color:var(--cr-fg); }
+.s6-dot.active { border-color:var(--cr-accent); box-shadow:0 0 0 1px var(--cr-accent); } .s6-dot.done { border-color:#2e8b57; background:#f3fbf6; }
+.s6-dn { font-weight:700; font-size:12px; line-height:1.1; } .s6-mini3 { display:grid; grid-template-columns:repeat(3,5px); gap:1px; min-height:17px; } .s6-mini3 i { width:5px; height:5px; border-radius:1px; display:block; }
+.s6-cam { position:relative; flex:1 1 auto; min-height:0; background:#000; overflow:hidden; }
+.s6-cam video { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.s6-guide { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.s6-cap { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#000; }
+.s6-hint { position:absolute; left:8px; right:8px; top:8px; background:rgba(0,0,0,.62); color:#fff; border-radius:10px; padding:7px 10px; font-size:13px; line-height:1.35; pointer-events:none; }
+.s6-hint.bad { background:rgba(180,35,24,.9); }
+.s6-ill { position:absolute; right:8px; bottom:8px; width:92px; height:92px; perspective:520px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.9); border-radius:12px; }
+.s6-mini { width:76px; height:76px; position:relative; transform-style:preserve-3d; transform:scale(.78); }
+.s6-mf { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; background-color:#cfd3da; backface-visibility:hidden;
+  background-image:linear-gradient(rgba(0,0,0,.18) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.18) 1px, transparent 1px); background-size:33.34% 33.34%; border:2px solid #1b1d21; box-sizing:border-box; }
+.s6-mf.tgt { background-color:#2f6bff; } .s6-mf.done { background-color:#34c38f; }
+.s6-nocam { position:absolute; inset:0; padding:30px 16px; color:#fff; text-align:center; font-size:14px; display:flex; align-items:center; justify-content:center; background:#111; }
+.s6-bottom { flex:none; background:#fff; border-top:1px solid var(--cr-line); padding:8px 12px calc(8px + env(safe-area-inset-bottom)); }
+.s6-live { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.s6-size-l { font-size:12px; color:var(--cr-dim); display:flex; flex-direction:column; width:96px; } .s6-size-l input { width:100%; margin:2px 0 0; }
+.s6-shutter { width:66px; height:66px; border-radius:50%; border:5px solid #cfe0ff; background:var(--cr-accent); color:#fff; font-size:18px; font-weight:700; cursor:pointer; flex:none; }
+.s6-pick { width:96px; text-align:center; font-size:14px; padding:13px 0; border:1px solid var(--cr-line); border-radius:10px; background:#eef0f3; cursor:pointer; color:var(--cr-fg); }
+.s6-review { display:flex; align-items:center; gap:10px; }
+.s6-sw { display:grid; grid-template-columns:repeat(3,22px); gap:3px; flex:none; } .s6-sw i { width:22px; height:22px; border-radius:4px; border:1px solid rgba(0,0,0,.25); display:block; } .s6-sw i.unsure { outline:2px dashed #ff9d00; outline-offset:-2px; }
+.s6-b { flex:1; padding:11px 0; font-size:16px; display:flex; flex-direction:column; align-items:center; line-height:1.15; } .s6-b small { font-size:10px; opacity:.7; font-weight:400; }
+.s6-msg { font-size:12px; color:var(--cr-dim); margin-top:4px; } .s6-msg:empty { display:none; }
+.s6-result { flex:1 1 auto; min-height:0; overflow:auto; text-align:center; padding:4px 12px 14px; }
+.s6-result .c3-scene { margin:26px auto 52px !important; } .s6-result .cr-seg { margin:6px 5px 0; } .s6-result .cr-3dsum { text-align:left; white-space:pre-wrap; font-size:12px; margin-top:10px; }
+
+/* ---- scan6: 连拍(每步 "<序号 方向> shot" + "reshot") ---- */
+.s6-live { display:flex; align-items:stretch; gap:8px; }
+.s6-size-l { width:84px; justify-content:center; }
+.s6-shot { flex:2; font-size:19px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px 0; line-height:1.15; }
+.s6-shot small { font-size:11px; font-weight:400; opacity:.85; }
+.s6-reshot { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px 0; line-height:1.15; font-size:15px; }
+.s6-reshot small { font-size:10px; opacity:.7; font-weight:400; } .s6-reshot:disabled { opacity:.4; }
+.s6-flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; transition:opacity .3s; } .s6-flash.on { opacity:.8; transition:none; }
+.s6-busy { position:absolute; inset:0; background:rgba(0,0,0,.55); color:#fff; display:flex; align-items:center; justify-content:center; font-size:18px; }
+.s6-dot.low { border-color:#e0a030; background:#fff8e8; } .s6-dot.low .s6-dn::after { content:" ⚠"; }
+.s6-mitem { display:block; padding:13px 14px; border:0; background:transparent; text-align:left; font:inherit; font-size:14px; color:var(--cr-fg); text-decoration:none; cursor:pointer; }
+
+/* ---- 3D 还原指导: 要转的面上的箭头与高亮 ---- */
+.c3-arrow { position:absolute; left:50%; top:50%; transform-style:preserve-3d; backface-visibility:hidden; pointer-events:none; animation:c3pulse 1.1s ease-in-out infinite; }
+@keyframes c3pulse { 0%,100% { opacity:1; } 50% { opacity:.55; } }
+.c3-st.hl { box-shadow:inset 0 0 0 4px #ff2d55; }
+
+/* ---- scan6 结果页: 还原指导(AI 求解 + 上一步/下一步 + 箭头) ---- */
+.s6-result .c3-scene { margin:14px auto 30px !important; }
+.s6-g-info { text-align:left; padding:0 4px; } .s6-g-step { font-size:15px; font-weight:700; } .s6-mv { font-size:20px; color:#d4163c; }
+.s6-g-text { font-size:14px; color:var(--cr-fg); min-height:20px; margin-top:2px; }
+.s6-g-btns { display:flex; gap:10px; margin:8px 0; } .s6-gb { flex:1; padding:14px 0; font-size:17px; } .s6-gb:disabled { opacity:.4; }
+.s6-chips { display:flex; gap:5px; overflow-x:auto; padding:2px 0 6px; -webkit-overflow-scrolling:touch; }
+.s6-chip { flex:none; border:1px solid var(--cr-line); background:#fff; border-radius:8px; padding:5px 9px; font:inherit; font-size:13px; font-weight:600; color:var(--cr-dim); cursor:pointer; }
+.s6-chip.done { background:#e9f7ef; border-color:#2e8b57; color:#1a7a44; } .s6-chip.cur { background:#ff2d55; border-color:#ff2d55; color:#fff; }
+.s6-g-pose { text-align:left; font-size:12px; color:var(--cr-dim); margin:2px 4px 6px; }
+
+.s6-result .c3-scene { margin:36px auto 52px !important; }
+
+/* ---- 求解设置面板 ---- */
+.s6-g-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.s6-gear { border:1px solid var(--cr-line); background:#fff; border-radius:8px; padding:5px 9px; font:inherit; font-size:12px; color:var(--cr-dim); cursor:pointer; flex:none; }
+.s6-g-src { font-size:11px; color:var(--cr-dim); margin-top:2px; min-height:14px; }
+.s6-sheet { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.45); display:flex; align-items:flex-end; }
+.s6-sheet-card { background:#fff; width:100%; max-height:84vh; overflow:auto; border-radius:16px 16px 0 0; padding:12px 14px calc(14px + env(safe-area-inset-bottom)); text-align:left; }
+.s6-sheet-h { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; } .s6-x { border:0; background:transparent; font-size:20px; cursor:pointer; padding:4px 8px; color:var(--cr-fg); }
+.s6-f { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:7px 0; font-size:14px; border-bottom:1px solid #eef0f3; } .s6-f select, .s6-f input { max-width:62%; font:inherit; font-size:13px; padding:5px; border:1px solid var(--cr-line); border-radius:6px; background:#fff; }
+.s6-sheet-btns { display:flex; gap:8px; margin:10px 0; } .s6-sheet-btns .cr-btn { flex:1; padding:11px 0; font-size:14px; }
+.s6-xrow { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 8px; border:1px solid var(--cr-line); border-radius:8px; margin:4px 0; font-size:13px; } .s6-xrow.best { border-color:#2e8b57; background:#f0faf4; }
+.s6-xrow button { border:1px solid var(--cr-accent); color:var(--cr-accent); background:#fff; border-radius:6px; padding:3px 8px; font:inherit; font-size:12px; cursor:pointer; }
+.s6-xnote { font-size:12px; color:#166534; margin:6px 0; } .s6-sheet-note { font-size:11px; color:var(--cr-dim); margin-top:8px; }
+
+.c3-lab { position:absolute; inset:0; display:none; align-items:center; justify-content:center; font:700 150% system-ui,sans-serif; color:#fff; text-shadow:0 0 3px #000,0 0 3px #000,0 0 6px #000; pointer-events:none; }
+.s6-dot-c { display:inline-block; width:11px; height:11px; border-radius:50%; border:1px solid #888; vertical-align:-1px; margin:0 2px; }
