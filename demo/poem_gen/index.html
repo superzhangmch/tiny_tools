@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>写诗 · 写词</title>
+<style>
+:root{--ok:#1a7f37;--bad:#cf222e;--free:#8c959f;--unsure:#bf8700;--bg:#fafaf7;--card:#fff;--line:#e5e2d8}
+*{box-sizing:border-box} body{margin:0;font:15px/1.5 -apple-system,"PingFang SC","Noto Serif SC",serif;background:var(--bg);color:#222}
+header{padding:14px 24px;border-bottom:1px solid var(--line);background:#fff} header h1{margin:0;font-size:19px} header small{color:#777}
+main{display:grid;grid-template-columns:380px 1fr;gap:20px;padding:20px 24px;max-width:1280px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:16px}
+h2{font-size:14px;margin:0 0 8px;color:#555;font-weight:600} textarea,input,select{width:100%;font:inherit;padding:6px 8px;border:1px solid #ccc;border-radius:5px}
+textarea{height:150px;font-size:18px;letter-spacing:2px;line-height:1.7} button{font:inherit;padding:6px 12px;border:1px solid #888;border-radius:5px;background:#fff;cursor:pointer}
+button.primary{background:#24292f;color:#fff;border-color:#24292f} button:hover{opacity:.85} .row{display:flex;gap:8px;margin:8px 0;align-items:center} .row>*{flex:1}
+.ex button{font-size:13px;padding:3px 8px;margin:2px 4px 2px 0} label{font-size:12px;color:#666;display:block}
+.line{display:flex;align-items:flex-end;gap:14px;margin:10px 0;padding:6px 8px;border-radius:6px} .line:hover{background:#f4f2ea}
+.no{width:22px;color:#999;font-size:12px;text-align:right;padding-bottom:6px}
+.cells{display:flex;gap:6px} .cell{width:46px;text-align:center}
+.exp{font-size:11px;color:#aaa;height:16px} .exp.must{color:#555;font-weight:600}
+.ch{font-size:26px;line-height:1.25;border-radius:6px;border:2px solid transparent;padding:0 2px;cursor:help}
+.ch.ok{color:var(--ok);border-color:#c7e8d0;background:#eefaf1} .ch.bad{color:var(--bad);border-color:#f3b8bd;background:#fff0f1;font-weight:700}
+.ch.free{color:#444;border-color:#eee} .ch.dflt{border-style:dashed}.ch.unsure{color:var(--unsure);border-color:#efdca8;background:#fff9e6}
+.tn{font-size:12px;color:#888;height:16px} .tn.rhyme{color:#6f42c1;font-weight:700} .pat{font-size:12px;color:#999;padding-bottom:6px;white-space:nowrap}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;margin-right:6px;background:#eee} .tag.good{background:#dcffe4;color:var(--ok)} .tag.warn{background:#ffebe9;color:var(--bad)}
+table{border-collapse:collapse;width:100%;font-size:13px} td,th{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left}
+.issue{padding:5px 0;border-bottom:1px dashed var(--line);font-size:14px} .issue b{color:var(--bad)} .issue.note b{color:var(--unsure)}
+.legend span{margin-right:12px;font-size:12px} .dot{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:3px;border:2px solid}
+.small{font-size:12px;color:#777} .err{color:var(--bad)}
+
+#gen{font-size:26px;line-height:2;letter-spacing:3px;min-height:48px;white-space:pre-wrap;font-family:"Songti SC","Noto Serif SC",serif} #bar{height:6px;background:#eee;border-radius:3px;overflow:hidden;margin-top:8px;display:none} #bar>i{display:block;height:100%;width:0;background:#2da44e;transition:width .15s}
+.cols{display:grid;grid-template-columns:380px 1fr;gap:20px;padding:20px 24px;max-width:1280px;margin:auto} .combo{position:relative} .combo input{padding-right:30px} .cbtn{position:absolute;right:1px;top:1px;bottom:1px;width:28px;padding:0;border:none;background:transparent;color:#666;font-size:14px;border-radius:0 5px 5px 0}
+.clist{display:none;position:absolute;left:0;right:0;top:100%;margin-top:2px;max-height:260px;overflow:auto;background:#fff;border:1px solid #bbb;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.15);z-index:20} .clist.open{display:block}
+.clist div{padding:5px 10px;font-size:15px;cursor:pointer} .clist div:hover,.clist div.cur{background:#eef3ff} .clist div.cur{font-weight:600}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
+</style></head><body>
+<header><h1>写诗 · 写词</h1></header>
+<div class="cols">
+<div>
+ <div class="card">
+  <div class="row"><div><label>类型</label><select id="type" onchange="syncKind()"><option value="shi">诗 (近体)</option><option value="ci">词</option></select></div>
+   <div><label id="kl">体裁</label><select id="kind"></select></div></div>
+  <div class="row"><div><label>主题(下拉选择或输入)</label><div class="combo"><input id="themes" placeholder="如: 春风 秋月　/　山 闲　/　愁 秋风" autocomplete="off" onfocus="openCombo()" onclick="openCombo()"><button type="button" class="cbtn" onclick="toggleCombo(event)" title="展开全部选项">▾</button><div class="clist" id="clist"></div></div></div></div>
+  <div class="row"><div><label>前几句 (可空, 接着写)</label><input id="head" placeholder="如: 床前明月光"></div></div>
+  <div class="row"><button class="primary" id="go" onclick="generate()">生成</button><button id="pre" onclick="preload()" style="flex:none">预先下载模型</button></div>
+  <div id="bar"><i></i></div><div class="small" id="status">诗/词模型各约 7 MB, 用到哪个才下载哪个, 之后缓存在浏览器里。</div>
+ </div>
+</div>
+<div>
+ <div class="card"><div id="gen"></div><div class="small" id="meta"></div></div>
+ <div id="vout"><div class="card small">生成后, 校验结果会显示在这里。</div></div>
+</div>
+</div>
+<script src="validator.js"></script>
+<script>
+
+const $ = id => document.getElementById(id); let worker = null, TUNES = []; const M = {};   // M[dir] = {worker, ready, loading}
+const SHI = ['七绝', '五绝', '七律', '五律'];
+const tunesReady = Promise.resolve();
+function syncKind() { const ci = $('type').value === 'ci'; $('kl').textContent = ci ? '词牌' : '体裁'; $('kind').innerHTML = (ci ? TUNES.map(t => `<option value="${t.name}">${t.name} · ${t.total}字</option>`) : SHI.map(s => `<option>${s}</option>`)).join(''); }
+syncKind();
+function status(t, err) { $('status').textContent = t; $('status').className = 'small' + (err ? ' err' : ''); }
+function progress(got, total) { $('bar').style.display = 'block'; $('bar').firstChild.style.width = Math.min(100, 100 * got / total) + '%'; status(`下载模型 ${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB (${Math.min(100, 100 * got / total).toFixed(0)}%)`); }
+async function cacheGet(url) { try { const c = await caches.open('poem-model-v1'); const r = await c.match(url); return r ? await r.arrayBuffer() : null; } catch (e) { return null; } }
+async function cachePut(url, buf) { try { const c = await caches.open('poem-model-v1'); await c.put(url, new Response(buf.slice(0))); } catch (e) { } }
+function loadModel() {
+  const dir = $('type').value; const S = M[dir] = M[dir] || {}; worker = null;
+  if (S.ready) { worker = S.worker; return Promise.resolve(); } if (S.loading) return S.loading;
+  S.loading = (async () => {
+    const t0 = performance.now(); const man = await (await fetch(dir + '/model.json')).json(); let buf = await cacheGet(dir + '/model.int8.bin'), from = '缓存';
+    if (!buf) { from = '网络'; const r = await fetch(dir + '/model.int8.bin'); if (!r.ok) throw new Error('模型下载失败 HTTP ' + r.status); const total = man.bin_bytes, rd = r.body.getReader(), chunks = []; let got = 0;
+      for (;;) { const { done, value } = await rd.read(); if (done) break; chunks.push(value); got += value.length; progress(got, total); }
+      const u = new Uint8Array(got); let o = 0; for (const c of chunks) { u.set(c, o); o += c.length; } buf = u.buffer; await cachePut(dir + '/model.int8.bin', buf); }
+    status('初始化…'); const W = new Worker('worker.js');
+    await new Promise((res, rej) => { W.onmessage = e => { if (e.data.type === 'ready') res(); else if (e.data.type === 'error') rej(new Error(e.data.msg)); }; W.onerror = e => rej(new Error(e.message)); W.postMessage({ cmd: 'load', manifest: man, buffer: buf }, [buf]); });
+    S.worker = W; S.ready = true; worker = W; $('bar').style.display = 'none'; status(`模型就绪 (来自${from}, 用时 ${((performance.now() - t0) / 1000).toFixed(1)} 秒)`);
+  })().catch(e => { S.loading = null; status('加载失败: ' + e.message, true); throw e; }); return S.loading;
+}
+async function preload() { $('pre').disabled = true; try { await loadModel(); } catch (e) { } $('pre').disabled = false; }
+function normHead(h, kind) { const parts = h.split(/[，。,.、\s]+/).filter(Boolean); if (!parts.length) return ''; return SHI.includes(kind) ? parts.map((p, i) => p + (i % 2 ? '。' : '，')).join('') : h.trim() + (/[，。？！；]$/.test(h.trim()) ? '' : '，'); }
+async function generate() {
+  $('go').disabled = true; $('gen').style.display = 'none'; $('gen').textContent = '';   // the poem is never shown as plain text first; the old result stays until the new one replaces it in one go
+  try { await loadModel(); worker = M[$('type').value].worker; const kind = $('kind').value, themes = themesList(), head = normHead($('head').value, kind), seedv = String(window.TEST_SEED || '');
+    const prefix = `<${kind}${themes.length ? ':' + themes.join(' ') : ''}>` + head; status('生成中…');
+    await new Promise((res, rej) => { worker.onmessage = e => { const d = e.data; if (d.type === 'partial') $('gen').textContent = head + d.text; else if (d.type === 'done') { $('gen').textContent = head + d.text; const n = Array.from(d.text).length; window.__meta = `${prefix} · ${n} 字 · ${(d.ms / 1000).toFixed(2)} 秒 (${(n / (d.ms / 1000)).toFixed(0)} 字/秒)`; res(); } else if (d.type === 'error') rej(new Error(d.msg)); };
+      worker.postMessage({ cmd: 'gen', opts: { prefix, kind, temp: 0.8, topk: 40, seed: seedv ? parseInt(seedv) : null } }); }); status('完成'); await validate($('type').value, kind, $('gen').textContent); }
+  catch (e) { status('出错: ' + e.message, true); } $('go').disabled = false; }
+// test hook: index.html#auto (诗) / #auto-ci (词) generates once on load
+(async () => { if (!location.hash.startsWith('#auto')) return; await tunesReady; if (location.hash === '#auto-ci') { $('type').value = 'ci'; syncKind(); $('kind').value = '浣溪沙'; } setThemes(['月']); window.TEST_SEED = '7'; await generate(); document.title = 'DONE'; })();
+
+// ---------------------------------------------------------------- validator wiring
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let vready=null, lastKind='shi', lastTune='';
+function loadValidator(){ if(vready) return vready;
+  vready=Promise.all(['validator_data.json','pz_templates.json','benchmarks.json','validator_t2s.json'].map(f=>fetch(f).then(r=>r.json()))).then(([d,t,b,s])=>{PZ.init(d,t,b,s); TUNES=PZ.tunes(); syncKind();;}).catch(e=>{$('vout').innerHTML='<div class="card err">校验器加载失败: '+esc(e.message)+'</div>'; vready=null; throw e}); return vready; }
+
+
+
+
+async function validate(kind, tune, text){ await loadValidator(); lastKind=kind; lastTune=tune; lastText=text;
+  const strict=false, o=$('vout'); $('meta').textContent=window.__meta||''; const merge=()=>{ const f=o.firstElementChild; if(f&&f.querySelector('.tag')){ $('meta').insertAdjacentHTML('beforeend',' '+Array.from(f.querySelectorAll('.tag')).map(t=>t.outerHTML).join('')); f.remove(); } };
+  if(kind==='shi'){ const d=PZ.checkPoem(text, strict); if(d.error){ o.innerHTML=`<div class="card err">${esc(d.error)}</div>`; $('gen').style.display=''; return } renderPoem(d); merge(); }
+  else { const d=PZ.compareCi(tune, text); renderCi(d); if(d.error) $('gen').style.display=''; else merge(); } }
+let lastText='';
+loadValidator();
+
+// ---------------------------------------------------------------- theme words: one editable input backed by a <datalist> of ready-made combos (themes.json)
+const themesList=()=>$('themes').value.trim().split(/\s+/).filter(Boolean);
+const setThemes=a=>{ $('themes').value=a.join(' '); };
+let COMBOS=[];
+fetch('themes.json').then(r=>r.json()).then(t=>{ const seen=new Set(); COMBOS=[...t.combos,...t.common].filter(w=>!seen.has(w)&&seen.add(w)); renderCombo(); }).catch(()=>{});
+function renderCombo(){ const cur=$('themes').value.trim(); $('clist').innerHTML=COMBOS.map(w=>`<div class="${w===cur?'cur':''}" data-w="${w}">${w}</div>`).join(''); }
+function openCombo(){ if(!COMBOS.length) return; renderCombo(); $('clist').classList.add('open'); }
+function closeCombo(){ $('clist').classList.remove('open'); }
+function toggleCombo(e){ e.stopPropagation(); if($('clist').classList.contains('open')) closeCombo(); else { openCombo(); $('themes').focus({preventScroll:true}); } }
+$('clist').addEventListener('mousedown',e=>{ const d=e.target.closest('div[data-w]'); if(!d) return; e.preventDefault(); $('themes').value=d.dataset.w; closeCombo(); });
+document.addEventListener('mousedown',e=>{ if(!e.target.closest('.combo')) closeCombo(); });
+$('themes').addEventListener('keydown',e=>{ if(e.key==='Escape') closeCombo(); if(e.key==='ArrowDown') openCombo(); });
+</script>
+<script>
+function tn(t){return t==='平'?'平':t==='仄'?'仄':t==='?'?'两读':'无'}
+function renderPoem(d){const o=$('vout');
+ if(d.error){o.innerHTML=`<div class="card err">${esc(d.error)}</div>`;return}
+ const nv=d.n_violations, good=nv===0;
+ let h=`<div class="card"><h2>结果</h2><span class="tag">${d.kind}</span><span class="tag">最接近: ${d.best}</span><span class="tag ${good?'good':'warn'}">${good?'没有发现违例':'违例 '+nv+' 处'}</span></div>`;
+ h+=`<div class="card"><h2>逐字对照 <span class="legend small"><span><i class="dot" style="border-color:#c7e8d0;background:#eefaf1"></i>符合</span><span><i class="dot" style="border-color:#f3b8bd;background:#fff0f1"></i>违反</span><span><i class="dot" style="border-color:#eee"></i>不论位</span><span><i class="dot" style="border-color:#efdca8;background:#fff9e6"></i>不判</span><span style="color:#6f42c1">韵=韵脚</span></span></h2>`;
+ d.lines.forEach((l,i)=>{h+=`<div class="line"><div class="no">${i+1}</div><div class="cells">`+l.chars.map(c=>{
+   const tip=esc(`${c.c}: ${c.via_default?'两读字, 按常见读音取'+c.tone+' ('+c.dstat+'次)':(c.tone==='?'?'两读(无明显常见读音)':c.tone||'字表无')} ${c.yun.join(' / ')}${c.must?'\n此位置应为: '+c.expected:'\n(一三五不论位)'}`);
+   return `<div class="cell"><div class="exp ${c.must?'must':''}">${c.must?c.expected:'('+c.expected+')'}</div><div class="ch ${c.status} ${c.via_default?'dflt':''}" title="${tip}">${esc(c.c)}</div><div class="tn ${c.rhyme?'rhyme':''}">${tn(c.tone)}${c.via_default?'<sup title="两读字, 按常见读音">常</sup>':''}${c.rhyme?' 韵':''}</div></div>`}).join('')+`</div><div class="pat">标准 ${esc(l.pattern)}</div></div>`});
+ h+=`</div>`;
+ h+=`<div class="card"><h2>违反 / 提示</h2>`+(d.issues.length?d.issues.map(x=>{const note=x.kind.startsWith('提示');return `<div class="issue ${note?'note':''}"><b>${esc(x.kind)}</b> ${x.line?`第 ${x.line} 句${x.pos?` 第 ${x.pos} 字`:''}`:''} ${x.char?`「${esc(x.char)}」`:''} 应 ${esc(x.expected)}, 实为 ${esc(x.actual)} <span class="small">${esc((x.yun||[]).join(' / '))}</span></div>`}).join(''):'<div class="small">无</div>')+`</div>`;
+ h+=`<div class="card"><h2>粘对</h2><table><tr><th>类型</th><th>句</th><th>第二字</th><th>结果</th></tr>`+d.pairs.map(p=>`<tr><td>${p.kind}</td><td>${p.lines[0]}–${p.lines[1]}</td><td>${esc(p.chars[0])}(${tn(p.a)}) ${p.kind==='对'?'⟷':'＝'} ${esc(p.chars[1])}(${tn(p.b)})</td><td>${p.ok===null?'<span style="color:var(--unsure)">不判</span>':p.ok?'<span style="color:var(--ok)">✓</span>':'<span class=err>✗</span>'}</td></tr>`).join('')+`</table></div>`;
+ h+=`<div class="card"><h2>押韵</h2>韵脚: ${d.rhyme.chars.map((c,i)=>`第${d.rhyme.lines[i]}句「${esc(c)}」${esc((d.rhyme.yun[c]||[]).join('/')||'?')}`).join(' · ')}<br>共同韵部: <b>${d.rhyme.common.length?esc(d.rhyme.common.join(' / ')):'无'}</b></div>`;
+ h+=`<div class="card"><h2>四种标准格式的违例数 <span class="small">(取违例最少者作标准)</span></h2><table><tr><th>格式</th><th>违例</th><th>各句标准</th></tr>`+d.forms.map(f=>`<tr><td>${f.name}</td><td>${f.violations}</td><td class="small">${f.patterns.join(' / ')}</td></tr>`).join('')+`</table></div>`;
+ o.innerHTML=h}
+
+
+function renderCi(d){const o=$('vout');
+ if(d.error){o.innerHTML=`<div class="card err">${esc(d.error)}${d.total?` (共 ${d.total} 字)`:''}</div>`;return}
+ const okTotal=d.match_total, nv=d.n_violations;
+ let h=`<div class="card"><h2>结果</h2><span class="tag">${esc(d.tune)}</span><span class="tag ${okTotal?'good':'warn'}">字数 ${d.total} ${okTotal?'✓ 符合':'✗ 不符'}</span><span class="tag">句式匹配度 ${(d.sentence_match*100).toFixed(0)}%</span>`+(okTotal?`<span class="tag ${nv?'warn':'good'}">${nv?'违例 '+nv+' 处':'没有发现违例'}</span><span class="tag">韵: ${esc(d.rhyme_class||'?')}</span>`:`<span class="tag warn">字数不符 · 单句字数能对上的小句,整句逐字检查 (${d.checked_chars}/${d.total} 字已检查)</span><span class="tag ${nv>1?'warn':''}">${nv>1?'平仄/押韵违例 '+(nv-1)+' 处':'已检查的句子没有违例'}</span>`)+`</div>`;
+ h+=`<div class="card"><h2>字数 <span class="small">词牌常见字数</span></h2>`+d.standard.map(x=>`<span class="tag ${x.total===d.total?'good':''}">${x.total}字 · ${x.n}首</span>`).join('')+`<div style="margin-top:8px" class="small">逐句字数对照 (生成 / 标准):</div><div style="margin-top:4px">`+d.sentence_alignment.map(p=>`<span class="tag ${p.got===p.std?'good':'warn'}">${p.got===null?'缺':p.got} / ${p.std===null?'多':p.std}</span>`).join('')+`</div></div>`;
+ const W=32, PW=18;
+ const slot=(c,o,i,isGen)=>{const p=c.punct||'';const op=(o&&i<o.length)?(o[i].punct||''):null;const diff=op!==null&&op!==p;
+   return `<div style="width:${PW}px;flex:none;text-align:center;line-height:1;padding-top:${isGen?18:3}px;font-size:${isGen?20:16}px;${isGen?'color:#222;font-weight:700':'color:#aaa'};${diff?'background:#ffdede;border-radius:4px;':''}" title="${diff?'这里的句读位置与对方不同':(p?'句读':'')}">${p}</div>`};
+ const cellH=(c,o,i)=>{const e=c.expected&&c.expected!=='中'?c.expected:'';const cls=c.status;
+   return `<div style="display:flex;flex:none"><div class="cell" style="width:${W}px"><div class="exp ${e?'must':''}" style="height:13px">${e||'·'}</div><div class="ch ${cls}" style="font-size:20px;${c.rhyme?'text-decoration:underline #6f42c1 2px':''}" title="${esc(c.c+': '+(c.tone||'无')+(e?'\n模板: '+e:'\n模板: 可平可仄')+(c.rhyme?'\n韵脚位':''))}">${esc(c.c)}</div><div class="tn ${c.rhyme?'rhyme':''}" style="height:14px;font-size:11px">${tn(c.tone)}${c.rhyme?'韵':''}</div></div>${slot(c,o,i,true)}</div>`};
+ const cellG=(c,o,i)=>`<div style="display:flex;flex:none"><div class="cell" style="width:${W}px"><div style="font-size:17px;color:#b3b3b3;line-height:1.3">${esc(c.c)}</div><div style="height:13px;font-size:11px;color:#c4c4c4">${tn(c.tone)}${c.rhyme?'韵':''}</div></div>${slot(c,o,i,false)}</div>`;
+ const flow=(s,fn,o)=>`<div style="display:flex;flex-wrap:nowrap;align-items:flex-start">${s.map((c,i)=>fn(c,o,i)).join('')}</div>`;
+ if(d.rows){const bm=d.benchmark;
+  h+=`<div class="card"><h2>逐字对照 · 灰色是标杆 <span class="small">${esc(bm.author)}《${esc(d.tune)}》${bm.total}字 (统计最典型), 放在对应句下面, 上下同一列 = 同一位置 · ${d.rows_same}/${d.rows_total} 句字数与标杆一致</span></h2>
+   <div class="legend small" style="margin-bottom:8px"><span><i class="dot" style="border-color:#c7e8d0;background:#eefaf1"></i>符合</span><span><i class="dot" style="border-color:#f3b8bd;background:#fff0f1"></i>违反</span><span><i class="dot" style="border-color:#eee"></i>可平可仄</span><span style="color:#6f42c1">韵=韵脚位</span><span>字上方灰字=模板要求的平仄</span><span>黑色 ，。 = 你的词的句读</span><span style="background:#ffdede;padding:0 4px;border-radius:3px">红底 = 与标杆的句读位置不同</span></div>`+
+   d.rows.map((r,i)=>`<div style="display:flex;gap:12px;padding:6px 4px;border-bottom:1px solid #f0eee6;${r.same?'':'background:#fff7f7'}"><div style="width:96px;flex:none;font-size:12px;color:#888;padding-top:18px">第${i+1}句<br>${r.gen_len}字 ${r.same?'<span style="color:var(--ok)">✓</span>':`<span class=err>✗ 标杆${r.bm_len}字</span>`}</div><div style="overflow-x:auto">`+(r.gen?flow(r.gen,cellH,r.bm):'<div class="small" style="padding:10px 0">(生成里没有这一句)</div>')+(r.bm?`<div style="margin-top:2px;display:flex;align-items:flex-end">${flow(r.bm,cellG,r.gen)}<span class="small" style="color:#bbb;margin-left:6px">标杆 ${r.bm_len}字</span></div>`:'<div class="small" style="color:#bbb">(标杆没有这一句)</div>')+`</div></div>`).join('')+`</div>`}
+ else{h+=`<div class="card"><h2>逐字</h2>`+flow(d.chars,cellH,null)+`</div>`}
+ h+=`<div class="card"><h2>违反 / 提示</h2>`+(d.issues.length?d.issues.map(x=>{const note=x.kind.startsWith('提示');return `<div class="issue ${note?'note':''}"><b>${esc(x.kind)}</b> ${x.msg?esc(x.msg):`${x.pos?`第 ${x.pos} 字`:''} ${x.char?`「${esc(x.char)}」`:''} 应 ${esc(x.expected)}, 实为 ${esc(x.actual)} <span class="small">${esc((x.yun||[]).join(' / '))}</span>`}</div>`}).join(''):'<div class="small">无</div>')+`</div>`;
+ if(d.rhyme_positions)h+=`<div class="card"><h2>押韵 <span class="small">(词林正韵, 韵脚位从真词归纳)</span></h2>主韵: <b>${esc(d.rhyme_class||'?')}</b> · 韵脚位: 第 ${d.rhyme_positions.join('、')} 字</div>`;
+ o.innerHTML=h}
+
+</script></body></html>

@@ -10,6 +10,7 @@
 - 黑白棋（Edax 标注的小 CNN + 剪枝搜索，纯浏览器 int8 推理，每个模型不到 1 MB，手机可玩；可选两种模型、纯 CNN / 加规则 / 搜索三档，可看网络认为的好走法，可让子）: demo/games/othello/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/othello/index.html)
 - 魔方 3x3（小模型 + beam search，纯浏览器推理，手机可玩）: demo/games/rubiks_cube/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/rubiks_cube/index.html)
 - 魔方还原（手机拍 6 张实物魔方 → 浏览器里读色、还原出整个魔方 → 用上面的小模型求解，3D 魔方 + 箭头一步步指导你还原；纯网页，无服务端）: demo/games/rubiks_cube/scan/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/rubiks_cube/scan/index.html)
+- 写诗 / 写词（7M 字符级 GPT 从零训练，诗经 GRPO 调过；纯浏览器 int8 推理，诗、词各约 7 MB，用到才下载；生成后按平水韵 / 词林正韵逐字校验平仄、押韵、字数，词还和标杆词逐句对照；主题可下拉选组合）: demo/poem_gen/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/poem_gen/index.html)
 - 物理模拟（只给最底层定律，让公式自己涌现）: demo/physics/windtunnel.html / demo/physics/idealgas.html / demo/physics/idealgas_kelvin.html / demo/physics/blackbody.html / demo/physics/catenary.html / demo/physics/catenary_compare.html / demo/physics/cloth3d.html / demo/physics/solarsystem.html / demo/physics/fermat_light.html
   
 
