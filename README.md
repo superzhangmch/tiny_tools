@@ -6,6 +6,7 @@
 - 成语检索、成语接龙 chengyu_search.html
 - 五子棋（CNN 模仿 Rapfi + MCTS，纯浏览器推理，手机可玩）: demo/games/gomoku/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/gomoku/index.html)
 - 俄罗斯方块（AI 自动玩 / 自己玩，盘面上方是 AI 对每个旋转角度、每个平移位置的评分曲线）: demo/games/tetris/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/tetris/index.html)
+- 1024 / 2048（V 网络 + expectimax 搜索，纯浏览器 float16 推理，CNN 和 MLP 各一个（各约 270 KB），手机可玩；AI 自动玩 / 单步 / 自己玩，右侧面板显示网络对四个方向的预期得分，自动玩时先亮箭头标出 AI 接下来要走的方向，可选搜索深度 1–3）: demo/games/1024/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/1024/index.html)
 - 象棋（CNN 模仿 Pikafish + MCTS，纯浏览器 int8 推理，四种策略头可选（每种 4–7 MB，选到才下载），手机可玩；热力图/调试模式可看模型认为哪些着法、每颗子的落点分布）: demo/games/xiangqi/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/xiangqi/index.html)
 - 黑白棋（Edax 标注的小 CNN + 剪枝搜索，纯浏览器 int8 推理，每个模型不到 1 MB，手机可玩；可选两种模型、纯 CNN / 加规则 / 搜索三档，可看网络认为的好走法，可让子）: demo/games/othello/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/othello/index.html)
 - 魔方 3x3（小模型 + beam search，纯浏览器推理，手机可玩）: demo/games/rubiks_cube/index.html [online](https://superzhangmch.github.io/tiny_tools/demo/games/rubiks_cube/index.html)

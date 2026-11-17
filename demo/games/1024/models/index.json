@@ -1,0 +1,14 @@
+[
+ {
+  "name": "v_cnn_R2",
+  "label": "V \u00b7 CNN (strongest, R2)",
+  "json": "models/v_cnn_R2.json",
+  "bin": "models/v_cnn_R2.bin"
+ },
+ {
+  "name": "v_mlp_13k",
+  "label": "V \u00b7 MLP (13k episodes)",
+  "json": "models/v_mlp_13k.json",
+  "bin": "models/v_mlp_13k.bin"
+ }
+]

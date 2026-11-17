@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>1024 · V-net auto-play</title>
+<style>
+:root{--bg:#faf8ef;--panel:#bbada0;--cell:#cdc1b4;--ink:#776e65;--accent:#8f7a66}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;justify-content:center}
+main{width:100%;max-width:980px;padding:14px;display:grid;gap:16px;grid-template-columns:minmax(280px,440px) 1fr;align-items:start}
+@media(max-width:760px){main{grid-template-columns:1fr}}
+h1{margin:0 0 4px;font-size:22px}.sub{font-size:13px;opacity:.75;margin-bottom:8px}.note{grid-column:1/-1;font-size:13px;line-height:1.6;color:#8a7f73;border-top:1px solid #e6dfd3;padding-top:10px}
+.stats{display:flex;gap:8px;margin:8px 0}.stat{flex:1;background:var(--panel);color:#fff;border-radius:6px;padding:6px 8px;text-align:center}
+.stat b{display:block;font-size:20px}.stat span{font-size:11px;text-transform:uppercase;opacity:.85}
+#board{position:relative;background:var(--panel);border-radius:8px;padding:8px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(4,minmax(0,1fr));gap:8px;aspect-ratio:1;touch-action:none}
+.cell{min-width:0;min-height:0;overflow:hidden;background:var(--cell);border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:clamp(22px,7vw,40px);color:#776e65;transition:background .12s}
+.cell.small{font-size:clamp(18px,5.5vw,32px)}.cell.xs{font-size:clamp(15px,4.5vw,26px)}
+.cell.pop{animation:pop .16s}.cell.merge{animation:merge .2s}
+@keyframes pop{0%{transform:scale(.4)}100%{transform:scale(1)}}@keyframes merge{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}
+#stage{position:relative}
+.cell{position:relative}.cell .dir{position:absolute;top:5%;right:5%;width:36%;aspect-ratio:1;pointer-events:none}
+.cell .dir svg{width:100%;height:100%;display:block;filter:drop-shadow(0 0 2px rgba(255,255,255,.9))}.cell .dir polygon{fill:#e53935;stroke:#fff;stroke-width:5;stroke-linejoin:round}
+.cell.new{box-shadow:inset 0 0 0 4px #e53935}
+.cell.float{position:absolute;z-index:2;margin:0;will-change:transform}#phase{font-size:12px;color:#8a7f73;height:18px;white-space:nowrap;overflow:hidden}
+#over{position:absolute;inset:0;background:rgba(238,228,218,.78);border-radius:8px;display:none;align-items:center;justify-content:center;flex-direction:column;font-weight:700;font-size:26px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+button,select{font:inherit;padding:7px 12px;border-radius:6px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+button.alt,select{background:#e6dfd3;color:var(--ink)}button:disabled{opacity:.5}
+label{display:flex;gap:6px;align-items:center;font-size:14px}input[type=range]{width:130px}
+.card{background:#fff;border-radius:8px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.card h3{margin:0 0 8px;font-size:14px;text-transform:uppercase;letter-spacing:.04em;opacity:.7}
+.q{display:grid;grid-template-columns:54px 1fr 78px;gap:8px;align-items:center;margin:5px 0;font-variant-numeric:tabular-nums;font-size:14px}
+.bar{height:14px;background:#eee;border-radius:7px;overflow:hidden}.bar i{display:block;height:100%;background:#c9bba6}.q.best .bar i{background:#f67c5f}.q.best{font-weight:700;color:#000}.q.illegal{opacity:.35}
+table{width:100%;border-collapse:collapse;font-size:14px}td{padding:2px 0}td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.muted{font-size:12px;opacity:.7}.err{color:#c0392b}
+</style></head><body><main>
+<section>
+  <h1>1024 · V-net auto-play</h1>
+  <div class="stats"><div class="stat"><span>Score</span><b id="score">0</b></div><div class="stat"><span>Moves</span><b id="moves">0</b></div><div class="stat"><span>Max tile</span><b id="maxtile">0</b></div></div>
+  <div id="stage"><div id="board"></div></div>
+  <div class="row"><button id="play">▶ Play</button><button id="step" class="alt">Step</button><button id="new" class="alt">New game</button><label><input type="checkbox" id="auto">auto-restart</label><label><input type="checkbox" id="hint" checked>AI hint</label></div>
+  <div id="phase"></div>
+  <div class="row"><label>speed <input type="range" id="speed" min="0" max="800" value="120"><span id="speedv" class="muted"></span></label></div>
+</section>
+<section style="display:grid;gap:12px">
+  <div class="card"><h3>Model</h3>
+    <div class="row"><select id="model"></select><button class="alt" id="loadbtn">Load files…</button><input type="file" id="files" multiple accept=".json,.bin" hidden></div>
+    <div class="muted" id="modelinfo">loading…</div>
+    <div class="row"><label>search depth <select id="depth"><option value="1">1 (greedy)</option><option value="2" selected>2</option><option value="3">3 (slow)</option></select></label></div>
+    <div class="muted">depth 1 = 只看一步：<code>这步得分 + V(走完后的棋盘)</code>；depth 2/3 = 再往后看，对每个可能刷出的新方块按概率取平均。</div>
+  </div>
+  <div class="card"><h3>Expected points per move (model's view)</h3><div id="qs"></div><div class="muted" id="think"></div></div>
+  <div class="card"><h3>This session</h3><table><tr><td>Games finished</td><td id="g_n">0</td></tr><tr><td>Average score</td><td id="g_avg">–</td></tr><tr><td>Best tile</td><td id="g_best">–</td></tr><tr><td>Reached 1024</td><td id="g_win">–</td></tr></table></div>
+  <div class="muted" id="err"></div>
+</section>
+<div class="note">网络在浏览器里运行 · 每步做 expectimax 搜索 · 你也可以自己玩：方向键 / WASD / 在棋盘上滑动。<br>
+<b>AI 模式（自动玩 / Step）</b>：新刷出的方块（红框）右上角的红色箭头，表示 <b>AI 接下来要往哪个方向走</b>。自动玩时先亮箭头、停一下（速度滑块）再滑动；Step 时下一次点击就往这个方向滑。<br>
+<b>Step 分两步</b>：先滑动合并，再出新方块（红框，并带出下一步的箭头）。轮到你自己玩时，右边面板会标出 AI 认为最好的方向（AI hint）。</div>
+</main>
+<script src="engine.js"></script><script src="app.js"></script></body></html>
