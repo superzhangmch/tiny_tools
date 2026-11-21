@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>手机放胸口：心冲击图 BCG</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{font-family:-apple-system,system-ui,sans-serif;background:#111;color:#eee;margin:0;padding:12px;display:flex;flex-direction:column;align-items:center}
+  h1{font-size:15px;margin:0 0 8px}
+  #nums{display:flex;gap:28px;margin:6px 0}
+  .n{font-size:44px;font-weight:700;text-align:center;line-height:1}
+  .n small{display:block;font-size:13px;font-weight:400;color:#999;margin-top:4px}
+  #status{color:#aaa;min-height:20px;margin-bottom:6px;font-size:14px;text-align:center}
+  canvas{background:#000;border-radius:8px;width:640px;max-width:100%;height:130px;margin-top:8px}
+  button{font-size:16px;padding:8px 20px;border-radius:8px;border:0;background:#2a7;color:#fff;cursor:pointer}
+  .tips{color:#888;font-size:13px;max-width:640px;line-height:1.5;margin-top:10px}
+</style>
+</head>
+<body>
+<h1>手机放胸口：用加速度计读心跳和呼吸（心冲击图 BCG）</h1>
+<div id="nums">
+  <div class="n" id="hr">--<small>心率 bpm</small></div>
+  <div class="n" id="rr">--<small>呼吸 次/分</small></div>
+</div>
+<div id="status">点击"开始"授权运动传感器</div>
+<div><button id="btn">开始</button></div>
+<canvas id="cH" width="1280" height="260"></canvas>
+<canvas id="cB" width="1280" height="260"></canvas>
+<canvas id="cA" width="1280" height="260"></canvas>
+<canvas id="cE" width="1280" height="260"></canvas>
+<div class="tips">
+  <b>平躺</b>，手机屏幕朝上平放在<b>胸口正中（胸骨）</b>，双手放两侧，别说话、别动。可以先正常呼吸 20 秒，再试试屏住呼吸 10 秒，心跳波形会干净很多。<br>
+  心脏每次泵血，血液向头脚方向加速，身体会有微小的反冲，加速度计能记录下来。呼吸则让胸口慢慢起伏。<br>
+  没有任何模型：先重采样到 50Hz，用带通滤波分出"心跳频段"和"呼吸频段"，取振动最强的方向，再用自相关找心跳周期、用频谱找呼吸频率。
+</div>
+<script>
+// ===== DSP-BEGIN =====
+const FS = 50;            // uniform resample rate (Hz)
+
+// raw samples [{t,x,y,z}] (irregular t, sec) -> {x,y,z} uniform arrays at FS
+function resample3(buf) {
+  const t0 = buf[0].t, t1 = buf[buf.length - 1].t, n = Math.floor((t1 - t0) * FS);
+  const out = { x: new Float64Array(n), y: new Float64Array(n), z: new Float64Array(n) };
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    const t = t0 + i / FS;
+    while (j < buf.length - 2 && buf[j + 1].t < t) j++;
+    const a = buf[j], b = buf[j + 1];
+    const w = Math.min(1, Math.max(0, (t - a.t) / (b.t - a.t || 1)));
+    out.x[i] = a.x + (b.x - a.x) * w; out.y[i] = a.y + (b.y - a.y) * w; out.z[i] = a.z + (b.z - a.z) * w;
+  }
+  return out;
+}
+
+// zero-phase one-pole low-pass (forward then backward)
+function lowpass(x, fc) {
+  const a = 1 - Math.exp(-2 * Math.PI * fc / FS), n = x.length;
+  const f = new Float64Array(n), o = new Float64Array(n);
+  let s = x[0];
+  for (let i = 0; i < n; i++) { s += a * (x[i] - s); f[i] = s; }
+  s = f[n - 1];
+  for (let i = n - 1; i >= 0; i--) { s += a * (f[i] - s); o[i] = s; }
+  return o;
+}
+function bandpass(x, lo, hi) {
+  const h = lowpass(x, hi), l = lowpass(x, lo), o = new Float64Array(x.length);
+  for (let i = 0; i < x.length; i++) o[i] = h[i] - l[i];
+  return o;
+}
+
+// project the 3 axes onto the direction of largest variance (power iteration on the 3x3 covariance)
+function principal(c) {
+  const n = c[0].length, m = c.map(a => a.reduce((s, v) => s + v, 0) / n);
+  const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (let i = 0; i < n; i++) for (let p = 0; p < 3; p++) for (let q = 0; q < 3; q++) C[p][q] += (c[p][i] - m[p]) * (c[q][i] - m[q]);
+  let v = [0.3, 0.3, 0.9];
+  for (let it = 0; it < 30; it++) {
+    const w = [0, 1, 2].map(p => C[p][0] * v[0] + C[p][1] * v[1] + C[p][2] * v[2]);
+    const nr = Math.hypot(w[0], w[1], w[2]) || 1; v = w.map(a => a / nr);
+  }
+  const o = new Float64Array(n);
+  for (let i = 0; i < n; i++) o[i] = (c[0][i] - m[0]) * v[0] + (c[1][i] - m[1]) * v[1] + (c[2][i] - m[2]) * v[2];
+  return o;
+}
+
+// heart rate from the periodicity of the signal: autocorrelation, take the SHORTEST strong peak (not a multiple of the period)
+function heartRate(x) {
+  const n = x.length; let e = 0; for (const v of x) e += v * v;
+  if (n < FS * 6 || e === 0) return { hr: null, q: 0 };
+  const lo = Math.floor(FS * 60 / 180), hi = Math.ceil(FS * 60 / 42), r = new Float64Array(hi + 2);
+  for (let L = lo - 1; L <= hi + 1; L++) { let s = 0; for (let i = 0; i + L < n; i++) s += x[i] * x[i + L]; r[L] = s / e * n / (n - L); }
+  let best = -1;
+  for (let L = lo; L <= hi; L++) if (r[L] > r[L - 1] && r[L] >= r[L + 1] && r[L] > best) best = r[L];
+  if (best <= 0) return { hr: null, q: 0 };
+  for (let L = lo; L <= hi; L++) if (r[L] > r[L - 1] && r[L] >= r[L + 1] && r[L] >= 0.85 * best) {
+    const d = r[L - 1] - 2 * r[L] + r[L + 1], off = d ? 0.5 * (r[L - 1] - r[L + 1]) / d : 0;   // parabolic refinement
+    return { hr: 60 * FS / (L + off), q: r[L], r, lo, hi, L: L + off };
+  }
+  return { hr: null, q: 0 };
+}
+
+// ensemble-average the heartbeat: align beats of period T (samples) and average them.
+// returns {avg, n, coh}: coh = |avg|^2 / mean |segment|^2  (about 1 if every beat is the same, about 1/n for pure noise)
+function ensemble(x, T0) {
+  const n = x.length, T = Math.round(T0), w = Math.max(1, Math.round(0.05 * FS)), env = new Float64Array(n);
+  for (let i = 0; i < n; i++) { let s = 0, c = 0; for (let k = Math.max(0, i - w); k <= Math.min(n - 1, i + w); k++) { s += Math.abs(x[k]); c++; } env[i] = s / c; }
+  let phi = 0, bs = -1;
+  for (let f = 0; f < T; f++) { let s = 0, c = 0; for (let i = f; i < n; i += T) { s += env[i]; c++; } s /= c; if (s > bs) { bs = s; phi = f; } }
+  const half = Math.round(0.15 * T), pre = Math.round(0.25 * T), post = Math.round(0.75 * T), len = pre + post;
+  let peaks = [];
+  for (let i = phi; i < n; i += T) { let b = i, bv = -1; for (let j = Math.max(0, i - half); j <= Math.min(n - 1, i + half); j++) if (env[j] > bv) { bv = env[j]; b = j; } peaks.push(b); }
+  const mean = pk => { const a = new Float64Array(len); let c = 0; for (const p of pk) if (p - pre >= 0 && p + post <= n) { for (let k = 0; k < len; k++) a[k] += x[p - pre + k]; c++; } for (let k = 0; k < len; k++) a[k] /= (c || 1); return { a, c }; };
+  let m = mean(peaks);
+  // one refinement: shift each beat (+-0.1 T) to best match the current average
+  const sh = Math.round(0.1 * T), refined = [];
+  for (const p of peaks) { let bp = p, bc = -Infinity;
+    for (let d = -sh; d <= sh; d++) { const q = p + d; if (q - pre < 0 || q + post > n) continue; let c = 0; for (let k = 0; k < len; k++) c += x[q - pre + k] * m.a[k]; if (c > bc) { bc = c; bp = q; } }
+    refined.push(bp); }
+  m = mean(refined);
+  let ea = 0, es = 0, cnt = 0;
+  for (let k = 0; k < len; k++) ea += m.a[k] * m.a[k];
+  for (const p of refined) if (p - pre >= 0 && p + post <= n) { let e = 0; for (let k = 0; k < len; k++) e += x[p - pre + k] ** 2; es += e; cnt++; }
+  return { avg: m.a, n: m.c, pre, coh: cnt ? ea / (es / cnt) : 0 };
+}
+
+// breathing rate: spectral peak in 0.1-0.6 Hz
+function breathRate(x) {
+  const n = x.length;
+  if (n < FS * 12) return { rr: null, q: 0 };
+  let best = 0, bf = 0, tot = 0;
+  for (let f = 0.1; f <= 0.6; f += 0.005) {
+    let re = 0, im = 0;
+    for (let i = 0; i < n; i++) { const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1)), a = 2 * Math.PI * f * i / FS; re += x[i] * w * Math.cos(a); im -= x[i] * w * Math.sin(a); }
+    const p = re * re + im * im; tot += p; if (p > best) { best = p; bf = f; }
+  }
+  return { rr: bf * 60, q: best / (tot || 1) * 10 };   // x10: share of one peak bin vs ~100 bins, ~1 means "flat"
+}
+
+// full analysis of a buffer of raw samples
+function analyze(buf) {
+  const u = resample3(buf);
+  // heart band: band-pass twice (breathing tilt leaks into this band otherwise), then pick the axis (x, y, z or principal
+  // direction) whose signal is the most PERIODIC - not the one with the most variance, which is usually leftover breathing
+  const ax = [u.x, u.y, u.z].map(a => bandpass(bandpass(a, 0.7, 10), 0.7, 10));
+  const cut = FS;   // drop 1 s of filter edge effects at both ends
+  let best = null;
+  for (const c of [principal(ax), ...ax]) {
+    const H = c.slice(cut, c.length - cut), h = heartRate(H);
+    if (!best || h.q > best.h.q) best = { c, H, h };
+  }
+  const breath = principal([bandpass(u.x, 0.1, 0.6), bandpass(u.y, 0.1, 0.6), bandpass(u.z, 0.1, 0.6)]);
+  const B = breath.slice(cut, breath.length - cut);
+  return { heart: best.c, breath, h: best.h, b: breathRate(B), ens: best.h.hr ? ensemble(best.H, 60 * FS / best.h.hr) : null };
+}
+// ===== DSP-END =====
+
+const hrEl = document.getElementById('hr'), rrEl = document.getElementById('rr'), stEl = document.getElementById('status');
+const btn = document.getElementById('btn');
+const cH = document.getElementById('cH'), cB = document.getElementById('cB'), cA = document.getElementById('cA'), cE = document.getElementById('cE');
+let buf = [], running = false, timer = null, noData = 0, hrHist = [], rrHist = [];
+const KEEP = 20;
+
+function onMotion(e) {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null) { noData++; return; }
+  buf.push({ t: e.timeStamp / 1000, x: a.x, y: a.y, z: a.z });
+  while (buf.length > 2 && buf[buf.length - 1].t - buf[0].t > KEEP) buf.shift();
+}
+
+function trace(c, sig, secs, color, title) {
+  const g = c.getContext('2d'), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = '#666'; g.font = '22px sans-serif'; g.fillText(title, 12, 26);
+  if (!sig) return;
+  const n = Math.min(sig.length - FS, FS * secs), seg = sig.slice(sig.length - FS - n, sig.length - FS);
+  let mx = 1e-12; for (const v of seg) mx = Math.max(mx, Math.abs(v));
+  g.strokeStyle = color; g.lineWidth = 2; g.beginPath();
+  for (let i = 0; i < n; i++) { const x = i / (FS * secs) * W, y = H / 2 - seg[i] / mx * (H / 2 - 16); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke();
+}
+function drawAuto(h) {
+  const g = cA.getContext('2d'), W = cA.width, H = cA.height;
+  g.clearRect(0, 0, W, H); g.fillStyle = '#666'; g.font = '22px sans-serif';
+  g.fillText('自相关（横轴 = 心跳间隔对应的心率 bpm；最高的峰 = 心跳周期）', 12, 26);
+  if (!h || !h.r) { g.fillText('攒够约 8 秒后显示', W / 2 - 80, H / 2 + 8); return; }
+  const lags = []; for (let L = h.lo; L <= h.hi; L++) lags.push(L);
+  const bpm = L => 60 * FS / L, b0 = bpm(h.hi), b1 = bpm(h.lo);
+  const X = L => (bpm(L) - b0) / (b1 - b0) * (W - 20) + 10, Y = v => H - 40 - Math.max(-0.3, Math.min(1, v)) / 1.3 * (H - 80) - 0.3 / 1.3 * (H - 80) * 0 ;
+  g.strokeStyle = '#333'; g.fillStyle = '#888'; g.lineWidth = 1;
+  for (let b = 60; b <= 180; b += 30) { const x = (b - b0) / (b1 - b0) * (W - 20) + 10; g.beginPath(); g.moveTo(x, 40); g.lineTo(x, H - 40); g.stroke(); g.fillText(b, x - 12, H - 14); }
+  g.strokeStyle = '#5af'; g.lineWidth = 2; g.beginPath();
+  lags.forEach((L, i) => { const x = X(L), y = Y(h.r[L]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+  const px = X(h.L); g.strokeStyle = '#f55'; g.beginPath(); g.moveTo(px, 40); g.lineTo(px, H - 40); g.stroke();
+  g.fillStyle = '#f55'; g.font = 'bold 24px sans-serif'; g.fillText(`${(60 * FS / h.L).toFixed(0)} bpm（峰高 ${(h.q * 100).toFixed(0)}%）`, Math.min(px + 8, W - 260), 62);
+}
+function drawEns(e) {
+  const g = cE.getContext('2d'), W = cE.width, H = cE.height;
+  g.clearRect(0, 0, W, H); g.fillStyle = '#666'; g.font = '22px sans-serif';
+  g.fillText('平均心冲击波形（把每次心跳按节拍对齐后叠加平均）', 12, 26);
+  if (!e) { g.fillText('等心率出来后显示', W / 2 - 80, H / 2 + 8); return; }
+  const a = e.avg; let mx = 1e-12; for (const v of a) mx = Math.max(mx, Math.abs(v));
+  g.strokeStyle = '#333'; g.beginPath(); g.moveTo(0, H / 2 + 10); g.lineTo(W, H / 2 + 10); g.stroke();
+  const xz = e.pre / a.length * W; g.strokeStyle = '#553'; g.beginPath(); g.moveTo(xz, 40); g.lineTo(xz, H - 10); g.stroke();
+  g.strokeStyle = '#fc4'; g.lineWidth = 3; g.beginPath();
+  for (let k = 0; k < a.length; k++) { const x = k / a.length * W, y = H / 2 + 10 - a[k] / mx * (H / 2 - 40); k ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke();
+  g.fillStyle = '#fc4'; g.font = '22px sans-serif';
+  g.fillText(`平均了 ${e.n} 次心跳，一致性 ${(e.coh * 100).toFixed(0)}%（纯噪声约 ${(100 / Math.max(1, e.n)).toFixed(0)}%，明显更高才说明每次心跳形状相似）`, 12, H - 8);
+}
+const med = a => a.slice().sort((p, q) => p - q)[Math.floor(a.length / 2)];
+
+function tick() {
+  if (buf.length < 20) {
+    stEl.textContent = noData > 50 ? '没有收到传感器数据：请用手机，且页面要是 https' : '等待传感器数据…';
+    return;
+  }
+  const span = buf[buf.length - 1].t - buf[0].t, rate = (buf.length - 1) / span;
+  if (span < 4) { stEl.textContent = `采集中… ${span.toFixed(0)}s（采样 ${rate.toFixed(0)}Hz）`; return; }
+  const r = analyze(buf);
+  trace(cH, r.heart, 10, '#f55', '心跳频段 0.7–10Hz（最近 10 秒）');
+  trace(cB, r.breath, 20, '#5af', '呼吸频段 0.1–0.6Hz（最近 20 秒）');
+  drawAuto(r.h); drawEns(r.ens);
+  let msg = `采样 ${rate.toFixed(0)}Hz` + (rate < 40 ? '（偏低，心冲击图可能看不清）' : '');
+  if (r.h.hr) {
+    hrHist.push(r.h.hr); if (hrHist.length > 5) hrHist.shift();
+    hrEl.firstChild.nodeValue = med(hrHist).toFixed(0); hrEl.style.color = r.h.q > 0.3 ? '#fff' : '#666';
+    msg += `，心跳周期性 ${(r.h.q * 100).toFixed(0)}%` + (r.h.q > 0.3 ? '' : '（弱，请别动、屏住呼吸试试）');
+  }
+  if (r.b.rr) {
+    rrHist.push(r.b.rr); if (rrHist.length > 5) rrHist.shift();
+    rrEl.firstChild.nodeValue = med(rrHist).toFixed(0);
+  }
+  stEl.textContent = msg;
+}
+
+btn.onclick = async () => {
+  if (running) { running = false; window.removeEventListener('devicemotion', onMotion); clearInterval(timer); btn.textContent = '开始'; stEl.textContent = '已停止'; return; }
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    try { if (await DeviceMotionEvent.requestPermission() !== 'granted') { stEl.textContent = '没有授权运动传感器'; return; } }
+    catch (e) { stEl.textContent = '授权失败：' + e.message; return; }
+  }
+  buf = []; noData = 0; hrHist = []; rrHist = [];
+  hrEl.firstChild.nodeValue = '--'; rrEl.firstChild.nodeValue = '--';
+  window.addEventListener('devicemotion', onMotion);
+  timer = setInterval(tick, 400);
+  running = true; btn.textContent = '停止'; stEl.textContent = '等待传感器数据…';
+};
+</script>
+</body>
+</html>
