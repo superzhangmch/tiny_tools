@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>rPPG 摄像头心率 demo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{font-family:-apple-system,system-ui,sans-serif;background:#111;color:#eee;margin:0;padding:16px;display:flex;flex-direction:column;align-items:center}
+  h1{font-size:15px;margin:0 0 8px}
+  #stage{position:relative;width:min(320px,66vh);max-width:100%;transition:width .2s}
+  video{width:100%;max-height:50vh;object-fit:cover;border-radius:8px;transform:scaleX(-1);background:#000;display:block}
+  #roi::after{content:'额头';position:absolute;left:100%;top:50%;transform:translateY(-50%);margin-left:6px;color:#4f4;font-size:14px;white-space:nowrap}
+  #roi{position:absolute;border:2px solid #4f4;box-sizing:border-box;pointer-events:none;
+       left:35%;top:25%;width:30%;height:30%}
+  #hr{font-size:48px;font-weight:700;margin:6px 0 0}
+  #hr small{font-size:20px;font-weight:400;color:#aaa}
+  #status{color:#aaa;min-height:22px;margin-bottom:6px}
+  canvas#spec{background:#000;border-radius:8px;width:640px;max-width:100%;height:130px;margin-top:8px}
+  canvas#plot{background:#000;border-radius:8px;width:640px;max-width:100%;height:160px}
+  #ctrl{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;margin:6px 0}
+  #ctrl select,#ctrl label{font-size:16px;color:#ddd}
+  #ctrl select{padding:7px;border-radius:8px;background:#222;border:1px solid #444}
+  button{font-size:16px;padding:8px 20px;border-radius:8px;border:0;background:#2a7;color:#fff;cursor:pointer}
+  .tips{color:#888;font-size:13px;max-width:640px;line-height:1.5;margin-top:10px}
+</style>
+</head>
+<body>
+<h1>rPPG: 用摄像头测心率（全部在本地计算，视频不会上传）</h1>
+<div id="stage">
+  <video id="v" autoplay playsinline muted></video>
+  <div id="roi"></div>
+</div>
+<div id="hr">-- <small>bpm</small></div>
+<div id="status">点击"开始"授权摄像头</div>
+<div id="ctrl">
+  <button id="btn">开始</button>
+  <select id="modeSel"><option value="face">face</option><option value="finger" selected>finger</option></select>
+</div>
+<canvas id="plot" width="1280" height="320"></canvas>
+<canvas id="spec" width="1280" height="260"></canvas>
+<div class="tips">
+  <b>手指模式</b>：只看红通道。用<b>前置摄像头</b>，指腹轻轻盖住镜头，对着亮处，别按太用力，手别动。<br>
+  <b>脸模式</b>：让<b>额头进绿框</b>（别带头发、眉毛、眼睛）。<br>
+  坐稳、别说话、光线明亮且稳定，攒够约 10 秒后出读数，约 15 秒后更稳。<br>
+  这是 POS 算法 + 频谱峰值，没有任何模型。精度受摄像头自动曝光、光线、运动影响。
+</div>
+<script>
+// ===== DSP-BEGIN =====
+const FS = 30;          // resample rate (Hz)
+const WIN = 48;         // POS window = 1.6 s
+const LO = 0.7, HI = 3.0;
+
+// buf: [{t(sec), r, g, b}] with increasing t -> 3 arrays at uniform FS
+function resample(buf) {
+  const t0 = buf[0].t, t1 = buf[buf.length - 1].t;
+  const n = Math.floor((t1 - t0) * FS);
+  const out = [new Float64Array(n), new Float64Array(n), new Float64Array(n)];
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    const t = t0 + i / FS;
+    while (j < buf.length - 2 && buf[j + 1].t < t) j++;
+    const a = buf[j], b = buf[j + 1];
+    let w = (t - a.t) / (b.t - a.t || 1);
+    w = Math.min(1, Math.max(0, w));
+    out[0][i] = a.r + (b.r - a.r) * w;
+    out[1][i] = a.g + (b.g - a.g) * w;
+    out[2][i] = a.b + (b.b - a.b) * w;
+  }
+  return out;
+}
+
+function std(x) {
+  let m = 0; for (const v of x) m += v; m /= x.length;
+  let s = 0; for (const v of x) s += (v - m) * (v - m);
+  return Math.sqrt(s / x.length);
+}
+
+// POS (Wang et al. 2017)
+function pos(rgb) {
+  const n = rgb[0].length, H = new Float64Array(n);
+  if (n < WIN) return H;
+  const s0 = new Float64Array(WIN), s1 = new Float64Array(WIN);
+  for (let e = WIN; e <= n; e++) {
+    const st = e - WIN;
+    const m = [0, 0, 0];
+    for (let c = 0; c < 3; c++) { for (let i = st; i < e; i++) m[c] += rgb[c][i]; m[c] = m[c] / WIN || 1; }
+    for (let i = 0; i < WIN; i++) {
+      const r = rgb[0][st + i] / m[0], g = rgb[1][st + i] / m[1], b = rgb[2][st + i] / m[2];
+      s0[i] = g - b;
+      s1[i] = -2 * r + g + b;
+    }
+    const alpha = std(s0) / (std(s1) || 1e-9);
+    let mean = 0; const h = new Float64Array(WIN);
+    for (let i = 0; i < WIN; i++) { h[i] = s0[i] + alpha * s1[i]; mean += h[i]; }
+    mean /= WIN;
+    for (let i = 0; i < WIN; i++) H[st + i] += h[i] - mean;
+  }
+  return H;
+}
+
+function movavg(x, w) {
+  const n = x.length, out = new Float64Array(n), h = Math.floor(w / 2);
+  for (let i = 0; i < n; i++) {
+    let s = 0, c = 0;
+    for (let k = Math.max(0, i - h); k <= Math.min(n - 1, i + h); k++) { s += x[k]; c++; }
+    out[i] = s / c;
+  }
+  return out;
+}
+
+// crude band-pass: remove slow trend (1 s moving average), smooth fast noise (5 samples)
+function bandpass(x) {
+  const trend = movavg(x, FS);
+  const d = x.map((v, i) => v - trend[i]);
+  return movavg(d, 5);
+}
+
+// returns {hr (bpm), quality (0..1: peak power share in band), pulse (filtered signal)}
+function estimate(buf, mode) {
+  const rgb = resample(buf);
+  // finger mode: red channel only (blood absorbs light -> red dips on each beat, so invert for display)
+  let pulse = mode === 'finger' ? bandpass(rgb[0]).map(v => -v) : bandpass(pos(rgb));
+  // drop the first/last 1 s where overlap-add and filters are incomplete
+  const x = pulse.slice(FS, pulse.length - FS);
+  const n = x.length;
+  if (n < FS * 6) return { hr: null, quality: 0, pulse, spec: null };
+  let best = 0, bestF = 0, tot = 0;
+  const pw = [], fr = [];
+  for (let f = LO; f <= HI; f += 0.01) {
+    let re = 0, im = 0;
+    for (let i = 0; i < n; i++) {
+      const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1));
+      const a = 2 * Math.PI * f * i / FS;
+      re += x[i] * w * Math.cos(a); im -= x[i] * w * Math.sin(a);
+    }
+    const p = re * re + im * im;
+    pw.push(p); fr.push(f); tot += p;
+    if (p > best) { best = p; bestF = f; }
+  }
+  let near = 0;
+  for (let k = 0; k < fr.length; k++) if (Math.abs(fr[k] - bestF) <= 0.1) near += pw[k];
+  return { hr: bestF * 60, quality: near / (tot || 1), pulse, spec: { fr, pw, bestF } };
+}
+// ===== DSP-END =====
+
+// ===== UI =====
+const video = document.getElementById('v');
+const hrEl = document.getElementById('hr');
+const stEl = document.getElementById('status');
+const btn = document.getElementById('btn');
+const plot = document.getElementById('plot'), pctx = plot.getContext('2d');
+const small = document.createElement('canvas'); small.width = 32; small.height = 32;
+const sctx = small.getContext('2d', { willReadFrequently: true });
+
+let mode = 'finger', buf = [], running = false, stream = null, hrHist = [], lastEst = 0, lastWave = 0, lastPulse = null, lastSpec = null;
+const KEEP = 20;  // seconds of history
+
+function sample(nowMs) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw) return;
+  // face: same area as the green box (x 35-65%, y 25-55%); finger: central 60% of the frame
+  if (mode === 'finger') sctx.drawImage(video, vw * 0.2, vh * 0.2, vw * 0.6, vh * 0.6, 0, 0, 32, 32);
+  else sctx.drawImage(video, vw * 0.35, vh * 0.25, vw * 0.30, vh * 0.30, 0, 0, 32, 32);
+  const d = sctx.getImageData(0, 0, 32, 32).data;
+  let r = 0, g = 0, b = 0;
+  const n = d.length / 4;
+  for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+  buf.push({ t: nowMs / 1000, r: r / n, g: g / n, b: b / n });
+  const cutoff = buf[buf.length - 1].t - KEEP;
+  while (buf.length > 2 && buf[0].t < cutoff) buf.shift();
+}
+
+function loop(now) {
+  if (!running) return;
+  sample(now);
+  const t = now / 1000;
+  if (buf.length > 2) {
+    const span = buf[buf.length - 1].t - buf[0].t;
+    // waveform: show it from ~3 s on, refreshed every 0.3 s; heart rate only after 10 s
+    let e = null;
+    if (span >= 3 && t - lastWave >= 0.3) {
+      lastWave = t;
+      e = estimate(buf, mode);
+      lastPulse = e.pulse;
+      lastSpec = e.spec;
+    }
+    if (e && span >= 10 && t - lastEst >= 1) {
+      lastEst = t;
+      if (e.hr) {
+        hrHist.push(e.hr); if (hrHist.length > 5) hrHist.shift();
+        const med = hrHist.slice().sort((a, b) => a - b)[Math.floor(hrHist.length / 2)];
+        const good = e.quality > 0.25;
+        hrEl.innerHTML = med.toFixed(0) + ' <small>bpm</small>';
+        hrEl.style.color = good ? '#fff' : '#777';
+        const lastR = buf[buf.length - 1].r;
+        let hint = mode === 'finger'
+          ? (lastR < 40 ? '画面太暗：确认指腹盖住镜头，并对着更亮的地方' : lastR > 250 ? '过曝：手指略抬起一点、别按太紧' : '指腹轻盖镜头、手别动')
+          : '请坐稳、光线更亮、让额头进绿框';
+        stEl.textContent = good ? `信号质量 ${(e.quality * 100).toFixed(0)}%` : `信号弱（${(e.quality * 100).toFixed(0)}%），${hint}`;
+      }
+    } else if (span < 10) {
+      stEl.textContent = `采集中… ${span.toFixed(0)}/10 s`;
+    }
+    draw();
+    drawSpec();
+  }
+  schedule();
+}
+
+function draw() {
+  const W = plot.width, H = plot.height;
+  pctx.clearRect(0, 0, W, H);
+  if (!lastPulse) return;
+  const x = lastPulse.slice(FS), n = Math.min(x.length, FS * 10);
+  const seg = x.slice(x.length - n);
+  let mx = 1e-9; for (const v of seg) mx = Math.max(mx, Math.abs(v));
+  pctx.strokeStyle = '#f55'; pctx.lineWidth = 2; pctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const px = i / (FS * 10) * W, py = H / 2 - seg[i] / mx * (H / 2 - 10);
+    i ? pctx.lineTo(px, py) : pctx.moveTo(px, py);
+  }
+  pctx.stroke();
+  pctx.fillStyle = '#666'; pctx.font = '22px sans-serif';
+  pctx.fillText(mode === 'finger' ? '脉搏波形（最近 10 秒，红通道）' : '脉搏波形（最近 10 秒，POS）', 12, 26);
+}
+
+const sCanvas = document.getElementById('spec'), sctx2 = sCanvas.getContext('2d');
+function drawSpec() {
+  const W = sCanvas.width, H = sCanvas.height, padB = 40, padT = 34;
+  sctx2.clearRect(0, 0, W, H);
+  sctx2.font = '22px sans-serif'; sctx2.fillStyle = '#666';
+  sctx2.fillText('频谱（横轴 bpm，纵轴强度；最高点 = 心率）', 12, 26);
+  if (!lastSpec) { sctx2.fillText('攒够约 8 秒后显示', W / 2 - 80, H / 2 + 8); return; }
+  const { fr, pw, bestF } = lastSpec;
+  const f0 = fr[0] * 60, f1 = fr[fr.length - 1] * 60, mx = Math.max(...pw) || 1;
+  const X = bpm => (bpm - f0) / (f1 - f0) * (W - 20) + 10;
+  const Y = v => H - padB - v / mx * (H - padB - padT);
+  // axis ticks
+  sctx2.strokeStyle = '#333'; sctx2.fillStyle = '#888'; sctx2.lineWidth = 1;
+  for (let b = 60; b <= 180; b += 30) {
+    sctx2.beginPath(); sctx2.moveTo(X(b), padT); sctx2.lineTo(X(b), H - padB); sctx2.stroke();
+    sctx2.fillText(String(b), X(b) - 12, H - 14);
+  }
+  // spectrum
+  sctx2.beginPath(); sctx2.moveTo(X(fr[0] * 60), H - padB);
+  for (let k = 0; k < fr.length; k++) sctx2.lineTo(X(fr[k] * 60), Y(pw[k]));
+  sctx2.lineTo(X(fr[fr.length - 1] * 60), H - padB); sctx2.closePath();
+  sctx2.fillStyle = 'rgba(80,160,255,.35)'; sctx2.fill();
+  sctx2.strokeStyle = '#5af'; sctx2.lineWidth = 2; sctx2.stroke();
+  // peak marker
+  const px = X(bestF * 60);
+  sctx2.strokeStyle = '#f55'; sctx2.lineWidth = 2;
+  sctx2.beginPath(); sctx2.moveTo(px, padT); sctx2.lineTo(px, H - padB); sctx2.stroke();
+  sctx2.fillStyle = '#f55'; sctx2.font = 'bold 24px sans-serif';
+  sctx2.fillText((bestF * 60).toFixed(0) + ' bpm', Math.min(px + 8, W - 110), padT + 18);
+}
+
+function schedule() {
+  if ('requestVideoFrameCallback' in HTMLVideoElement.prototype)
+    video.requestVideoFrameCallback((now) => loop(now));
+  else requestAnimationFrame(loop);
+}
+
+function layout() {
+  const finger = mode === 'finger';
+  document.getElementById('stage').style.width = finger ? '140px' : 'min(320px, 66vh)';   // finger: tiny preview is enough; face: just enough to align
+  document.getElementById('roi').style.display = finger ? 'none' : 'block';
+  video.style.transform = finger ? 'none' : 'scaleX(-1)';
+}
+layout();
+
+function stop() {
+  running = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  btn.textContent = '开始';
+}
+
+async function start() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: 640, height: 480, frameRate: 30 },
+      audio: false });
+  } catch (e) {
+    stEl.textContent = '无法打开摄像头：' + e.message + '（需要 https 或 localhost）'; return;
+  }
+  video.srcObject = stream; await video.play();
+  buf = []; hrHist = []; lastEst = 0; lastWave = 0; lastPulse = null; lastSpec = null;
+  hrEl.innerHTML = '-- <small>bpm</small>'; hrEl.style.color = '#fff';
+  layout();
+  stEl.textContent = '采集中…';
+  running = true; btn.textContent = '停止'; schedule();
+}
+
+btn.onclick = async () => {
+  if (running) { stop(); stEl.textContent = '已停止'; return; }
+  await start();
+};
+
+const modeSel = document.getElementById('modeSel');
+modeSel.onchange = async () => {
+  mode = modeSel.value;
+  layout();
+  if (running) { stop(); await start(); }
+};
+</script>
+</body>
+</html>
